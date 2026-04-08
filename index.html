@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mage Arena</title>
+    <script async src="https://jam.pieter.com/2026/widget.js"></script>
+  </head>
+  <body>
+    <div id="app" data-testid="game-root">
+      <canvas id="c" data-testid="scene-canvas"></canvas>
+      <div id="hud" aria-live="polite">
+        <p id="hud-title">Mage Arena — MVP</p>
+        <p id="hud-hint">
+          Click to capture pointer · <kbd>WASD</kbd> move · Hold <strong>left mouse</strong> and <strong>shout</strong> into the mic to
+          charge; <strong>release</strong> to fire. Quiet release does not shoot.
+        </p>
+        <p id="mic-level">
+          Level: <span id="mic-db" data-testid="mic-db">…</span>
+          <meter id="mic-meter" min="0" max="100" low="33" high="66" optimum="80" value="0" data-testid="mic-meter"></meter>
+        </p>
+        <p id="charge-row">Charge: <span id="charge-label" data-testid="charge-label">0%</span></p>
+        <p id="fire-feedback" class="warn" hidden data-testid="fire-feedback"></p>
+        <p id="hud-cooldown" hidden data-testid="hud-cooldown">Cooldown…</p>
+        <p id="mic-banner" class="warn" hidden data-testid="mic-banner">
+          Microphone unavailable or denied — allow mic for shout-to-charge.
+        </p>
+        <p class="meta">Shots: <span id="shot-count" data-testid="shot-count">0</span></p>
+      </div>
+      <div id="click-to-play" data-testid="click-to-play">Click to play · pointer lock for look</div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

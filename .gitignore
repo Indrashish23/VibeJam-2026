@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.local
+.DS_Store
+.env
+.env.*
+playwright-report/
+test-results/
+.vscode/*
+!.vscode/extensions.json
