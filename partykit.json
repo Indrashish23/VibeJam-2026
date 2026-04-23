@@ -1,0 +1,5 @@
+{
+  "name": "vibe-game-jam-lobby",
+  "main": "party/main.ts",
+  "compatibilityDate": "2024-10-01"
+}

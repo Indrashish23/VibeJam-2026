@@ -1,0 +1,257 @@
+import type { PerspectiveCamera } from 'three'
+import type { PointerLockControls } from 'three/addons/controls/PointerLockControls.js'
+import { gameConfig, resetGameConfig, type GameConfigKey } from './gameConfig'
+import { TWEAK_DISPLAY_NAME, TWEAK_RANGE, TWEAK_SECTIONS } from './tweakRanges'
+
+function isTypingTarget(el: EventTarget | null): boolean {
+  if (!(el instanceof HTMLElement)) return false
+  const tag = el.tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true
+  return el.isContentEditable
+}
+
+export type DebugBoolToggle = {
+  label: string
+  get: () => boolean
+  set: (value: boolean) => void
+  onChange?: () => void
+}
+
+export type TweaksPanelHooks = {
+  controls: PointerLockControls
+  camera: PerspectiveCamera
+  ambient: import('three').AmbientLight
+  sun: import('three').DirectionalLight
+  onToggle: (open: boolean) => void
+  /** Called after any slider / reset / debug-toggle edit (debounce in main). */
+  onConfigChanged?: () => void
+  blockToggle?: () => boolean
+  debugBoolToggles?: DebugBoolToggle[]
+}
+
+type RowInput = { key: GameConfigKey; range: HTMLInputElement; num: HTMLInputElement }
+
+function appendConfigRow(
+  key: GameConfigKey,
+  rows: RowInput[],
+  syncSceneFromConfig: () => void,
+  onConfigChanged?: () => void,
+): HTMLElement {
+  const r = TWEAK_RANGE[key]
+  const row = document.createElement('label')
+  row.className = 'tweaks-row'
+
+  const name = document.createElement('span')
+  name.className = 'tweaks-name'
+  name.textContent = TWEAK_DISPLAY_NAME[key] ?? key
+
+  const range = document.createElement('input')
+  range.type = 'range'
+  range.min = String(r.min)
+  range.max = String(r.max)
+  range.step = String(r.step)
+
+  const num = document.createElement('input')
+  num.type = 'number'
+  num.min = String(r.min)
+  num.max = String(r.max)
+  num.step = String(r.step)
+
+  function syncRow() {
+    const v = gameConfig[key]
+    range.value = String(v)
+    num.value = String(v)
+  }
+
+  function applyValue(raw: number) {
+    const clamped = Math.min(r.max, Math.max(r.min, raw))
+    gameConfig[key] = clamped
+    syncRow()
+    syncSceneFromConfig()
+    onConfigChanged?.()
+  }
+
+  range.addEventListener('input', () => applyValue(Number.parseFloat(range.value)))
+  num.addEventListener('change', () => applyValue(Number.parseFloat(num.value)))
+
+  rows.push({ key, range, num })
+  row.appendChild(name)
+  row.appendChild(range)
+  row.appendChild(num)
+  syncRow()
+  return row
+}
+
+export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
+  dispose: () => void
+  syncBooleanToggles: () => void
+} {
+  let open = false
+  const rows: RowInput[] = []
+
+  const panel = document.createElement('aside')
+  panel.className = 'tweaks-panel'
+  panel.setAttribute('aria-label', 'Dev tweaks')
+  panel.hidden = true
+
+  const header = document.createElement('div')
+  header.className = 'tweaks-panel-header'
+  const title = document.createElement('strong')
+  title.textContent = 'Tweaks'
+  const sub = document.createElement('span')
+  sub.className = 'tweaks-panel-sub'
+  sub.textContent =
+    'T or − opens · edits reset the round (3-2-1) · collapsible sections · Esc closes'
+  header.appendChild(title)
+  header.appendChild(sub)
+  panel.appendChild(header)
+
+  type BoolRow = { cb: HTMLInputElement; spec: DebugBoolToggle }
+  const boolRows: BoolRow[] = []
+
+  function syncBooleanToggles() {
+    for (const br of boolRows) {
+      br.cb.checked = br.spec.get()
+    }
+  }
+
+  function syncSceneFromConfig() {
+    hooks.camera.fov = gameConfig.cameraFov
+    hooks.camera.near = gameConfig.cameraNear
+    hooks.camera.far = gameConfig.cameraFar
+    hooks.camera.updateProjectionMatrix()
+    hooks.controls.pointerSpeed = gameConfig.mouseSensitivity
+    hooks.ambient.intensity = gameConfig.ambientIntensity
+    hooks.sun.intensity = gameConfig.sunIntensity
+  }
+
+  const body = document.createElement('div')
+  body.className = 'tweaks-panel-body'
+
+  if (hooks.debugBoolToggles?.length) {
+    const details = document.createElement('details')
+    details.className = 'tweaks-category'
+    details.open = true
+    const summary = document.createElement('summary')
+    summary.className = 'tweaks-category-summary'
+    summary.textContent = 'Debug'
+    details.appendChild(summary)
+
+    const dbgBody = document.createElement('div')
+    dbgBody.className = 'tweaks-category-body tweaks-category-body--debug'
+
+    for (const spec of hooks.debugBoolToggles) {
+      const lab = document.createElement('label')
+      lab.className = 'tweaks-row tweaks-row-bool'
+
+      const cb = document.createElement('input')
+      cb.type = 'checkbox'
+      cb.checked = spec.get()
+
+      cb.addEventListener('change', () => {
+        spec.set(cb.checked)
+        spec.onChange?.()
+        hooks.onConfigChanged?.()
+      })
+
+      const name = document.createElement('span')
+      name.className = 'tweaks-name'
+      name.textContent = spec.label
+
+      lab.appendChild(cb)
+      lab.appendChild(name)
+      dbgBody.appendChild(lab)
+      boolRows.push({ cb, spec })
+    }
+    details.appendChild(dbgBody)
+    body.appendChild(details)
+  }
+
+  for (const section of TWEAK_SECTIONS) {
+    const details = document.createElement('details')
+    details.className = 'tweaks-category'
+    details.open = true
+
+    const summary = document.createElement('summary')
+    summary.className = 'tweaks-category-summary'
+    summary.textContent = section.title
+    details.appendChild(summary)
+
+    const inner = document.createElement('div')
+    inner.className = 'tweaks-category-body'
+
+    for (const key of section.keys) {
+      inner.appendChild(
+        appendConfigRow(key, rows, syncSceneFromConfig, hooks.onConfigChanged),
+      )
+    }
+
+    details.appendChild(inner)
+    body.appendChild(details)
+  }
+
+  panel.appendChild(body)
+
+  const actions = document.createElement('div')
+  actions.className = 'tweaks-panel-actions'
+  const resetBtn = document.createElement('button')
+  resetBtn.type = 'button'
+  resetBtn.textContent = 'Reset defaults'
+  resetBtn.addEventListener('click', () => {
+    resetGameConfig()
+    for (const row of rows) {
+      const v = gameConfig[row.key]
+      row.range.value = String(v)
+      row.num.value = String(v)
+    }
+    syncSceneFromConfig()
+    hooks.onConfigChanged?.()
+  })
+  actions.appendChild(resetBtn)
+  panel.appendChild(actions)
+
+  host.appendChild(panel)
+
+  function setOpen(next: boolean) {
+    open = next
+    panel.hidden = !open
+    hooks.onToggle(open)
+    if (open) {
+      hooks.controls.unlock()
+      syncBooleanToggles()
+    }
+    syncSceneFromConfig()
+  }
+
+  function toggle() {
+    setOpen(!open)
+  }
+
+  function onGlobalKeyDown(e: KeyboardEvent) {
+    const openTweaks =
+      e.code === 'KeyT' || e.code === 'Minus' || e.code === 'NumpadSubtract'
+    if (openTweaks && hooks.blockToggle?.()) {
+      return
+    }
+    if (openTweaks && !isTypingTarget(e.target)) {
+      e.preventDefault()
+      toggle()
+      return
+    }
+    if (open && e.code === 'Escape') {
+      e.preventDefault()
+      setOpen(false)
+    }
+  }
+
+  window.addEventListener('keydown', onGlobalKeyDown, true)
+
+  syncSceneFromConfig()
+
+  function dispose() {
+    window.removeEventListener('keydown', onGlobalKeyDown, true)
+    panel.remove()
+  }
+
+  return { dispose, syncBooleanToggles }
+}
