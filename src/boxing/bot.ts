@@ -13,7 +13,7 @@ import {
 import { gameConfig } from '../gameConfig'
 import { PROJECTILE_R } from './playerArms'
 
-export type BotMode = 'dummy' | 'smart'
+export type BotMode = 'dummy' | 'smart' | 'network'
 
 const DOWN = new Vector3(0, -1, 0)
 const _ray = new Raycaster()
@@ -57,10 +57,27 @@ export class BotFighter {
   /** Optional decoded clip on bot projectile (PvP / future); spatial playback for victim. */
   private projHitAudio: AudioBuffer | null = null
 
-  constructor(scene: Scene, mode: BotMode, startPos: Vector3) {
+  /** PvP peer avatar — smoothed from snapshots (world space). */
+  readonly networkTargetPos = new Vector3()
+  networkTargetYaw = 0
+
+  constructor(
+    scene: Scene,
+    mode: BotMode,
+    startPos: Vector3,
+    opts?: { bodyColor?: number },
+  ) {
     this.mode = mode
+    const bodyHex =
+      typeof opts?.bodyColor === 'number'
+        ? opts.bodyColor
+        : mode === 'dummy'
+          ? 0x5b8cff
+          : mode === 'network'
+            ? 0x5cffb8
+            : 0xff6b4a
     const mat = new MeshStandardMaterial({
-      color: new Color(mode === 'dummy' ? 0x5b8cff : 0xff6b4a),
+      color: new Color(bodyHex),
       roughness: 0.78,
       metalness: 0.12,
     })
@@ -95,6 +112,29 @@ export class BotFighter {
     scene.add(this.root)
 
     this.smartShotGapMs = 2000 + Math.random() * 1000
+  }
+
+  /** Feet offset from root Y (capsule geometry). */
+  getFootOffset(): number {
+    return this.feetFromCenter
+  }
+
+  /**
+   * Opponent voice shot replicated in world space (same ballistic integration as local arms).
+   */
+  injectWorldProjectile(worldOrigin: Vector3, velWorld: Vector3, voiceClip: AudioBuffer | null): void {
+    if (this.mode === 'network' && this.projActive) {
+      this.clearProjectile()
+    } else if (this.projActive) return
+    this.projPos.copy(worldOrigin)
+    this.projSpawn.copy(worldOrigin)
+    this.projVel.copy(velWorld)
+    this.projActive = true
+    this.projFlying = true
+    this.projDealt = false
+    this.projHitAudio = voiceClip
+    _work.copy(worldOrigin).add(velWorld)
+    this.faceToward(_work)
   }
 
   dispose(scene: Scene): void {
@@ -259,12 +299,49 @@ export class BotFighter {
     if (hit) this.clearProjectile()
   }
 
+  /** PvP only: hide incoming fist once it reaches local player torso (does not affect authority). */
+  private clearProjectileNearLocalPlayer(playerPos: Vector3): void {
+    if (!this.projFlying || !this.projActive) return
+    const fy = playerPos.y - gameConfig.eyeHeight
+    const feetOffset = gameConfig.botBodyRadius * 1.15 + 0.72
+    const rootY = fy + feetOffset
+    const cx = playerPos.x
+    const cy = rootY + feetOffset * 0.52
+    const cz = playerPos.z
+    const dx = this.projPos.x - cx
+    const dy = this.projPos.y - cy
+    const dz = this.projPos.z - cz
+    const dist = Math.hypot(dx, dy * 0.75, dz)
+    const reach = gameConfig.punchHitRadius + gameConfig.botBodyRadius * 0.88
+    if (dist < reach) this.clearProjectile()
+  }
+
   update(
     delta: number,
     playerPos: Vector3,
     colliders: Object3D[],
     _playerProjectileActive: boolean,
   ): void {
+    if (this.mode === 'network') {
+      const a = Math.min(1, delta * 16)
+      this.root.position.lerp(this.networkTargetPos, a)
+      let dy = this.networkTargetYaw - this.root.rotation.y
+      while (dy > Math.PI) dy -= Math.PI * 2
+      while (dy < -Math.PI) dy += Math.PI * 2
+      this.root.rotation.y += dy * Math.min(1, delta * 14)
+
+      this.bodyCenter.copy(this.root.position)
+      this.bodyCenter.y += this.feetFromCenter * 0.52
+
+      this.integrateProjectile(delta)
+      this.clearProjectileNearLocalPlayer(playerPos)
+      if (this.projActive) {
+        this.projMesh.position.copy(this.projPos)
+        this.projMesh.visible = true
+      }
+      return
+    }
+
     const groundedAtStart = this.grounded
     this.grounded = false
 

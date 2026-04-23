@@ -24,3 +24,9 @@ dist-ssr
 *.sw?
 
 .vercel
+
+# Accident empty file from CLI
+/npx
+
+# Local PartyKit dev state
+.partykit/

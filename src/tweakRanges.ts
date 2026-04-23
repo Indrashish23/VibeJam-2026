@@ -34,6 +34,9 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   playerPostKnockInvulnMs: { min: 0, max: 6000, step: 50 },
   hitScreenShake: { min: 0, max: 1.2, step: 0.02 },
   hitFlashOpacity: { min: 0, max: 1, step: 0.02 },
+  pvpAggressorHitShake: { min: 0, max: 1, step: 0.02 },
+  pvpAggressorHitFlash: { min: 0, max: 1, step: 0.02 },
+  pvpAuthComboKnockMul: { min: 0.25, max: 1.15, step: 0.02 },
   dashImpulse: { min: 0, max: CAP, step: 2 },
   dashVelocityMul: { min: 0.08, max: 1.2, step: 0.02 },
   dashDecay: { min: 4, max: 28, step: 0.4 },
@@ -100,6 +103,9 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   voiceHitRefDistance: 'Voice hit rolloff ref distance',
   voiceHitMaxDistance: 'Voice hit max distance',
   voiceHitRolloff: 'Voice hit rolloff factor',
+  pvpAggressorHitShake: 'PvP landed shot — screen shake',
+  pvpAggressorHitFlash: 'PvP landed shot — flash opacity',
+  pvpAuthComboKnockMul: 'PvP combo knock × (already hurt)',
 }
 
 /** Ordered groups for the tweaks UI (every key appears exactly once). */
@@ -178,6 +184,9 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'playerPostKnockInvulnMs',
       'hitScreenShake',
       'hitFlashOpacity',
+      'pvpAggressorHitShake',
+      'pvpAggressorHitFlash',
+      'pvpAuthComboKnockMul',
       'winFinisherKnockXZ',
       'winFinisherVy',
       'botBodyRadius',

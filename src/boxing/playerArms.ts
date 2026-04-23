@@ -37,6 +37,10 @@ export class PlayerArms {
 
   private dealt = true
 
+  /** Last successful fire (world space), for network replication. */
+  private readonly lastShotOrigin = new Vector3()
+  private readonly lastShotVel = new Vector3()
+
   private readonly _shoulderW = new Vector3()
   private readonly _tmp = new Vector3()
   private readonly _meshQuat = new Quaternion()
@@ -100,7 +104,15 @@ export class PlayerArms {
     this.proj.flying = true
     this.dealt = false
 
+    this.lastShotOrigin.copy(this._tmp)
+    this.lastShotVel.copy(this.proj.vel)
+
     return true
+  }
+
+  copyLastShotWorld(origin: Vector3, vel: Vector3): void {
+    origin.copy(this.lastShotOrigin)
+    vel.copy(this.lastShotVel)
   }
 
   /** Audio attached to last fired shot (cleared after consumption). */

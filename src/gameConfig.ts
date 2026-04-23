@@ -61,6 +61,15 @@ export const defaultGameConfig = {
   hitScreenShake: 0.22,
   /** Peak opacity for white hit flash overlay (0–1). */
   hitFlashOpacity: 0.82,
+  /** PvP: camera shake when your authoritative shot connects (host applies locally; guest via message). */
+  pvpAggressorHitShake: 0.12,
+  /** PvP: flash opacity when your authoritative shot connects. */
+  pvpAggressorHitFlash: 0.44,
+  /**
+   * PvP: knock multiplier when another authoritative hit lands while already hurt / invuln.
+   * Keeps combos readable without stacking full impulse every frame.
+   */
+  pvpAuthComboKnockMul: 0.76,
   dashImpulse: 52,
   /** Multiplier with dashImpulse for horizontal slide velocity (units/s scale). */
   dashVelocityMul: 0.46,
@@ -89,9 +98,9 @@ export const defaultGameConfig = {
   /** Normalized charge (0–1) required before release counts as a shot. */
   voiceChargeMinRelease: 0.22,
   /** Scales RMS → charge buildup. */
-  voiceChargeSensitivity: 1.15,
-  /** × RMS after sensitivity — default ≈4.2/1.7 (~70% louder than legacy 4.2-only to max the bar). */
-  voiceChargeRmsScale: 4.2 / 1.7,
+  voiceChargeSensitivity: 1.35,
+  /** × RMS after sensitivity — higher = reach max charge with less shouting. */
+  voiceChargeRmsScale: (4.2 / 1.7) * 1.85,
   /** Attack smoothing while charging (higher = meter follows input faster). */
   voiceChargeAttack: 14,
   /** When not charging: smoothing toward quiet (higher = faster decay). */

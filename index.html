@@ -24,46 +24,35 @@
 
     <div id="lobby-overlay" class="lobby-overlay" hidden>
       <div class="lobby-card">
-        <h2 class="lobby-title">Multiplayer lobby</h2>
+        <h2 class="lobby-title">Play</h2>
         <p id="lobby-intro" class="lobby-intro"></p>
+        <button type="button" id="lobby-change-name" class="lobby-link-btn">
+          Change display name
+        </button>
         <p id="lobby-error" class="lobby-error" role="alert" hidden></p>
         <div class="lobby-actions">
           <button type="button" id="lobby-create" class="lobby-btn">Create lobby</button>
           <label class="lobby-join-row">
-            <span>Join code</span>
-            <input id="lobby-join-code" maxlength="16" autocomplete="off" placeholder="e.g. abc123" />
+            <span>Friend's code</span>
+            <input id="lobby-join-code" maxlength="16" autocomplete="off" placeholder="abc123" />
           </label>
           <button type="button" id="lobby-join" class="lobby-btn">Join lobby</button>
           <button type="button" id="lobby-offline" class="lobby-btn lobby-btn--ghost">Play offline</button>
         </div>
-        <p id="lobby-code-row" class="lobby-code-row" hidden>
-          Code: <strong id="lobby-code-display"></strong>
-          <button type="button" id="lobby-copy" class="lobby-btn lobby-btn--small">Copy</button>
-        </p>
-        <p id="lobby-status" class="lobby-status"></p>
-        <button type="button" id="lobby-start" class="lobby-btn lobby-btn--primary" hidden>Start match (host)</button>
       </div>
     </div>
 
     <div id="game-root" class="game-root" hidden>
-      <div id="fight-hud" class="fight-hud">
-        <div class="fight-row">
-          You <span id="score-p">0</span>
-          <span class="fight-sep">—</span>
-          <span id="score-b">0</span> Bot
-        </div>
-        <div class="fight-sub">
-          Land <span id="hits-need-enemy">3</span> hits · <span id="hits-need-player">2</span> on you = KO · Ring-out · Hold <strong>LMB</strong> + scream to
-          charge · release to shoot · <strong>Q</strong> parry · WASD · Shift dash · <strong>1</strong> dummy ·
-          <strong>2</strong> smart · <strong>3</strong> toggle · <strong>R</strong> restart
-        </div>
-        <div class="fight-bot-row">
-          <span class="fight-bot-label">Practice:</span>
-          <button type="button" id="bot-dummy" class="fight-btn">Dummy</button>
-          <button type="button" id="bot-smart" class="fight-btn">Smart bot</button>
-          <button type="button" id="fight-rematch" class="fight-btn fight-btn--ghost">Rematch</button>
-        </div>
+      <div id="mp-wait-layer" class="mp-wait-layer" hidden>
+        <p id="mp-wait-text" class="mp-wait-text shimmer">Waiting for opponent…</p>
       </div>
+      <div id="mp-code-hud" class="mp-code-hud" hidden>
+        <span class="mp-code-label">Your code</span>
+        <strong id="mp-code-value" class="mp-code-value"></strong>
+        <button type="button" id="mp-code-copy" class="mp-code-copy">Copy</button>
+        <span class="mp-code-shortcut" aria-hidden="true">C</span>
+      </div>
+      <div id="mp-toast" class="mp-toast" hidden role="status" aria-live="polite"></div>
       <div id="win-game-splash" class="win-game-splash" hidden>
         <span class="win-game-splash__txt" aria-live="polite">GAME</span>
       </div>
@@ -74,6 +63,7 @@
         <div id="rematch-black-sheet" class="rematch-black-sheet"></div>
       </div>
       <div id="countdown-overlay" class="countdown-overlay" hidden>
+        <p id="countdown-title" class="countdown-title" hidden>Match begins in</p>
         <span id="countdown-num" class="countdown-num">3</span>
       </div>
       <div id="charge-bar-wrap" class="charge-bar-wrap">
@@ -95,20 +85,44 @@
         <div class="match-end-card" role="dialog" aria-labelledby="match-end-title">
           <h2 id="match-end-title" class="match-end-title">You win!</h2>
           <p id="match-end-sub" class="match-end-sub"></p>
-          <div class="match-end-actions">
+          <div id="match-rematch-primary-actions" class="match-end-actions">
             <button type="button" id="match-rematch-btn" class="match-end-btn match-end-btn--primary">
               Rematch
             </button>
             <button type="button" id="match-close-btn" class="match-end-btn">Continue</button>
+          </div>
+          <p id="match-rematch-status" class="match-rematch-status" hidden></p>
+          <button type="button" id="match-rematch-cancel-btn" class="match-end-btn" hidden>
+            Cancel request
+          </button>
+          <div id="match-rematch-incoming" class="match-rematch-incoming" hidden>
+            <p class="match-rematch-incoming-label">Your opponent wants a rematch.</p>
+            <div class="match-end-actions">
+              <button type="button" id="match-rematch-accept-btn" class="match-end-btn match-end-btn--primary">
+                Accept
+              </button>
+              <button type="button" id="match-rematch-decline-btn" class="match-end-btn">Decline</button>
+            </div>
           </div>
         </div>
       </div>
       <div id="tweaks-panel-host"></div>
     </div>
 
+    <!-- Outside game-root so logs work on lobby + fixed overlay -->
+    <div id="debug-mp-panel" class="debug-mp-panel debug-mp-panel--overlay" hidden>
+      <div class="debug-mp-panel__hdr">
+        MP debug · <kbd>`</kbd> or <kbd>F2</kbd> hide/show · <kbd>F9</kbd> copy report
+      </div>
+      <div class="debug-mp-panel__toolbar">
+        <button type="button" id="debug-mp-copy" class="debug-mp-copy-btn">Copy full report</button>
+      </div>
+      <pre id="debug-mp-pre" class="debug-mp-panel__pre"></pre>
+    </div>
+
     <script>
       try {
-        var _n = localStorage.getItem('vibejam_player_name')
+        var _n = sessionStorage.getItem('vibejam_player_name')
         if (_n && _n.trim()) {
           document.getElementById('username-overlay').hidden = true
           document.getElementById('game-root').hidden = true
