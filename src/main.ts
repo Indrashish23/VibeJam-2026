@@ -307,9 +307,11 @@ function initGame(lobby: LobbyResult) {
 
   const isOnline = lobby.mode === 'online'
   let mpPhase: 'waiting' | 'starting' | 'live' = isOnline ? 'waiting' : 'live'
+  /** Online lobby only: Tweaks "Practice with Dummy" — move and fight vs dummy while still waiting for a peer. */
+  let lobbyDummyPractice = false
 
   function multiplayerBlocksPlay(): boolean {
-    return isOnline && mpPhase !== 'live'
+    return isOnline && mpPhase !== 'live' && !lobbyDummyPractice
   }
 
   let mpSocket: MultiplayerWire | null = null
@@ -651,6 +653,7 @@ function initGame(lobby: LobbyResult) {
   async function runMpBeginNow(): Promise<void> {
     if (lobby.mode !== 'online') return
     if (mpSeqStarted || mpPhase === 'live') return
+    lobbyDummyPractice = false
     mpSeqStarted = true
 
     if (isOnline && lobby.mode === 'online') {
@@ -1343,6 +1346,36 @@ function initGame(lobby: LobbyResult) {
     botMode = mode
     bot = new BotFighter(scene, botMode, new Vector3(0, 1.45, -gameConfig.groundDepth / 2 + 12))
     instantHudRematch()
+  }
+
+  async function beginLobbyDummyPractice(): Promise<void> {
+    if (!isOnline || lobby.mode !== 'online') return
+    if (mpSeqStarted || mpPhase === 'live') return
+
+    lobbyDummyPractice = true
+    if (mpWaitLayer) mpWaitLayer.hidden = true
+    updateMicBlockedUi()
+
+    if (botMode !== 'dummy') recreateBot('dummy')
+    else applyRoundReset()
+
+    if (mpToast) {
+      mpToast.textContent = 'Practice vs dummy — a real match still starts when someone joins.'
+      mpToast.hidden = false
+      mpToast.classList.remove('mp-toast--bad')
+      window.setTimeout(() => {
+        if (
+          mpToast &&
+          mpToast.textContent === 'Practice vs dummy — a real match still starts when someone joins.'
+        ) {
+          mpToast.hidden = true
+        }
+      }, 5200)
+    }
+
+    if (!voiceInputBlocked) await runVoiceResumeCountdown()
+    if (!lobbyDummyPractice) return
+    tryPointerLock()
   }
 
   spawnActors()
@@ -2183,6 +2216,9 @@ function initGame(lobby: LobbyResult) {
         if (!open) tryPointerLock()
       },
       onConfigChanged: scheduleRoundResetAfterTweak,
+      ...(isOnline && lobby.mode === 'online'
+        ? { onPracticeWithDummy: beginLobbyDummyPractice }
+        : {}),
     })
   }
 }

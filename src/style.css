@@ -462,7 +462,7 @@ body {
 .countdown-overlay {
   position: absolute;
   inset: 0;
-  z-index: 63;
+  z-index: 110;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -742,6 +742,65 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+}
+
+.tweaks-section-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.35rem;
+  padding: 0.45rem 0.5rem;
+  border-radius: 8px;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: rgba(30, 41, 59, 0.55);
+}
+
+.tweaks-section-nav-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7dd3fc;
+}
+
+.tweaks-section-select {
+  width: 100%;
+  padding: 0.38rem 0.45rem;
+  border-radius: 6px;
+  border: 1px solid #475569;
+  background: #0f172a;
+  color: #f1f5f9;
+  font-size: 0.78rem;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.tweaks-section-select:focus {
+  outline: 2px solid #38bdf8;
+  outline-offset: 1px;
+}
+
+.tweaks-section-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.38rem;
+  padding: 0.45rem 0.35rem 0.15rem;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.tweaks-section-panel[hidden] {
+  display: none !important;
+}
+
+.tweaks-row[title] {
+  cursor: help;
+}
+
+.tweaks-row[title] .tweaks-name {
+  cursor: help;
+  border-bottom: 1px dotted rgba(148, 163, 184, 0.45);
 }
 
 .tweaks-category {

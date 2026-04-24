@@ -1,7 +1,7 @@
 import type { PerspectiveCamera } from 'three'
 import type { PointerLockControls } from 'three/addons/controls/PointerLockControls.js'
 import { gameConfig, resetGameConfig, type GameConfigKey } from './gameConfig'
-import { TWEAK_DISPLAY_NAME, TWEAK_RANGE, TWEAK_SECTIONS } from './tweakRanges'
+import { TWEAK_DISPLAY_NAME, TWEAK_RANGE, TWEAK_SECTIONS, TWEAK_TOOLTIP } from './tweakRanges'
 
 function isTypingTarget(el: EventTarget | null): boolean {
   if (!(el instanceof HTMLElement)) return false
@@ -27,6 +27,8 @@ export type TweaksPanelHooks = {
   onConfigChanged?: () => void
   blockToggle?: () => boolean
   debugBoolToggles?: DebugBoolToggle[]
+  /** Online lobby (waiting): start local dummy round without leaving the room. */
+  onPracticeWithDummy?: () => void | Promise<void>
 }
 
 type RowInput = { key: GameConfigKey; range: HTMLInputElement; num: HTMLInputElement }
@@ -40,22 +42,27 @@ function appendConfigRow(
   const r = TWEAK_RANGE[key]
   const row = document.createElement('label')
   row.className = 'tweaks-row'
+  const tip = TWEAK_TOOLTIP[key]
+  row.title = tip
 
   const name = document.createElement('span')
   name.className = 'tweaks-name'
   name.textContent = TWEAK_DISPLAY_NAME[key] ?? key
+  name.title = tip
 
   const range = document.createElement('input')
   range.type = 'range'
   range.min = String(r.min)
   range.max = String(r.max)
   range.step = String(r.step)
+  range.title = tip
 
   const num = document.createElement('input')
   num.type = 'number'
   num.min = String(r.min)
   num.max = String(r.max)
   num.step = String(r.step)
+  num.title = tip
 
   function syncRow() {
     const v = gameConfig[key]
@@ -101,7 +108,7 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
   const sub = document.createElement('span')
   sub.className = 'tweaks-panel-sub'
   sub.textContent =
-    'T or − opens · edits reset the round (3-2-1) · collapsible sections · Esc closes'
+    'T or − opens · Category menu (The Player = move, dash, fists, voice, knockback…) · hover any row for a tip · Esc closes'
   header.appendChild(title)
   header.appendChild(sub)
   panel.appendChild(header)
@@ -167,28 +174,48 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
     body.appendChild(details)
   }
 
+  const nav = document.createElement('div')
+  nav.className = 'tweaks-section-nav'
+  const navLab = document.createElement('label')
+  navLab.className = 'tweaks-section-nav-label'
+  navLab.setAttribute('for', 'tweaks-section-select')
+  navLab.textContent = 'Category'
+  const navSel = document.createElement('select')
+  navSel.id = 'tweaks-section-select'
+  navSel.className = 'tweaks-section-select'
+  navSel.setAttribute('aria-label', 'Tweak category')
   for (const section of TWEAK_SECTIONS) {
-    const details = document.createElement('details')
-    details.className = 'tweaks-category'
-    details.open = true
+    const opt = document.createElement('option')
+    opt.value = section.id
+    opt.textContent = section.title
+    navSel.appendChild(opt)
+  }
+  nav.appendChild(navLab)
+  nav.appendChild(navSel)
+  body.appendChild(nav)
 
-    const summary = document.createElement('summary')
-    summary.className = 'tweaks-category-summary'
-    summary.textContent = section.title
-    details.appendChild(summary)
-
-    const inner = document.createElement('div')
-    inner.className = 'tweaks-category-body'
+  const sectionPanels = new Map<string, HTMLElement>()
+  const defaultSectionId = TWEAK_SECTIONS[0]?.id ?? ''
+  for (const section of TWEAK_SECTIONS) {
+    const panel = document.createElement('div')
+    panel.className = 'tweaks-section-panel'
+    panel.dataset.section = section.id
+    panel.hidden = section.id !== defaultSectionId
 
     for (const key of section.keys) {
-      inner.appendChild(
-        appendConfigRow(key, rows, syncSceneFromConfig, hooks.onConfigChanged),
-      )
+      panel.appendChild(appendConfigRow(key, rows, syncSceneFromConfig, hooks.onConfigChanged))
     }
-
-    details.appendChild(inner)
-    body.appendChild(details)
+    sectionPanels.set(section.id, panel)
+    body.appendChild(panel)
   }
+
+  navSel.value = defaultSectionId
+  navSel.addEventListener('change', () => {
+    const id = navSel.value
+    for (const [sid, el] of sectionPanels) {
+      el.hidden = sid !== id
+    }
+  })
 
   panel.appendChild(body)
 
@@ -208,6 +235,20 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
     hooks.onConfigChanged?.()
   })
   actions.appendChild(resetBtn)
+
+  if (hooks.onPracticeWithDummy) {
+    const practiceBtn = document.createElement('button')
+    practiceBtn.type = 'button'
+    practiceBtn.textContent = 'Practice with Dummy'
+    practiceBtn.addEventListener('click', () => {
+      void (async () => {
+        await hooks.onPracticeWithDummy!()
+        setOpen(false)
+      })()
+    })
+    actions.appendChild(practiceBtn)
+  }
+
   panel.appendChild(actions)
 
   host.appendChild(panel)
