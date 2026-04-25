@@ -53,6 +53,8 @@ import {
   isMpDebugMode,
   type MpDiagSnapshot,
 } from './mpDebugReport'
+import stunnedEffectBgUrl from '../Assets/UI/StunnedEffectBg.svg?url'
+import stunnedStarUrl from '../Assets/UI/StunnedStar.svg?url'
 
 /** Production without baked host: open once with `?pk=your-deployment.partykit.dev` (stored in session). */
 try {
@@ -88,6 +90,66 @@ const percentLabelFoeEl = document.getElementById('percent-label-foe')
 const seriesScoreOverlay = document.getElementById('series-score-overlay') as HTMLDivElement | null
 const seriesScoreLineEl = document.getElementById('series-score-line') as HTMLParagraphElement | null
 const victimHitFlashEl = document.getElementById('victim-hit-flash') as HTMLDivElement | null
+const stunnedOverlayEl = document.getElementById('stunned-overlay') as HTMLDivElement | null
+const stunnedBgEl = document.getElementById('stunned-bg') as HTMLImageElement | null
+const stunnedStarsEl = document.getElementById('stunned-stars') as HTMLDivElement | null
+let stunnedFxTimer: ReturnType<typeof setTimeout> | null = null
+
+if (stunnedBgEl) stunnedBgEl.src = stunnedEffectBgUrl
+
+/** Full-window dazed vignette + up to 7 spinning stars when the local player is hit. */
+function triggerStunnedHitOverlay(): void {
+  if (!stunnedOverlayEl || !stunnedStarsEl) return
+  if (stunnedFxTimer !== null) {
+    clearTimeout(stunnedFxTimer)
+    stunnedFxTimer = null
+  }
+  stunnedStarsEl.replaceChildren()
+  stunnedOverlayEl.classList.remove('stunned-overlay--active')
+  void stunnedOverlayEl.offsetWidth
+  stunnedOverlayEl.classList.add('stunned-overlay--active')
+
+  const w = window.innerWidth
+  const h = window.innerHeight
+  const minDim = Math.min(w, h)
+  const count = 4 + Math.floor(Math.random() * 4)
+
+  for (let i = 0; i < count; i++) {
+    const ang = Math.random() * Math.PI * 2
+    const r = minDim * (0.26 + Math.random() * 0.22)
+    const cx = w * 0.5 + Math.cos(ang) * r + (Math.random() - 0.5) * minDim * 0.06
+    const cy = h * 0.5 + Math.sin(ang) * r + (Math.random() - 0.5) * minDim * 0.06
+    const slotRot = Math.random() * 360
+    const px = 44 + Math.random() * 132
+    const spinS = 0.42 + Math.random() * 0.55
+
+    const slot = document.createElement('div')
+    slot.className = 'stunned-overlay__star-slot'
+    slot.style.left = `${cx}px`
+    slot.style.top = `${cy}px`
+    slot.style.transform = `translate(-50%, -50%) rotate(${slotRot}deg)`
+
+    const img = document.createElement('img')
+    img.className = 'stunned-overlay__star-img'
+    img.src = stunnedStarUrl
+    img.alt = ''
+    img.decoding = 'async'
+    img.style.width = `${px}px`
+    img.style.animationDuration = `${spinS}s`
+    img.style.animationDirection = Math.random() < 0.5 ? 'reverse' : 'normal'
+
+    slot.appendChild(img)
+    stunnedStarsEl.appendChild(slot)
+  }
+
+  stunnedOverlayEl.hidden = false
+  stunnedFxTimer = window.setTimeout(() => {
+    stunnedOverlayEl.hidden = true
+    stunnedOverlayEl.classList.remove('stunned-overlay--active')
+    stunnedStarsEl.replaceChildren()
+    stunnedFxTimer = null
+  }, 1000)
+}
 
 const matchEndOverlay = document.getElementById('match-end-overlay') as HTMLDivElement | null
 const matchEndTitle = document.getElementById('match-end-title')
@@ -935,6 +997,7 @@ function initGame(lobby: LobbyResult) {
 
   function triggerLocalVictimWhiteFlash(): void {
     victimWhiteFlashUntil = performance.now() + gameConfig.hitVictimWhiteFlashMs
+    triggerStunnedHitOverlay()
   }
 
   async function flashSeriesScoreLineThenHide(): Promise<void> {

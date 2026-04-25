@@ -1217,6 +1217,78 @@ body {
   display: none !important;
 }
 
+/* Local player hit — radial white vignette + spinning stars (see Assets/UI). */
+.stunned-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 86;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.stunned-overlay[hidden] {
+  display: none !important;
+}
+
+.stunned-overlay__bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  opacity: 0;
+}
+
+.stunned-overlay--active .stunned-overlay__bg {
+  animation: stunned-bg-flash 1s ease-in-out forwards;
+}
+
+@keyframes stunned-bg-flash {
+  0% {
+    opacity: 0.35;
+  }
+  12% {
+    opacity: 0.92;
+  }
+  55% {
+    opacity: 0.78;
+  }
+  100% {
+    opacity: 0.22;
+  }
+}
+
+.stunned-overlay__stars {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.stunned-overlay__star-slot {
+  position: absolute;
+  pointer-events: none;
+}
+
+.stunned-overlay__star-img {
+  display: block;
+  height: auto;
+  transform-origin: center center;
+  animation-name: stunned-star-spin;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  filter: drop-shadow(0 0 12px rgba(255, 234, 0, 0.55)) drop-shadow(0 0 4px rgba(255, 255, 255, 0.35));
+}
+
+@keyframes stunned-star-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .match-end-overlay {
   position: absolute;
   inset: 0;
