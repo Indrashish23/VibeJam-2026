@@ -131,6 +131,84 @@ body {
   display: none;
 }
 
+.lobby-vis-fieldset {
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 10px;
+  padding: 0.65rem 0.85rem 0.75rem;
+  margin: 0 0 0.85rem;
+}
+.lobby-vis-legend {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #94a3b8;
+  padding: 0 0.35rem;
+}
+.lobby-vis-option {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+  color: #e2e8f0;
+  margin-top: 0.35rem;
+  cursor: pointer;
+}
+.lobby-vis-option input {
+  accent-color: #5cffb8;
+}
+.lobby-browser-section {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem 0.75rem;
+  margin: 0 0 0.85rem;
+  background: rgba(15, 23, 42, 0.55);
+}
+.lobby-browser-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+.lobby-browser-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+.lobby-browser-hint {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  margin: 0 0 0.5rem;
+  line-height: 1.35;
+}
+.lobby-browser-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 9.5rem;
+  overflow-y: auto;
+}
+.lobby-browser-empty,
+.lobby-browser-row {
+  font-size: 0.78rem;
+  color: #94a3b8;
+  padding: 0.25rem 0;
+}
+.lobby-browser-join {
+  width: 100%;
+  text-align: left;
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid #334155;
+  background: rgba(30, 41, 59, 0.9);
+  color: #e2e8f0;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.lobby-browser-join:hover {
+  background: rgba(14, 165, 233, 0.15);
+  border-color: #0ea5e9;
+}
+
 .lobby-actions {
   display: flex;
   flex-direction: column;

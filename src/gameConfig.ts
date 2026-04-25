@@ -125,7 +125,9 @@ export const defaultGameConfig = {
   /** After opponent ring-out (win), wait this many ms before flashing GAME. */
   winRingoutPresentDelayMs: 2000,
   /** Outside platform half-extent + this (XZ) or below yKill = blast. */
-  blastMargin: 4,
+  blastMargin: 12,
+  /** When 1, draw a green ring-out boundary loop on the deck (Tweaks → Arena). */
+  showBlastBounds: 0,
   /** Fall below this Y on blast zone (death plane). */
   blastY: -12,
   botBodyRadius: 0.72,

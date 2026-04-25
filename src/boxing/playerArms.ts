@@ -60,6 +60,8 @@ export class PlayerArms {
     })
     const geo = new BoxGeometry(0.38, 0.38, 0.42)
     this.mesh = new Mesh(geo, mat)
+    this.mesh.castShadow = true
+    this.mesh.receiveShadow = true
     this.mesh.visible = false
     scene.add(this.mesh)
 

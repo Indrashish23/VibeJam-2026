@@ -30,6 +30,39 @@
           Change display name
         </button>
         <p id="lobby-error" class="lobby-error" role="alert" hidden></p>
+        <fieldset class="lobby-vis-fieldset">
+          <legend class="lobby-vis-legend">Match visibility (host)</legend>
+          <label
+            class="lobby-vis-option"
+            title="Only players with your lobby code can join. Your room is not listed in the public browser."
+          >
+            <input type="radio" name="lobby-vis" id="lobby-vis-private" value="private" checked />
+            Private (code only)
+          </label>
+          <label
+            class="lobby-vis-option"
+            title="While you wait for an opponent, your lobby appears in the public list so anyone can join without a code."
+          >
+            <input type="radio" name="lobby-vis" id="lobby-vis-public" value="public" />
+            Public (listed — join without code)
+          </label>
+        </fieldset>
+        <div id="lobby-browser-section" class="lobby-browser-section">
+          <div class="lobby-browser-head">
+            <span class="lobby-browser-title">Public lobbies</span>
+            <button type="button" id="lobby-browser-refresh" class="lobby-btn lobby-btn--small">
+              Refresh list
+            </button>
+          </div>
+          <p
+            id="lobby-browser-hint"
+            class="lobby-browser-hint"
+            title="Hosts who chose “Public” appear here while they wait. Click a row to join that room."
+          >
+            Open games from players who chose Public when hosting. Click Refresh, then Join on a row.
+          </p>
+          <ul id="lobby-browser-list" class="lobby-browser-list"></ul>
+        </div>
         <div class="lobby-actions">
           <button type="button" id="lobby-create" class="lobby-btn">Create lobby</button>
           <button type="button" id="lobby-practice" class="lobby-btn lobby-btn--ghost">

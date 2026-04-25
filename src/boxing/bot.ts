@@ -148,6 +148,8 @@ export class BotFighter {
     }
     this.feetFromCenter = feet
     this.mesh = new Mesh(geo, mat)
+    this.mesh.castShadow = true
+    this.mesh.receiveShadow = true
     this.root.add(this.mesh)
 
     const pm = new MeshStandardMaterial({
@@ -156,6 +158,8 @@ export class BotFighter {
       metalness: 0.2,
     })
     this.projMesh = new Mesh(new BoxGeometry(PROJECTILE_R * 2, PROJECTILE_R * 2, PROJECTILE_R * 2), pm)
+    this.projMesh.castShadow = true
+    this.projMesh.receiveShadow = true
     this.projMesh.visible = false
     scene.add(this.projMesh)
 
@@ -190,6 +194,13 @@ export class BotFighter {
       this.root.add(wrap)
       this.monkeyWrap = wrap
       this.monkeyRoot = sceneRoot
+      sceneRoot.traverse((o) => {
+        const mo = o as Mesh
+        if (mo.isMesh) {
+          mo.castShadow = true
+          mo.receiveShadow = true
+        }
+      })
 
       /* Hide the capsule visual now that the monkey is rendering. The hit-detection capsule (math) is unaffected. */
       this.mesh.visible = false

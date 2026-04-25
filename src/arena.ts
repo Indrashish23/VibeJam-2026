@@ -23,6 +23,7 @@ export function addArena(parent: Object3D): Mesh {
       metalness: 0.03,
     }),
   )
+  ground.receiveShadow = true
   ground.position.set(0, -h / 2, 0)
   parent.add(ground)
 
@@ -39,6 +40,8 @@ export function addArena(parent: Object3D): Mesh {
 
   const mkRim = (bw: number, bd: number, px: number, pz: number) => {
     const m = new Mesh(new BoxGeometry(bw, rimH, bd), rimMat)
+    m.receiveShadow = true
+    m.castShadow = true
     m.position.set(px, rimH / 2 + 0.001, pz)
     rimGroup.add(m)
   }

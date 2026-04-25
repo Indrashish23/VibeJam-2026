@@ -18,7 +18,7 @@ export const COMBAT = {
   percentGainMax: 22,
   /** Approximate capsule feet offset (matches BotFighter geometry). */
   feetFromCenterApprox: 0.85,
-  blastMargin: 4,
+  blastMargin: 12,
   blastY: -12,
   groundWidth: 52,
   groundDepth: 52,

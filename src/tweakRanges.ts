@@ -64,6 +64,7 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   dashDecay: { min: 4, max: 28, step: 0.4 },
   dashCooldownMs: { min: 100, max: CAP, step: 50 },
   blastMargin: { min: 0, max: 80, step: 1 },
+  showBlastBounds: { min: 0, max: 1, step: 1 },
   blastY: { min: -120, max: -2, step: 1 },
   botBodyRadius: { min: 0.3, max: 3, step: 0.05 },
   botPunchRange: { min: 2, max: 20, step: 0.2 },
@@ -240,6 +241,7 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   groundWidth: 'Ground width',
   groundDepth: 'Ground depth',
   blastMargin: 'Blast margin',
+  showBlastBounds: 'Show ring-out bounds (green loop)',
   blastY: 'Kill plane Y',
   botBodyRadius: 'Bot body radius',
   botPunchRange: 'Bot engage range',
@@ -309,6 +311,8 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   groundWidth: 'Half the stage is this wide in X; larger = more room before ring-out.',
   groundDepth: 'Half the stage depth in Z.',
   blastMargin: 'Extra distance beyond the deck edge before the blast zone counts (XZ).',
+  showBlastBounds:
+    'When 1, draws a bright green rectangle on the deck at the ring-out line (half arena + blast margin in XZ).',
   blastY: 'World Y below which you are eliminated (falling off the stage).',
 
   cameraFov: 'Vertical field of view in degrees (wider = more peripheral view).',
@@ -564,7 +568,14 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
   {
     id: 'arena',
     title: 'Arena',
-    keys: ['groundWidth', 'groundDepth', 'blastMargin', 'blastY', 'winRingoutPresentDelayMs'],
+    keys: [
+      'groundWidth',
+      'groundDepth',
+      'blastMargin',
+      'showBlastBounds',
+      'blastY',
+      'winRingoutPresentDelayMs',
+    ],
   },
   {
     id: 'opponent',

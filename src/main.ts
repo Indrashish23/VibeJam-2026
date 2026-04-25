@@ -9,8 +9,11 @@ import {
   Color,
   DirectionalLight,
   EdgesGeometry,
+  PCFSoftShadowMap,
   Group,
+  BufferGeometry,
   LineBasicMaterial,
+  LineLoop,
   LineSegments,
   MathUtils,
   Mesh,
@@ -37,6 +40,7 @@ import {
   type MultiplayerWire,
 } from './net/multiplayerSocket'
 import { createBrowserHostAuthority } from './net/browserHostAuthority'
+import { PublicLobbyDirectoryClient } from './net/publicLobbyDirectory'
 import { isAuthoritativeListenServer } from './net/transportConfig'
 import {
   createWebRtcGameChannel,
@@ -355,6 +359,8 @@ function initGame(lobby: LobbyResult) {
   const renderer = new WebGLRenderer({ antialias: true })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
   renderer.setSize(window.innerWidth, window.innerHeight)
+  renderer.shadowMap.enabled = true
+  renderer.shadowMap.type = PCFSoftShadowMap
   /** Canvas first in DOM so HUD / hit-flash overlays stack above it. */
   gameRoot.prepend(renderer.domElement)
 
@@ -375,8 +381,27 @@ function initGame(lobby: LobbyResult) {
   scene.add(ambient)
 
   const sun = new DirectionalLight(0xffffff, gameConfig.sunIntensity)
-  sun.position.set(28, 50, 22)
+  /* Top-down key light so character meshes cast readable shadows on the deck. */
+  sun.position.set(0, 72, 0.1)
+  sun.castShadow = true
+  sun.shadow.mapSize.set(2048, 2048)
+  sun.shadow.camera.near = 2
+  sun.shadow.camera.far = 160
+  sun.shadow.bias = -0.00025
+  sun.shadow.normalBias = 0.02
+  function applySunShadowFrustum(): void {
+    const ext = Math.max(gameConfig.groundWidth, gameConfig.groundDepth) * 0.5 + gameConfig.blastMargin + 10
+    const cam = sun.shadow.camera
+    cam.left = -ext
+    cam.right = ext
+    cam.top = ext
+    cam.bottom = -ext
+    cam.updateProjectionMatrix()
+  }
+  applySunShadowFrustum()
   scene.add(sun)
+  scene.add(sun.target)
+  sun.target.position.set(0, 0, 0)
 
   const hubRoot = new Group()
   scene.add(hubRoot)
@@ -446,6 +471,67 @@ function initGame(lobby: LobbyResult) {
     gameConfig.ecCapsuleRadius,
     gameConfig.ecCapsuleHeight,
   )
+
+  /** Green XZ loop: ring-out boundary (|x|/|z| vs half-extent + blast margin). Toggle via Tweaks `showBlastBounds`. */
+  const blastBoundsGeom = new BufferGeometry()
+  const blastBoundsLine = new LineLoop(
+    blastBoundsGeom,
+    new LineBasicMaterial({ color: 0x33ee66, transparent: true, opacity: 0.9 }),
+  )
+  blastBoundsLine.visible = false
+  scene.add(blastBoundsLine)
+
+  function syncBlastBoundsLine(): void {
+    const show = gameConfig.showBlastBounds >= 0.5
+    blastBoundsLine.visible = show
+    if (!show) return
+    const hw = gameConfig.groundWidth * 0.5 + gameConfig.blastMargin
+    const hd = gameConfig.groundDepth * 0.5 + gameConfig.blastMargin
+    const y = 0.065
+    blastBoundsGeom.setFromPoints([
+      new Vector3(-hw, y, -hd),
+      new Vector3(hw, y, -hd),
+      new Vector3(hw, y, hd),
+      new Vector3(-hw, y, hd),
+    ])
+  }
+  syncBlastBoundsLine()
+
+  let publicHostDirClient: PublicLobbyDirectoryClient | null = null
+  let publicHostDirTimer: ReturnType<typeof setInterval> | null = null
+
+  function stopPublicHostAnnounce(): void {
+    if (publicHostDirTimer !== null) {
+      window.clearInterval(publicHostDirTimer)
+      publicHostDirTimer = null
+    }
+    if (publicHostDirClient) {
+      publicHostDirClient.disconnect()
+      publicHostDirClient = null
+    }
+  }
+
+  function maybeStartPublicHostAnnounce(): void {
+    stopPublicHostAnnounce()
+    if (!isOnline || lobby.mode !== 'online') return
+    if (lobby.role !== 'host') return
+    if (lobby.lobbyVisibility !== 'public') return
+    if (lobby.startWithDummyPractice) return
+    if (mpPhase !== 'waiting') return
+    const client = new PublicLobbyDirectoryClient(() => {})
+    publicHostDirClient = client
+    client.connect()
+    const pulse = () => {
+      if (mpPhase !== 'waiting' || !publicHostDirClient) {
+        stopPublicHostAnnounce()
+        return
+      }
+      const hostName = readStoredPlayerName()?.trim() || displayPlayerName()
+      publicHostDirClient.sendHostPing(lobby.roomId, lobby.shortCode, hostName)
+    }
+    pulse()
+    publicHostDirTimer = window.setInterval(pulse, 4000)
+  }
 
   function isPvp(): boolean {
     return isOnline && mpPhase === 'live' && bot.mode === 'network'
@@ -879,6 +965,7 @@ function initGame(lobby: LobbyResult) {
   async function runMpBeginNow(): Promise<void> {
     if (lobby.mode !== 'online') return
     if (mpSeqStarted || mpPhase === 'live') return
+    stopPublicHostAnnounce()
     lobbyDummyPractice = false
     mpSeqStarted = true
 
@@ -961,6 +1048,7 @@ function initGame(lobby: LobbyResult) {
 
   /** After a match ends: show Rematch + Continue (no incoming offer). */
   function showMatchEndRematchControlsDefault(): void {
+    if (!matchOutcome) return
     if (matchRematchIncomingEl) matchRematchIncomingEl.hidden = true
     if (matchRematchPrimaryActionsEl) matchRematchPrimaryActionsEl.hidden = false
     if (matchRematchBtnEl) matchRematchBtnEl.hidden = false
@@ -1256,12 +1344,12 @@ function initGame(lobby: LobbyResult) {
     }
 
     if (ty === 'youLose') {
-      if (!matchOutcome) endMatch('win')
+      if (!matchOutcome) endMatch('lose')
       return
     }
 
     if (ty === 'youWin') {
-      if (!matchOutcome) endMatch('lose')
+      if (!matchOutcome) endMatch('win')
       return
     }
   }
@@ -1545,6 +1633,8 @@ function initGame(lobby: LobbyResult) {
     voiceDownBoostReady = true
     airDashReady = true
     airJumpsLeft = Math.max(0, Math.round(gameConfig.airJumpsMax))
+    applySunShadowFrustum()
+    syncBlastBoundsLine()
   }
 
   type WinFinisherState =
@@ -1628,6 +1718,7 @@ function initGame(lobby: LobbyResult) {
     rematchSequenceActive = true
     pendingOutgoingRematchId = null
     pendingIncomingRematchId = null
+    matchOutcome = null
     hideMatchEndAndRematchUiFully()
     chargingLmb = false
     controls.unlock()
@@ -1635,7 +1726,6 @@ function initGame(lobby: LobbyResult) {
     keys.back = false
     keys.left = false
     keys.right = false
-    matchOutcome = null
     winFinisher = null
     hideWinGameSplash()
     playerPercent = 0
@@ -1665,6 +1755,8 @@ function initGame(lobby: LobbyResult) {
     await runPvpCountdown321()
 
     rematchSequenceActive = false
+    hideMatchEndAndRematchUiFully()
+    if (matchEndOverlay) matchEndOverlay.hidden = true
     tryPointerLock()
   }
 
@@ -2368,6 +2460,7 @@ function initGame(lobby: LobbyResult) {
         ecVisible,
       )
     }
+    syncBlastBoundsLine()
     /* Debug Room toggle: detect transitions and teleport / restore. Reset suppression is wired via scheduleRoundResetAfterTweak. */
     updateDebugRoom()
 
@@ -2455,6 +2548,7 @@ function initGame(lobby: LobbyResult) {
             role: onlineLobby.role,
           }),
         )
+        queueMicrotask(() => maybeStartPublicHostAnnounce())
       })
       mpSocket.addEventListener('message', (ev: Event) =>
         onMpSocketMessage(ev as MessageEvent),
