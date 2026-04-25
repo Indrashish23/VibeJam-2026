@@ -154,6 +154,16 @@ export const defaultGameConfig = {
   /** Shooter hit replay: fade gain to zero over this many seconds (capped vs clip length). */
   voiceShooterReplayFadeSec: 1.35,
 
+  /** Max seconds of mic captured per charge (MediaRecorder cap). */
+  voiceRecordMaxSec: 10,
+
+  /** Look-down voice shot: min |pitch| (rad); PointerLockControls uses negative x when looking down. */
+  voiceLookdownPitchMin: 0.38,
+  /** Upward vy impulse when look-down shot boost triggers. */
+  voiceLookdownBoostVy: 4.2,
+  /** Clamp vy after boost (prevents extreme stacking with jump). */
+  voiceLookdownBoostMaxVy: 18,
+
   /** Voice shots per round; `0` = unlimited. */
   voiceShotAmmoMax: 0,
 

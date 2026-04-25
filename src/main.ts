@@ -458,6 +458,10 @@ function initGame(lobby: LobbyResult) {
   let vy = 0
   let grounded = false
   let lastJumpAt = 0
+  /** One look-down voice shot hop per airborne cycle; reset on landing. */
+  let voiceDownBoostReady = true
+  /** One Shift dash while airborne per flight; reset on landing. */
+  let airDashReady = true
 
   const keys = {
     forward: false,
@@ -1141,11 +1145,20 @@ function initGame(lobby: LobbyResult) {
       t * (gameConfig.voiceShotSpeedMaxMul - gameConfig.voiceShotSpeedMinMul)
     const fired = arms.tryFire(speedMul, buf, t)
     if (fired) {
+      voice.stopVoiceClipPlayback()
       voice.resetChargeMeter()
       voiceChargeSmoothed = 0
       if (chargeBarFill) chargeBarFill.style.width = '0%'
       if (chargeBarWrap) chargeBarWrap.classList.remove('charge-bar-wrap--overload')
       if (chargeBarWrap) chargeBarWrap.classList.remove('charge-bar-wrap--ready')
+      if (voiceDownBoostReady && camera.rotation.x <= -gameConfig.voiceLookdownPitchMin) {
+        vy = Math.min(
+          gameConfig.voiceLookdownBoostMaxVy,
+          vy + Math.max(0, gameConfig.voiceLookdownBoostVy),
+        )
+        grounded = false
+        voiceDownBoostReady = false
+      }
     }
     if (fired && cap > 0 && voiceAmmoLeft > 0) voiceAmmoLeft -= 1
 
@@ -1269,6 +1282,8 @@ function initGame(lobby: LobbyResult) {
     bot.setRecordingTelegraph(false)
     /** Spawn pose is always on the deck; keep in sync when movement ticks are skipped (e.g. voice countdown). */
     grounded = true
+    voiceDownBoostReady = true
+    airDashReady = true
   }
 
   type WinFinisherState =
@@ -1575,11 +1590,12 @@ function initGame(lobby: LobbyResult) {
       rematchSequenceActive ||
       multiplayerBlocksPlay() ||
       dashCdMs > 0 ||
-      !grounded ||
       tweaksPanelOpen ||
       playerHurt !== 'none'
     )
       return
+    const onDeck = grounded
+    if (!onDeck && !airDashReady) return
     computeDashDirection(_knDir)
     const distance = Math.max(0, gameConfig.dashImpulse) * Math.max(0.1, gameConfig.dashVelocityMul)
     const decay = Math.max(0.5, gameConfig.dashDecay)
@@ -1596,6 +1612,7 @@ function initGame(lobby: LobbyResult) {
     gameRoot.classList.add('game-root--dash-tilt')
 
     dashCdMs = gameConfig.dashCooldownMs
+    if (!onDeck) airDashReady = false
   }
 
   function resolveCombat(delta: number): void {
@@ -1631,11 +1648,12 @@ function initGame(lobby: LobbyResult) {
       arms.getProjectileWorld(_fp)
       const reach = arms.projectileRadius() + gameConfig.botBodyRadius * 0.88
       if (_fp.distanceTo(bot.bodyCenter) < reach) {
+        const shotT = arms.peekShotT()
         const hitAudio = arms.takeHitAudio()
         arms.markDealt()
         voice.playBuffer(hitAudio)
         knockDirFromFistImpact(_fp, _knDir)
-        const gain = percentGainFromCharge(arms.peekShotT())
+        const gain = percentGainFromCharge(shotT)
         enemyPercent = Math.min(100, enemyPercent + gain)
         syncHud()
         if (isPvp()) {
@@ -1885,6 +1903,11 @@ function initGame(lobby: LobbyResult) {
     dashVel.multiplyScalar(Math.exp(-gameConfig.dashDecay * delta))
 
     resolveGround()
+
+    if (!groundedBeforeResolve && grounded) {
+      voiceDownBoostReady = true
+      airDashReady = true
+    }
 
     if (playerHurt === 'air') {
       const elapsed = performance.now() - playerHurtAirSince

@@ -24,6 +24,10 @@ export class VoiceChargeManager {
   private recorder: MediaRecorder | null = null
   private recordChunks: BlobPart[] = []
   private recordingMime = ''
+  private recordCapTimer: ReturnType<typeof setTimeout> | null = null
+
+  /** Stops previous clip graph when starting a new one. */
+  private voicePlaybackCleanup: (() => void)[] = []
 
   /** Accumulated fire charge 0..1 (bar shows this, not instantaneous RMS). */
   private charge = 0
@@ -79,7 +83,10 @@ export class VoiceChargeManager {
   }
 
   dispose(): void {
+    this.clearRecordCapTimer()
     this.stopRecorderSilently()
+    this.recordChunks = []
+    this.stopVoiceClipPlayback()
     this.disposeStreamOnly()
     this.status = 'pending'
   }
@@ -97,8 +104,28 @@ export class VoiceChargeManager {
     return ''
   }
 
+  private clearRecordCapTimer(): void {
+    if (this.recordCapTimer != null) {
+      clearTimeout(this.recordCapTimer)
+      this.recordCapTimer = null
+    }
+  }
+
+  /** Hard-stop recording at voiceRecordMaxSec; chunks finalized when LMB releases (inactive + chunks). */
+  private capRecordingDuration(): void {
+    this.recordCapTimer = null
+    const rec = this.recorder
+    if (!rec || rec.state === 'inactive') return
+    try {
+      rec.stop()
+    } catch {
+      this.recorder = null
+    }
+  }
+
   /** Call when LMB pressed — begins recording blob for hit playback. */
   startChargeRecording(): void {
+    this.clearRecordCapTimer()
     this.recordChunks = []
     if (!this.stream) return
     this.stopRecorderSilently()
@@ -112,6 +139,8 @@ export class VoiceChargeManager {
         if (e.data.size > 0) this.recordChunks.push(e.data)
       }
       this.recorder.start(120)
+      const sec = Math.max(0.5, gameConfig.voiceRecordMaxSec)
+      this.recordCapTimer = window.setTimeout(() => this.capRecordingDuration(), sec * 1000)
     } catch {
       this.recorder = null
     }
@@ -131,19 +160,28 @@ export class VoiceChargeManager {
   /** Call on LMB release — returns blob for decode (may be empty). */
   finishChargeRecording(): Promise<Blob> {
     return new Promise((resolve) => {
-      const rec = this.recorder
-      if (!rec || rec.state === 'inactive') {
-        this.recorder = null
-        resolve(new Blob())
-        return
-      }
-      rec.onstop = () => {
+      this.clearRecordCapTimer()
+
+      const finalizeFromChunks = (): Blob => {
         const blob = new Blob(this.recordChunks, {
           type: this.recordingMime || 'audio/webm',
         })
         this.recordChunks = []
         this.recorder = null
-        resolve(blob)
+        return blob
+      }
+
+      const rec = this.recorder
+      if (!rec) {
+        resolve(this.recordChunks.length > 0 ? finalizeFromChunks() : new Blob())
+        return
+      }
+      if (rec.state === 'inactive') {
+        resolve(this.recordChunks.length > 0 ? finalizeFromChunks() : new Blob())
+        return
+      }
+      rec.onstop = () => {
+        resolve(finalizeFromChunks())
       }
       try {
         rec.stop()
@@ -228,8 +266,25 @@ export class VoiceChargeManager {
     }
   }
 
+  /** Stop any in-progress voice clip (new shot / new hit replaces previous). */
+  stopVoiceClipPlayback(): void {
+    for (const fn of this.voicePlaybackCleanup) {
+      try {
+        fn()
+      } catch {
+        /* ignore */
+      }
+    }
+    this.voicePlaybackCleanup = []
+  }
+
+  private trackPlayback(cleanup: () => void): void {
+    this.voicePlaybackCleanup.push(cleanup)
+  }
+
   /** Short fallback when decode fails — simple blip. */
   playFallbackHitSound(): void {
+    this.stopVoiceClipPlayback()
     const c = this.ctx
     if (!c) return
     const dur = 0.09
@@ -244,10 +299,23 @@ export class VoiceChargeManager {
     const src = c.createBufferSource()
     src.buffer = buf
     src.connect(c.destination)
+    this.trackPlayback(() => {
+      try {
+        src.stop(0)
+      } catch {
+        /* ignore */
+      }
+      try {
+        src.disconnect()
+      } catch {
+        /* ignore */
+      }
+    })
     src.start()
   }
 
   playBuffer(buf: AudioBuffer | null): void {
+    this.stopVoiceClipPlayback()
     const c = this.ctx
     if (!c || !buf) {
       this.playFallbackHitSound()
@@ -257,14 +325,27 @@ export class VoiceChargeManager {
       const src = c.createBufferSource()
       src.buffer = buf
       src.connect(c.destination)
+      this.trackPlayback(() => {
+        try {
+          src.stop(0)
+        } catch {
+          /* ignore */
+        }
+        try {
+          src.disconnect()
+        } catch {
+          /* ignore */
+        }
+      })
       src.start()
     } catch {
       this.playFallbackHitSound()
     }
   }
 
-  /** Shooter-only replay: fades out so the clip is not held after one play (GC-friendly). */
+  /** Shooter-only replay: fades gain to zero over this many seconds (capped vs clip length). */
   playBufferFading(buf: AudioBuffer | null): void {
+    this.stopVoiceClipPlayback()
     const c = this.ctx
     if (!c || !buf) {
       this.playFallbackHitSound()
@@ -281,6 +362,19 @@ export class VoiceChargeManager {
       gain.gain.linearRampToValueAtTime(0, t0 + fadeDur)
       src.connect(gain)
       gain.connect(c.destination)
+      this.trackPlayback(() => {
+        try {
+          src.stop(0)
+        } catch {
+          /* ignore */
+        }
+        try {
+          src.disconnect()
+          gain.disconnect()
+        } catch {
+          /* ignore */
+        }
+      })
       src.onended = () => {
         try {
           src.disconnect()
@@ -304,6 +398,7 @@ export class VoiceChargeManager {
     soundWorld: Vector3,
     camera: PerspectiveCamera,
   ): void {
+    this.stopVoiceClipPlayback()
     const c = this.ctx
     if (!c || !buf) {
       this.playFallbackHitSound()
@@ -339,6 +434,19 @@ export class VoiceChargeManager {
       src.buffer = buf
       src.connect(panner)
       panner.connect(c.destination)
+      this.trackPlayback(() => {
+        try {
+          src.stop(0)
+        } catch {
+          /* ignore */
+        }
+        try {
+          src.disconnect()
+          panner.disconnect()
+        } catch {
+          /* ignore */
+        }
+      })
       src.onended = () => {
         try {
           src.disconnect()
