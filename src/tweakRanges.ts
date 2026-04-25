@@ -489,7 +489,7 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
 export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] }[] = [
   {
     id: 'thePlayer',
-    title: 'The Player',
+    title: 'Gameplay',
     keys: [
       'hitsToWin',
       'enemyHitsToWin',

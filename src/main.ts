@@ -93,63 +93,8 @@ const victimHitFlashEl = document.getElementById('victim-hit-flash') as HTMLDivE
 const stunnedOverlayEl = document.getElementById('stunned-overlay') as HTMLDivElement | null
 const stunnedBgEl = document.getElementById('stunned-bg') as HTMLImageElement | null
 const stunnedStarsEl = document.getElementById('stunned-stars') as HTMLDivElement | null
-let stunnedFxTimer: ReturnType<typeof setTimeout> | null = null
 
 if (stunnedBgEl) stunnedBgEl.src = stunnedEffectBgUrl
-
-/** Full-window dazed vignette + up to 7 spinning stars when the local player is hit. */
-function triggerStunnedHitOverlay(): void {
-  if (!stunnedOverlayEl || !stunnedStarsEl) return
-  if (stunnedFxTimer !== null) {
-    clearTimeout(stunnedFxTimer)
-    stunnedFxTimer = null
-  }
-  stunnedStarsEl.replaceChildren()
-  stunnedOverlayEl.classList.remove('stunned-overlay--active')
-  void stunnedOverlayEl.offsetWidth
-  stunnedOverlayEl.classList.add('stunned-overlay--active')
-
-  const w = window.innerWidth
-  const h = window.innerHeight
-  const minDim = Math.min(w, h)
-  const count = 4 + Math.floor(Math.random() * 4)
-
-  for (let i = 0; i < count; i++) {
-    const ang = Math.random() * Math.PI * 2
-    const r = minDim * (0.26 + Math.random() * 0.22)
-    const cx = w * 0.5 + Math.cos(ang) * r + (Math.random() - 0.5) * minDim * 0.06
-    const cy = h * 0.5 + Math.sin(ang) * r + (Math.random() - 0.5) * minDim * 0.06
-    const slotRot = Math.random() * 360
-    const px = 44 + Math.random() * 132
-    const spinS = 0.42 + Math.random() * 0.55
-
-    const slot = document.createElement('div')
-    slot.className = 'stunned-overlay__star-slot'
-    slot.style.left = `${cx}px`
-    slot.style.top = `${cy}px`
-    slot.style.transform = `translate(-50%, -50%) rotate(${slotRot}deg)`
-
-    const img = document.createElement('img')
-    img.className = 'stunned-overlay__star-img'
-    img.src = stunnedStarUrl
-    img.alt = ''
-    img.decoding = 'async'
-    img.style.width = `${px}px`
-    img.style.animationDuration = `${spinS}s`
-    img.style.animationDirection = Math.random() < 0.5 ? 'reverse' : 'normal'
-
-    slot.appendChild(img)
-    stunnedStarsEl.appendChild(slot)
-  }
-
-  stunnedOverlayEl.hidden = false
-  stunnedFxTimer = window.setTimeout(() => {
-    stunnedOverlayEl.hidden = true
-    stunnedOverlayEl.classList.remove('stunned-overlay--active')
-    stunnedStarsEl.replaceChildren()
-    stunnedFxTimer = null
-  }, 1000)
-}
 
 const matchEndOverlay = document.getElementById('match-end-overlay') as HTMLDivElement | null
 const matchEndTitle = document.getElementById('match-end-title')
@@ -785,6 +730,76 @@ function initGame(lobby: LobbyResult) {
   let playerHurtRecoverLeft = 0
   let playerHurtAirSince = 0
   let playerInvulnUntil = 0
+
+  /** Stunned vignette + stars: stays up until hurt ends and post-knock invuln expires. */
+  let stunnedFxActive = false
+
+  function hideStunnedFxOverlay(): void {
+    if (!stunnedOverlayEl || !stunnedStarsEl) return
+    stunnedFxActive = false
+    stunnedOverlayEl.hidden = true
+    stunnedOverlayEl.classList.remove('stunned-overlay--active')
+    stunnedStarsEl.replaceChildren()
+  }
+
+  function triggerStunnedHitOverlay(): void {
+    if (!stunnedOverlayEl || !stunnedStarsEl) return
+    stunnedStarsEl.replaceChildren()
+    stunnedOverlayEl.classList.remove('stunned-overlay--active')
+    void stunnedOverlayEl.offsetWidth
+    stunnedOverlayEl.classList.add('stunned-overlay--active')
+
+    const w = window.innerWidth
+    const h = window.innerHeight
+    const minDim = Math.min(w, h)
+    const count = 4 + Math.floor(Math.random() * 4)
+
+    for (let i = 0; i < count; i++) {
+      const ang = Math.random() * Math.PI * 2
+      const r = minDim * (0.22 + Math.random() * 0.26)
+      const cx = w * 0.5 + Math.cos(ang) * r + (Math.random() - 0.5) * minDim * 0.08
+      const cy = h * 0.5 + Math.sin(ang) * r + (Math.random() - 0.5) * minDim * 0.08
+      const slotRot = Math.random() * 360
+      const px = 72 + Math.random() * 148
+      const spinS = 0.42 + Math.random() * 0.55
+      const shimDur = 0.58 + Math.random() * 0.62
+
+      const slot = document.createElement('div')
+      slot.className = 'stunned-overlay__star-slot'
+      slot.style.left = `${cx}px`
+      slot.style.top = `${cy}px`
+      slot.style.transform = `translate(-50%, -50%) rotate(${slotRot}deg)`
+
+      const shim = document.createElement('div')
+      shim.className = 'stunned-overlay__star-shim'
+      shim.style.setProperty('--shim-dur', `${shimDur}s`)
+
+      const img = document.createElement('img')
+      img.className = 'stunned-overlay__star-img'
+      img.src = stunnedStarUrl
+      img.alt = ''
+      img.decoding = 'async'
+      img.draggable = false
+      img.style.width = `${px}px`
+      img.style.animationDuration = `${spinS}s`
+      img.style.animationDirection = Math.random() < 0.5 ? 'reverse' : 'normal'
+
+      shim.appendChild(img)
+      slot.appendChild(shim)
+      stunnedStarsEl.appendChild(slot)
+    }
+
+    stunnedOverlayEl.hidden = false
+    stunnedFxActive = true
+  }
+
+  function syncStunnedFxOverlay(): void {
+    if (!stunnedFxActive || !stunnedOverlayEl) return
+    const now = performance.now()
+    const done = playerHurt === 'none' && now >= playerInvulnUntil
+    if (done) hideStunnedFxOverlay()
+  }
+
   function deriveLocalAnimBase(): NetAnimBase {
     if (playerHurt !== 'none') return 'hitreact'
     if (!grounded || performance.now() < slideAnimUntilMs) return 'jumping'
@@ -1873,6 +1888,7 @@ function initGame(lobby: LobbyResult) {
     playerHurt = 'none'
     playerHurtRecoverLeft = 0
     playerInvulnUntil = 0
+    hideStunnedFxOverlay()
     bot.setRecordingTelegraph(false)
     /** Spawn pose is always on the deck; keep in sync when movement ticks are skipped (e.g. voice countdown). */
     grounded = true
@@ -2721,7 +2737,15 @@ function initGame(lobby: LobbyResult) {
       } else if (matchOutcome) {
         arms.update(delta)
       }
+    } else if (
+      (tweaksPanelOpen || leaveMatchDialogOpen) &&
+      (playerHurt !== 'none' || stunnedFxActive)
+    ) {
+      /* Tweaks / leave dialog open: still tick hurt + invuln so stun stars can clear. */
+      updateMovement(delta)
     }
+
+    syncStunnedFxOverlay()
 
     applyHitPresentation(delta)
 
@@ -3019,6 +3043,10 @@ function initGame(lobby: LobbyResult) {
         if (!open) tryPointerLock()
       },
       onConfigChanged: scheduleRoundResetAfterTweak,
+      onTriggerKnockbackDev: () => {
+        if (multiplayerBlocksPlay()) return
+        applyPeerMeleeHit(0.62, -0.74, { authoritative: true, victimPercent: playerPercent })
+      },
       ...(isOnline && lobby.mode === 'online'
         ? { onPracticeWithDummy: beginLobbyDummyPractice }
         : {}),

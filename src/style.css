@@ -1217,11 +1217,11 @@ body {
   display: none !important;
 }
 
-/* Local player hit — radial white vignette + spinning stars (see Assets/UI). */
+/* Local player hit — radial white vignette + spinning stars (see Assets/UI). Above victim white (88) so stars show. */
 .stunned-overlay {
   position: absolute;
   inset: 0;
-  z-index: 86;
+  z-index: 89;
   pointer-events: none;
   overflow: hidden;
 }
@@ -1241,21 +1241,18 @@ body {
 }
 
 .stunned-overlay--active .stunned-overlay__bg {
-  animation: stunned-bg-flash 1s ease-in-out forwards;
+  opacity: 0.78;
+  animation: stunned-bg-breathe 2.6s ease-in-out infinite alternate;
 }
 
-@keyframes stunned-bg-flash {
+@keyframes stunned-bg-breathe {
   0% {
-    opacity: 0.35;
-  }
-  12% {
-    opacity: 0.92;
-  }
-  55% {
-    opacity: 0.78;
+    opacity: 0.58;
+    filter: brightness(0.98);
   }
   100% {
-    opacity: 0.22;
+    opacity: 0.9;
+    filter: brightness(1.06);
   }
 }
 
@@ -1270,6 +1267,20 @@ body {
   pointer-events: none;
 }
 
+.stunned-overlay__star-shim {
+  transform-origin: center center;
+  animation: stunned-star-shimmer var(--shim-dur, 0.72s) ease-in-out infinite alternate;
+}
+
+@keyframes stunned-star-shimmer {
+  0% {
+    transform: scale(0.88);
+  }
+  100% {
+    transform: scale(1.12);
+  }
+}
+
 .stunned-overlay__star-img {
   display: block;
   height: auto;
@@ -1277,7 +1288,7 @@ body {
   animation-name: stunned-star-spin;
   animation-timing-function: linear;
   animation-iteration-count: infinite;
-  filter: drop-shadow(0 0 12px rgba(255, 234, 0, 0.55)) drop-shadow(0 0 4px rgba(255, 255, 255, 0.35));
+  filter: drop-shadow(0 0 18px rgba(255, 234, 0, 0.75)) drop-shadow(0 0 6px rgba(255, 255, 255, 0.45));
 }
 
 @keyframes stunned-star-spin {
@@ -1287,6 +1298,28 @@ body {
   to {
     transform: rotate(360deg);
   }
+}
+
+.tweaks-section-dev-row {
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.tweaks-dev-action-btn {
+  width: 100%;
+  padding: 0.45rem 0.65rem;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  background: rgba(251, 191, 36, 0.12);
+  color: #fde68a;
+}
+
+.tweaks-dev-action-btn:hover {
+  background: rgba(251, 191, 36, 0.22);
 }
 
 .match-end-overlay {

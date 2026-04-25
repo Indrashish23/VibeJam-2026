@@ -29,6 +29,8 @@ export type TweaksPanelHooks = {
   debugBoolToggles?: DebugBoolToggle[]
   /** Online lobby (waiting): start local dummy round without leaving the room. */
   onPracticeWithDummy?: () => void | Promise<void>
+  /** Gameplay section: apply a dev knockback to the local player (for testing hit FX). */
+  onTriggerKnockbackDev?: () => void
 }
 
 type RowInput = { key: GameConfigKey; range: HTMLInputElement; num: HTMLInputElement }
@@ -113,7 +115,7 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
   const sub = document.createElement('span')
   sub.className = 'tweaks-panel-sub'
   sub.textContent =
-    'T or − opens · Category menu (The Player + Projectile + others) · hover any row for a tip · Esc closes'
+    'T or − opens · Category menu (Gameplay + Projectile + others) · hover any row for a tip · Esc closes'
   header.appendChild(title)
   header.appendChild(sub)
   panel.appendChild(header)
@@ -212,6 +214,24 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
     }
     sectionPanels.set(section.id, panel)
     body.appendChild(panel)
+  }
+
+  if (hooks.onTriggerKnockbackDev) {
+    const gameplayPanel = sectionPanels.get('thePlayer')
+    if (gameplayPanel) {
+      const wrap = document.createElement('div')
+      wrap.className = 'tweaks-section-dev-row'
+      const btn = document.createElement('button')
+      btn.type = 'button'
+      btn.className = 'tweaks-dev-action-btn'
+      btn.textContent = 'Trigger knockback'
+      btn.title = 'Applies an authoritative melee knock to you (tests stun overlay + invuln).'
+      btn.addEventListener('click', () => {
+        hooks.onTriggerKnockbackDev?.()
+      })
+      wrap.appendChild(btn)
+      gameplayPanel.appendChild(wrap)
+    }
   }
 
   navSel.value = defaultSectionId
