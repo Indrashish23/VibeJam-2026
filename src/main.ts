@@ -53,8 +53,9 @@ import {
   isMpDebugMode,
   type MpDiagSnapshot,
 } from './mpDebugReport'
-import stunnedEffectBgUrl from '../Assets/UI/StunnedEffectBg.svg?url'
-import stunnedStarUrl from '../Assets/UI/StunnedStar.svg?url'
+/** Stunned FX SVGs live in `public/ui/` so Vercel/production resolves them without bundling `../Assets/`. */
+const stunnedEffectBgUrl = `${import.meta.env.BASE_URL}ui/StunnedEffectBg.svg`
+const stunnedStarUrl = `${import.meta.env.BASE_URL}ui/StunnedStar.svg`
 
 /** Production without baked host: open once with `?pk=your-deployment.partykit.dev` (stored in session). */
 try {
