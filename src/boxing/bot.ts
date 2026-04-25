@@ -59,6 +59,7 @@ export class BotFighter {
   readonly projVel = new Vector3()
   private readonly projSpawn = new Vector3()
   projDealt = true
+  private projSizeMul = 1
 
   /** Optional decoded clip on bot projectile (PvP / future); spatial playback for victim. */
   private projHitAudio: AudioBuffer | null = null
@@ -130,7 +131,12 @@ export class BotFighter {
   /**
    * Opponent voice shot replicated in world space (same ballistic integration as local arms).
    */
-  injectWorldProjectile(worldOrigin: Vector3, velWorld: Vector3, voiceClip: AudioBuffer | null): void {
+  injectWorldProjectile(
+    worldOrigin: Vector3,
+    velWorld: Vector3,
+    voiceClip: AudioBuffer | null,
+    sizeMul = 1,
+  ): void {
     if (this.mode === 'network' && this.projActive) {
       this.clearProjectile()
     } else if (this.projActive) return
@@ -140,6 +146,7 @@ export class BotFighter {
     this.projActive = true
     this.projFlying = true
     this.projDealt = false
+    this.projSizeMul = Math.max(0.15, Math.min(6, sizeMul))
     this.projHitAudio = voiceClip
     _work.copy(worldOrigin).add(velWorld)
     this.faceToward(_work)
@@ -264,6 +271,8 @@ export class BotFighter {
     this.projVel.set(0, 0, 0)
     this.projDealt = true
     this.projHitAudio = null
+    this.projSizeMul = 1
+    this.projMesh.scale.setScalar(1)
     this.projMesh.visible = false
   }
 
@@ -307,8 +316,9 @@ export class BotFighter {
         this.clearProjectile()
         return
       }
-      const hw = gameConfig.groundWidth / 2 + PROJECTILE_R
-      const hd = gameConfig.groundDepth / 2 + PROJECTILE_R
+      const rad = PROJECTILE_R * this.projSizeMul
+      const hw = gameConfig.groundWidth / 2 + rad
+      const hd = gameConfig.groundDepth / 2 + rad
       if (Math.abs(this.projPos.x) > hw || Math.abs(this.projPos.z) > hd) {
         this.clearProjectile()
       }
@@ -331,9 +341,10 @@ export class BotFighter {
       return
     }
 
-    const hw = gameConfig.groundWidth / 2 - PROJECTILE_R * 0.5
-    const hd = gameConfig.groundDepth / 2 - PROJECTILE_R * 0.5
-    const minY = PROJECTILE_R
+    const rad = PROJECTILE_R * this.projSizeMul
+    const hw = gameConfig.groundWidth / 2 - rad * 0.5
+    const hd = gameConfig.groundDepth / 2 - rad * 0.5
+    const minY = rad
     const onDeck =
       Math.abs(this.projPos.x) <= hw &&
       Math.abs(this.projPos.z) <= hd &&
@@ -367,7 +378,7 @@ export class BotFighter {
     const dy = this.projPos.y - cy
     const dz = this.projPos.z - cz
     const dist = Math.hypot(dx, dy * 0.75, dz)
-    const reach = gameConfig.punchHitRadius + gameConfig.botBodyRadius * 0.88
+    const reach = gameConfig.punchHitRadius * this.projSizeMul + gameConfig.botBodyRadius * 0.88
     if (dist < reach) this.clearProjectile()
   }
 
@@ -393,6 +404,7 @@ export class BotFighter {
       this.clearProjectileNearLocalPlayer(playerPos)
       if (this.projActive) {
         this.projMesh.position.copy(this.projPos)
+        this.projMesh.scale.setScalar(this.projSizeMul)
         this.projMesh.visible = true
       }
       return

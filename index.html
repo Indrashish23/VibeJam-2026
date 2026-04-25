@@ -96,6 +96,27 @@
         </div>
       </div>
       <div id="crosshair" class="crosshair" aria-hidden="true"></div>
+      <div id="leave-match-overlay" class="leave-match-overlay" hidden>
+        <div
+          class="match-end-card"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="leave-match-title"
+        >
+          <h2 id="leave-match-title" class="match-end-title">Leave match?</h2>
+          <p class="match-end-sub">You will return to the lobby. This match will end for you here.</p>
+          <div class="match-end-actions">
+            <button
+              type="button"
+              id="leave-match-confirm"
+              class="match-end-btn match-end-btn--primary"
+            >
+              Back to lobby
+            </button>
+            <button type="button" id="leave-match-cancel" class="match-end-btn">Stay in match</button>
+          </div>
+        </div>
+      </div>
       <div id="match-end-overlay" class="match-end-overlay" hidden>
         <div class="match-end-card" role="dialog" aria-labelledby="match-end-title">
           <h2 id="match-end-title" class="match-end-title">You win!</h2>

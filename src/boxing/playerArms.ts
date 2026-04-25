@@ -25,6 +25,8 @@ type ProjectileState = {
   hitAudio: AudioBuffer | null
   /** 0..1 at fire time: damage / knock lerp. */
   shotT: number
+  /** Visual + collision scale multiplier for this fired shot. */
+  sizeMul: number
 }
 
 /**
@@ -70,6 +72,7 @@ export class PlayerArms {
       spawnPos: new Vector3(),
       hitAudio: null,
       shotT: 0,
+      sizeMul: 1,
     }
   }
 
@@ -90,6 +93,7 @@ export class PlayerArms {
     speedFactor: number,
     hitAudio: AudioBuffer | null,
     shotT: number,
+    sizeMul = 1,
   ): boolean {
     if (this.proj.active) return false
 
@@ -108,6 +112,7 @@ export class PlayerArms {
     this.proj.spawnPos.copy(this.proj.pos)
     this.proj.hitAudio = hitAudio
     this.proj.shotT = Math.max(0, Math.min(1, shotT))
+    this.proj.sizeMul = Math.max(0.15, Math.min(6, sizeMul))
     this.proj.active = true
     this.proj.flying = true
     this.dealt = false
@@ -145,6 +150,7 @@ export class PlayerArms {
     this._meshQuat.copy(this.camera.quaternion)
     this.mesh.setRotationFromQuaternion(this._meshQuat)
     this.mesh.position.copy(this.proj.pos)
+    this.mesh.scale.setScalar(this.proj.sizeMul)
     this.mesh.visible = true
   }
 
@@ -162,8 +168,9 @@ export class PlayerArms {
         this.resetProjectile()
         return
       }
-      const hw = gameConfig.groundWidth / 2 + PROJECTILE_R
-      const hd = gameConfig.groundDepth / 2 + PROJECTILE_R
+      const rad = PROJECTILE_R * this.proj.sizeMul
+      const hw = gameConfig.groundWidth / 2 + rad
+      const hd = gameConfig.groundDepth / 2 + rad
       if (Math.abs(this.proj.pos.x) > hw || Math.abs(this.proj.pos.z) > hd) {
         this.resetProjectile()
       }
@@ -192,9 +199,10 @@ export class PlayerArms {
   }
 
   private resolveArenaImpact(): boolean {
-    const hw = gameConfig.groundWidth / 2 - PROJECTILE_R * 0.5
-    const hd = gameConfig.groundDepth / 2 - PROJECTILE_R * 0.5
-    const minY = PROJECTILE_R
+    const rad = PROJECTILE_R * this.proj.sizeMul
+    const hw = gameConfig.groundWidth / 2 - rad * 0.5
+    const hd = gameConfig.groundDepth / 2 - rad * 0.5
+    const minY = rad
 
     const onDeck =
       Math.abs(this.proj.pos.x) <= hw &&
@@ -228,6 +236,8 @@ export class PlayerArms {
     this.proj.vel.set(0, 0, 0)
     this.proj.hitAudio = null
     this.proj.shotT = 0
+    this.proj.sizeMul = 1
+    this.mesh.scale.setScalar(1)
     this.mesh.visible = false
     this.dealt = true
   }
@@ -264,7 +274,7 @@ export class PlayerArms {
   }
 
   projectileRadius(): number {
-    return gameConfig.punchHitRadius
+    return gameConfig.punchHitRadius * this.proj.sizeMul
   }
 
   resetAll(): void {

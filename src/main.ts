@@ -24,6 +24,7 @@ import { gameConfig } from './gameConfig'
 import { addArena, isBlastZone } from './arena'
 import { BotFighter, type BotMode } from './boxing/bot'
 import { PlayerArms } from './boxing/playerArms'
+import { LocalPlayerAvatar } from './boxing/localPlayerAvatar'
 import { VoiceChargeManager } from './audio/voiceCharge'
 import { mountTweaksPanel } from './tweaksPanel'
 import { runLobbyGate, type LobbyResult } from './lobbyGate'
@@ -99,6 +100,9 @@ const matchRematchAcceptBtnEl = document.getElementById(
 const matchRematchDeclineBtnEl = document.getElementById(
   'match-rematch-decline-btn',
 ) as HTMLButtonElement | null
+const leaveMatchOverlay = document.getElementById('leave-match-overlay') as HTMLDivElement | null
+const leaveMatchConfirmBtn = document.getElementById('leave-match-confirm') as HTMLButtonElement | null
+const leaveMatchCancelBtn = document.getElementById('leave-match-cancel') as HTMLButtonElement | null
 const hitFlashEl = document.getElementById('hit-flash') as HTMLDivElement | null
 const invulnShineEl = document.getElementById('invuln-shine') as HTMLDivElement | null
 const winGameSplashEl = document.getElementById('win-game-splash') as HTMLDivElement | null
@@ -253,7 +257,6 @@ if (DEBUG_MP && debugMpPanel) {
 }
 
 const HUB_SKY = 0x87b8e8
-const PIXEL_HUB = 2
 
 const _knDir = new Vector3()
 const _fp = new Vector3()
@@ -301,6 +304,7 @@ function initGame(lobby: LobbyResult) {
     )
 
   let tweaksPanelOpen = false
+  let leaveMatchDialogOpen = false
 
   const isOnline = lobby.mode === 'online'
   let mpPhase: 'waiting' | 'starting' | 'live' = isOnline ? 'waiting' : 'live'
@@ -351,9 +355,9 @@ function initGame(lobby: LobbyResult) {
 
   const composer = new EffectComposer(renderer)
   composer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-  const pixelPass = new RenderPixelatedPass(PIXEL_HUB, scene, camera, {
-    normalEdgeStrength: 0,
-    depthEdgeStrength: 0,
+  const pixelPass = new RenderPixelatedPass(Math.max(1, gameConfig.retroPixelScale), scene, camera, {
+    normalEdgeStrength: Math.max(0, gameConfig.retroEdgeStrength * 0.65),
+    depthEdgeStrength: Math.max(0, gameConfig.retroEdgeStrength),
   })
   composer.addPass(pixelPass)
   composer.addPass(new OutputPass())
@@ -378,6 +382,14 @@ function initGame(lobby: LobbyResult) {
   scene.add(camera)
 
   const arms = new PlayerArms(camera, scene)
+  let localAvatar: LocalPlayerAvatar | null = null
+  void LocalPlayerAvatar.create(scene)
+    .then((avatar) => {
+      localAvatar = avatar
+    })
+    .catch((err) => {
+      console.warn('[avatar] Local monkey avatar failed to initialize', err)
+    })
 
   let botMode: BotMode = isOnline ? 'dummy' : 'dummy'
   let bot = new BotFighter(scene, botMode, new Vector3())
@@ -764,6 +776,8 @@ function initGame(lobby: LobbyResult) {
   }
 
   function returnToLobbyReload(): void {
+    localAvatar?.dispose()
+    localAvatar = null
     try {
       mpSocket?.close()
     } catch {
@@ -1006,6 +1020,7 @@ function initGame(lobby: LobbyResult) {
           vz: data.vz,
           mime: typeof data.mime === 'string' ? data.mime : 'audio/webm',
           audioB64: data.audioB64,
+          shotScale: typeof data.shotScale === 'number' ? data.shotScale : 1,
         })
       }
       return
@@ -1100,6 +1115,7 @@ function initGame(lobby: LobbyResult) {
     vz: number
     mime: string
     audioB64: string
+    shotScale: number
   }): Promise<void> {
     if (seenVoiceShotIds.has(data.shotId)) return
     seenVoiceShotIds.add(data.shotId)
@@ -1116,7 +1132,7 @@ function initGame(lobby: LobbyResult) {
       }
       const o = new Vector3(data.ox, data.oy, data.oz)
       const v = new Vector3(data.vx, data.vy, data.vz)
-      bot.injectWorldProjectile(o, v, buf)
+      bot.injectWorldProjectile(o, v, buf, data.shotScale)
       if (buf && pendingVictimVoiceShotIds.has(data.shotId)) {
         pendingVictimVoiceShotIds.delete(data.shotId)
         pendingPeerShotAudioById.delete(data.shotId)
@@ -1130,6 +1146,7 @@ function initGame(lobby: LobbyResult) {
 
   async function releaseVoiceShot(): Promise<void> {
     const blob = await voice.finishChargeRecording()
+    localAvatar?.onRecordingReleased()
     const buf = await voice.decodeRecording(blob)
     const raw = voiceInputBlocked
       ? Math.max(0, Math.min(1, gameConfig.voiceDryFireT))
@@ -1143,7 +1160,11 @@ function initGame(lobby: LobbyResult) {
     const speedMul =
       gameConfig.voiceShotSpeedMinMul +
       t * (gameConfig.voiceShotSpeedMaxMul - gameConfig.voiceShotSpeedMinMul)
-    const fired = arms.tryFire(speedMul, buf, t)
+    const sizeMul = Math.max(
+      0.15,
+      gameConfig.projectileSizeBase * (1 + gameConfig.projectileSizeChargeMaxBonus * t),
+    )
+    const fired = arms.tryFire(speedMul, buf, t, sizeMul)
     if (fired) {
       voice.stopVoiceClipPlayback()
       voice.resetChargeMeter()
@@ -1185,6 +1206,7 @@ function initGame(lobby: LobbyResult) {
           vy: v.y,
           vz: v.z,
           chargeT: raw,
+          shotScale: sizeMul,
           mime: blob.type || 'audio/webm',
           audioB64,
           fromRole: lobby.role,
@@ -1228,6 +1250,7 @@ function initGame(lobby: LobbyResult) {
   }
 
   let dashTiltDeg = 0
+  let slideAnimUntilMs = 0
 
   function arenaSpacing(): number {
     const arenaHalf = Math.min(gameConfig.groundWidth, gameConfig.groundDepth) * 0.5 - 2.5
@@ -1260,6 +1283,7 @@ function initGame(lobby: LobbyResult) {
     bot.alignFacingToward(camera.position)
 
     dashTiltDeg = 0
+    slideAnimUntilMs = 0
     gameRoot.classList.remove('game-root--dash-tilt')
     gameRoot.style.transform = ''
     if (dashScanEl) dashScanEl.style.opacity = '0'
@@ -1549,6 +1573,7 @@ function initGame(lobby: LobbyResult) {
   function tryJump() {
     if (
       tweaksPanelOpen ||
+      leaveMatchDialogOpen ||
       matchOutcome ||
       winFinisher ||
       rematchSequenceActive ||
@@ -1591,6 +1616,7 @@ function initGame(lobby: LobbyResult) {
       multiplayerBlocksPlay() ||
       dashCdMs > 0 ||
       tweaksPanelOpen ||
+      leaveMatchDialogOpen ||
       playerHurt !== 'none'
     )
       return
@@ -1610,6 +1636,7 @@ function initGame(lobby: LobbyResult) {
     const lateral = _camRight.dot(_knDir)
     dashTiltDeg = MathUtils.clamp(lateral * -7.8, -6.8, 6.8)
     gameRoot.classList.add('game-root--dash-tilt')
+    slideAnimUntilMs = performance.now() + 320
 
     dashCdMs = gameConfig.dashCooldownMs
     if (!onDeck) airDashReady = false
@@ -1715,6 +1742,7 @@ function initGame(lobby: LobbyResult) {
     /** 1 dummy · 2 smart · 3 toggle bot · R restart (also when match-end overlay is open). */
     const shortcutBlock =
       tweaksPanelOpen ||
+      leaveMatchDialogOpen ||
       rematchSequenceActive ||
       winFinisher ||
       multiplayerBlocksPlay()
@@ -1747,6 +1775,7 @@ function initGame(lobby: LobbyResult) {
 
     if (
       tweaksPanelOpen ||
+      leaveMatchDialogOpen ||
       matchOutcome ||
       winFinisher ||
       rematchSequenceActive ||
@@ -1788,7 +1817,7 @@ function initGame(lobby: LobbyResult) {
   }
 
   function onKeyUp(e: KeyboardEvent) {
-    if (tweaksPanelOpen || matchOutcome) return
+    if (tweaksPanelOpen || leaveMatchDialogOpen || matchOutcome) return
     switch (e.code) {
       case 'KeyW':
       case 'ArrowUp':
@@ -1822,6 +1851,7 @@ function initGame(lobby: LobbyResult) {
       voiceResumeCountdownActive ||
       multiplayerBlocksPlay() ||
       tweaksPanelOpen ||
+      leaveMatchDialogOpen ||
       matchOutcome ||
       winFinisher ||
       rematchSequenceActive ||
@@ -1831,6 +1861,7 @@ function initGame(lobby: LobbyResult) {
       return
     voice.resumeAudio()
     voice.startChargeRecording()
+    if (!voiceInputBlocked) localAvatar?.onRecordingStarted()
     chargingLmb = true
   }
 
@@ -2062,7 +2093,7 @@ function initGame(lobby: LobbyResult) {
       if (dashSpd < 0.18) dashScanEl.style.opacity = '0'
     }
 
-    if (!tweaksPanelOpen) {
+    if (!tweaksPanelOpen && !leaveMatchDialogOpen) {
       if (
         !matchOutcome &&
         !rematchSequenceActive &&
@@ -2076,6 +2107,30 @@ function initGame(lobby: LobbyResult) {
     }
 
     applyHitPresentation(delta)
+
+    // Retro post-process can be tuned live from Tweaks.
+    ;(pixelPass as unknown as { setPixelSize?: (v: number) => void }).setPixelSize?.(
+      Math.max(1, gameConfig.retroPixelScale),
+    )
+    pixelPass.depthEdgeStrength = Math.max(0, gameConfig.retroEdgeStrength)
+    pixelPass.normalEdgeStrength = Math.max(0, gameConfig.retroEdgeStrength * 0.65)
+
+    localAvatar?.update(delta, {
+      x: camera.position.x,
+      feetY: feetY(),
+      z: camera.position.z,
+      yaw: camera.rotation.y,
+      grounded,
+      moving:
+        keys.forward ||
+        keys.back ||
+        keys.left ||
+        keys.right ||
+        Math.abs(velocity.x) > 0.08 ||
+        Math.abs(velocity.z) > 0.08,
+      playerHurt,
+      slideActive: performance.now() < slideAnimUntilMs,
+    })
 
     if (invulnShineEl) {
       const now = performance.now()
@@ -2103,6 +2158,7 @@ function initGame(lobby: LobbyResult) {
   function tryPointerLock(): void {
     if (
       tweaksPanelOpen ||
+      leaveMatchDialogOpen ||
       matchOutcome ||
       winFinisher ||
       rematchSequenceActive ||
@@ -2112,6 +2168,25 @@ function initGame(lobby: LobbyResult) {
     )
       return
     void controls.lock()
+  }
+
+  function hideLeaveMatchDialog(): void {
+    if (!leaveMatchOverlay) return
+    leaveMatchDialogOpen = false
+    leaveMatchOverlay.hidden = true
+    tryPointerLock()
+  }
+
+  function showLeaveMatchDialog(): void {
+    if (!leaveMatchOverlay) return
+    leaveMatchDialogOpen = true
+    leaveMatchOverlay.hidden = false
+    try {
+      controls.unlock()
+    } catch {
+      /* ignore */
+    }
+    requestAnimationFrame(() => leaveMatchCancelBtn?.focus())
   }
 
   /** HUD used to sit above the canvas and eat clicks; clicks on the canvas re-request lock after Esc/tab. */
@@ -2251,6 +2326,16 @@ function initGame(lobby: LobbyResult) {
     returnToLobbyReload()
   })
 
+  leaveMatchCancelBtn?.addEventListener('click', () => hideLeaveMatchDialog())
+  leaveMatchConfirmBtn?.addEventListener('click', () => {
+    hideLeaveMatchDialog()
+    if (lobby.mode === 'online') dismissMatchEndOnline()
+    returnToLobbyReload()
+  })
+  leaveMatchOverlay?.addEventListener('click', (e) => {
+    if (e.target === leaveMatchOverlay) hideLeaveMatchDialog()
+  })
+
   /** Escape: always offer exit (capture + before tweaks so T panel still owns Escape when open). */
   function onEscapeLeaveMatch(e: KeyboardEvent): void {
     if (e.code !== 'Escape' || e.repeat) return
@@ -2259,12 +2344,21 @@ function initGame(lobby: LobbyResult) {
     if (tweaksPanelOpen) return
     if (gameRoot.hidden) return
     e.preventDefault()
-    const ok = window.confirm('Leave match and return to lobby?')
-    if (!ok) return
-    if (lobby.mode === 'online') dismissMatchEndOnline()
-    returnToLobbyReload()
+    if (leaveMatchDialogOpen) {
+      hideLeaveMatchDialog()
+      return
+    }
+    showLeaveMatchDialog()
   }
   window.addEventListener('keydown', onEscapeLeaveMatch, true)
+  window.addEventListener(
+    'beforeunload',
+    () => {
+      localAvatar?.dispose()
+      localAvatar = null
+    },
+    { once: true },
+  )
 
   const tweaksHost = document.getElementById('tweaks-panel-host')
   if (tweaksHost) {

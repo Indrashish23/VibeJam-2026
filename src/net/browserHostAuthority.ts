@@ -86,6 +86,8 @@ export function createBrowserHostAuthority(broadcast: AuthBroadcast) {
       const tRaw = data.chargeT
       const chargeT =
         typeof tRaw === 'number' ? Math.max(0, Math.min(1, tRaw)) : 0.5
+      const shotScaleRaw = data.shotScale
+      const shotScale = typeof shotScaleRaw === 'number' ? Math.max(0.15, shotScaleRaw) : 1
       if (chargeT < gameConfig.voiceMinChargeToFire - 1e-6) return false
       const gain = percentGainFromCharge(chargeT)
 
@@ -93,6 +95,7 @@ export function createBrowserHostAuthority(broadcast: AuthBroadcast) {
         { x: ox, y: oy as number, z: oz as number },
         { x: vx as number, y: vy as number, z: vz as number },
         oppCenter,
+        shotScale,
       )
       if (!sim.hit) return false
       if (shots.has(shotId)) return false

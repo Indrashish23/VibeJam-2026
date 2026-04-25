@@ -14,6 +14,10 @@ export const defaultGameConfig = {
   cameraFov: 75,
   cameraNear: 0.1,
   cameraFar: 650,
+  /** Pixel pass cell size (higher = chunkier retro pixels). */
+  retroPixelScale: 2.35,
+  /** Pixel pass edge hint strength (subtle retro contour). */
+  retroEdgeStrength: 0.12,
 
   ambientIntensity: 0.5,
   sunIntensity: 1.05,
@@ -40,6 +44,10 @@ export const defaultGameConfig = {
   /** Gravity on flying fists; 0 = constant-velocity line in aim direction. */
   fistGravity: 0,
   punchHitRadius: 0.72,
+  /** Projectile base size multiplier (visual + hit radius baseline). */
+  projectileSizeBase: 1,
+  /** Extra projectile size bonus at full charge `t=1` (0.2 = +20%). */
+  projectileSizeChargeMaxBonus: 0.2,
   /** Horizontal knockback on player when bot lands a hit (non-parried). */
   knockbackOnPlayer: 26,
   /** Base knock on bot (multiplied by voice `t` lerp). */

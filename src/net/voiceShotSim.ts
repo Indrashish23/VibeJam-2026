@@ -18,9 +18,11 @@ export function simulateVoiceShotHit(
   origin: { x: number; y: number; z: number },
   vel: { x: number; y: number; z: number },
   oppCenter: { x: number; y: number; z: number },
+  shotScale = 1,
 ): { hit: false } | { hit: true; dx: number; dz: number } {
   const maxR = gameConfig.punchMaxRange
-  const reach = gameConfig.punchHitRadius + gameConfig.botBodyRadius * 0.88
+  const size = Math.max(0.15, shotScale)
+  const reach = gameConfig.punchHitRadius * size + gameConfig.botBodyRadius * 0.88
   const minTravel = maxR * 0.06
   const g = gameConfig.fistGravity
   const drag = gameConfig.fistAirDrag

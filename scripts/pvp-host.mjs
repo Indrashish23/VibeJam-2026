@@ -138,6 +138,8 @@ function validateVoiceShot(roomId, ws, raw, data) {
 
   const tRaw = data.chargeT
   const chargeT = typeof tRaw === 'number' ? Math.max(0, Math.min(1, tRaw)) : 0.5
+  const shotScaleRaw = data.shotScale
+  const shotScale = typeof shotScaleRaw === 'number' ? Math.max(0.15, shotScaleRaw) : 1
   if (chargeT < COMBAT.voiceMinChargeToFire - 1e-6) return
   const minF = Math.max(0.01, Math.min(0.99, COMBAT.voiceMinChargeToFire))
   const c = Math.max(minF, Math.min(1, chargeT))
@@ -148,6 +150,7 @@ function validateVoiceShot(roomId, ws, raw, data) {
     { x: ox, y: oy, z: oz },
     { x: vx, y: vy, z: vz },
     oppCenter,
+    shotScale,
   )
 
   if (!sim.hit) return

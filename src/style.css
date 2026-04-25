@@ -1010,6 +1010,21 @@ body {
   background: #475569;
 }
 
+.leave-match-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  background: rgba(15, 23, 42, 0.58);
+}
+
+.leave-match-overlay[hidden] {
+  display: none !important;
+}
+
 .match-end-overlay {
   position: absolute;
   inset: 0;

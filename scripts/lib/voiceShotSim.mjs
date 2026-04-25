@@ -17,9 +17,10 @@ export function opponentBodyCenterFromPose(pose) {
  * Straight-line segment (matches client when fistGravity and fistAirDrag are 0),
  * else legacy stepped ballistic for older configs.
  */
-export function simulateVoiceShotHit(origin, vel, oppCenter) {
+export function simulateVoiceShotHit(origin, vel, oppCenter, shotScale = 1) {
   const maxR = C.punchMaxRange
-  const reach = C.punchHitRadius + C.botBodyRadius * C.reachMul
+  const size = Math.max(0.15, shotScale)
+  const reach = C.punchHitRadius * size + C.botBodyRadius * C.reachMul
   const minTravel = maxR * 0.06
   const g = C.fistGravity
   const drag = C.fistAirDrag
