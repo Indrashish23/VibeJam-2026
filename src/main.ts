@@ -754,16 +754,21 @@ function initGame(lobby: LobbyResult) {
     const h = window.innerHeight
     const minDim = Math.min(w, h)
     const count = 4 + Math.floor(Math.random() * 4)
+    const spreadMul = MathUtils.clamp(gameConfig.stunnedStarSpreadMul, 0.4, 2.35)
+    const spinMul = MathUtils.clamp(gameConfig.stunnedStarSpinMul, 0.45, 5)
+    const scaleMul = MathUtils.clamp(gameConfig.stunnedStarScaleMul, 0.35, 2.5)
 
     for (let i = 0; i < count; i++) {
       const ang = Math.random() * Math.PI * 2
-      const r = minDim * (0.22 + Math.random() * 0.26)
-      const cx = w * 0.5 + Math.cos(ang) * r + (Math.random() - 0.5) * minDim * 0.08
-      const cy = h * 0.5 + Math.sin(ang) * r + (Math.random() - 0.5) * minDim * 0.08
+      const r0 = 0.22 + Math.random() * 0.26
+      const r = Math.min(minDim * 0.54, minDim * r0 * spreadMul)
+      const jitter = 0.08 * spreadMul
+      const cx = w * 0.5 + Math.cos(ang) * r + (Math.random() - 0.5) * minDim * jitter
+      const cy = h * 0.5 + Math.sin(ang) * r + (Math.random() - 0.5) * minDim * jitter
       const slotRot = Math.random() * 360
-      const px = 72 + Math.random() * 148
-      const spinS = 0.42 + Math.random() * 0.55
-      const shimDur = 0.58 + Math.random() * 0.62
+      const px = (72 + Math.random() * 148) * scaleMul
+      const spinS = (0.42 + Math.random() * 0.55) * spinMul
+      const shimDur = (0.58 + Math.random() * 0.62) * Math.sqrt(spinMul)
 
       const slot = document.createElement('div')
       slot.className = 'stunned-overlay__star-slot'

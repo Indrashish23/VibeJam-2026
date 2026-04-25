@@ -260,6 +260,18 @@ export const defaultGameConfig = {
   ecModelRotX: 0,
   ecModelRotY: 0,
 
+  /**
+   * Stunned hit VFX (see `public/ui/` stars): radial distance from screen center uses
+   * `minDim × (0.22…0.48) × this`. Higher = stars sit farther out (more spread).
+   */
+  stunnedStarSpreadMul: 1.38,
+  /**
+   * Multiplies seconds per full star spin (base random ~0.42–0.97s). Higher = slower rotation.
+   */
+  stunnedStarSpinMul: 2.15,
+  /** Multiplies randomized star graphic width (base ~72–220px). */
+  stunnedStarScaleMul: 1.02,
+
   /** Debug Room: when 1, slider edits do NOT trigger a round reset; teleports you + dummy to a side arena. */
   debugRoomActive: 0,
 } as const

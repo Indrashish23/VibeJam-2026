@@ -145,6 +145,9 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
 
   ambientIntensity: { min: 0, max: CAP, step: 0.05 },
   sunIntensity: { min: 0, max: CAP, step: 0.05 },
+  stunnedStarScaleMul: { min: 0.35, max: 2.2, step: 0.02 },
+  stunnedStarSpinMul: { min: 0.45, max: 5, step: 0.05 },
+  stunnedStarSpreadMul: { min: 0.45, max: 2.35, step: 0.02 },
   movementMaxDelta: { min: 0.002, max: 2, step: 0.01 },
 
   gravity: { min: 0, max: CAP, step: 1 },
@@ -291,6 +294,9 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   ecModelTransZ: 'Model translate Z (local forward, m)',
   ecModelRotX: 'Model pitch (rad)',
   ecModelRotY: 'Model yaw trim (rad)',
+  stunnedStarScaleMul: 'Stunned stars — scale ×',
+  stunnedStarSpinMul: 'Stunned stars — spin × (higher = slower)',
+  stunnedStarSpreadMul: 'Stunned stars — spread × (distance from center)',
   debugRoomActive: 'Debug room active (0/1)',
 }
 
@@ -372,6 +378,12 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   pcModelTransZ: 'Nudge your first-person body backward (−) / forward (+) relative to the camera (after body forward).',
   pcModelRotX: 'Extra model pitch (rad) on your FPS body (YXZ, applied after look yaw + avatar yaw).',
   pcModelRotY: 'Extra model yaw (rad) trim (small corrections on top of body yaw).',
+  stunnedStarSpreadMul:
+    'When you are hit, “seeing stars” radial distance from screen center scales by this (1 = legacy-ish ring; higher pushes stars toward the edges).',
+  stunnedStarSpinMul:
+    'Multiplies how many seconds each star takes for a full rotation (higher = slower, calmer spin).',
+  stunnedStarScaleMul:
+    'Uniform size multiplier on each star graphic (width); random per star still applies within the base band.',
   debugRoomActive:
     'When 1, the game enters an in-place debug arena: the player + dummy are teleported to a side area and round-resets are suppressed while you tweak.',
 
@@ -652,6 +664,11 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
     id: 'lighting',
     title: 'Lighting',
     keys: ['ambientIntensity', 'sunIntensity'],
+  },
+  {
+    id: 'uiVfx',
+    title: 'UI and Vfx',
+    keys: ['stunnedStarSpreadMul', 'stunnedStarSpinMul', 'stunnedStarScaleMul'],
   },
   {
     id: 'legacyCompat',
