@@ -20,12 +20,23 @@ const defaultPose = (role: 'host' | 'guest'): PoseLite => {
   return { x: 0, z: -spacing, fy, ry: Math.PI }
 }
 
+function percentGainFromCharge(charge: number): number {
+  const minF = Math.max(0.01, Math.min(0.99, gameConfig.voiceMinChargeToFire))
+  const c = Math.max(minF, Math.min(1, charge))
+  const t = (c - minF) / (1 - minF + 1e-6)
+  return gameConfig.percentGainMin + t * (gameConfig.percentGainMax - gameConfig.percentGainMin)
+}
+
+function startingPercent(): { host: number; guest: number } {
+  return { host: 0, guest: 0 }
+}
+
 export function createBrowserHostAuthority(broadcast: AuthBroadcast) {
   const poses: { host: PoseLite | null; guest: PoseLite | null } = {
     host: null,
     guest: null,
   }
-  const scores = { host: 0, guest: 0 }
+  let percent = startingPercent()
   const shots = new Set<string>()
   let ended = false
 
@@ -72,6 +83,12 @@ export function createBrowserHostAuthority(broadcast: AuthBroadcast) {
       const shotId = data.shotId
       if (typeof ox !== 'number' || typeof shotId !== 'string') return false
 
+      const tRaw = data.chargeT
+      const chargeT =
+        typeof tRaw === 'number' ? Math.max(0, Math.min(1, tRaw)) : 0.5
+      if (chargeT < gameConfig.voiceMinChargeToFire - 1e-6) return false
+      const gain = percentGainFromCharge(chargeT)
+
       const sim = simulateVoiceShotHit(
         { x: ox, y: oy as number, z: oz as number },
         { x: vx as number, y: vy as number, z: vz as number },
@@ -82,8 +99,7 @@ export function createBrowserHostAuthority(broadcast: AuthBroadcast) {
       shots.add(shotId)
       if (shots.size > 512) shots.clear()
 
-      const key = fromRole
-      scores[key] += 1
+      percent[victim] = Math.min(100, percent[victim] + gain)
 
       broadcast({
         type: 'authDamage',
@@ -92,27 +108,19 @@ export function createBrowserHostAuthority(broadcast: AuthBroadcast) {
         dx: sim.dx,
         dz: sim.dz,
         shotId,
-        scoreHost: scores.host,
-        scoreGuest: scores.guest,
+        percentHost: percent.host,
+        percentGuest: percent.guest,
+        chargeT,
+        percentGain: gain,
       })
 
-      const cap = Math.round(gameConfig.enemyHitsToWin)
-      if (scores[key] >= cap) {
-        ended = true
-        broadcast({
-          type: 'authMatchEnd',
-          winnerRole: fromRole,
-          reason: 'ko',
-        })
-      }
       return true
     },
 
     reset(): void {
       poses.host = null
       poses.guest = null
-      scores.host = 0
-      scores.guest = 0
+      percent = startingPercent()
       shots.clear()
       ended = false
     },

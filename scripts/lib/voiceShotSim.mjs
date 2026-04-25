@@ -14,17 +14,41 @@ export function opponentBodyCenterFromPose(pose) {
 }
 
 /**
- * Same ballistic integration as client `PlayerArms` / `BotFighter` projectile.
+ * Straight-line segment (matches client when fistGravity and fistAirDrag are 0),
+ * else legacy stepped ballistic for older configs.
  */
 export function simulateVoiceShotHit(origin, vel, oppCenter) {
   const maxR = C.punchMaxRange
   const reach = C.punchHitRadius + C.botBodyRadius * C.reachMul
-  const pos = { x: origin.x, y: origin.y, z: origin.z }
-  const v = { x: vel.x, y: vel.y, z: vel.z }
-  const spawn = { ...pos }
   const minTravel = maxR * 0.06
   const g = C.fistGravity
   const drag = C.fistAirDrag
+
+  if (g < 1e-6 && drag < 1e-6) {
+    const speed = Math.hypot(vel.x, vel.y, vel.z) || 1
+    const dir = { x: vel.x / speed, y: vel.y / speed, z: vel.z / speed }
+    const dt = 1 / 240
+    for (let s = 0; s <= maxR + 1e-3; s += speed * dt) {
+      const px = origin.x + dir.x * s
+      const py = origin.y + dir.y * s
+      const pz = origin.z + dir.z * s
+      const dx = px - oppCenter.x
+      const dy = py - oppCenter.y
+      const dz = pz - oppCenter.z
+      const dist = Math.hypot(dx, dy * 0.75, dz)
+      if (dist < reach && s > minTravel) {
+        const h = Math.hypot(dx, dz)
+        const kx = h > 1e-6 ? dx / h : 0
+        const kz = h > 1e-6 ? dz / h : 1
+        return { hit: true, dx: kx, dz: kz }
+      }
+    }
+    return { hit: false }
+  }
+
+  const pos = { x: origin.x, y: origin.y, z: origin.z }
+  const v = { x: vel.x, y: vel.y, z: vel.z }
+  const spawn = { ...pos }
   const dt = 1 / 120
 
   for (let step = 0; step < 4000; step++) {

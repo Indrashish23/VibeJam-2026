@@ -21,12 +21,35 @@ export function simulateVoiceShotHit(
 ): { hit: false } | { hit: true; dx: number; dz: number } {
   const maxR = gameConfig.punchMaxRange
   const reach = gameConfig.punchHitRadius + gameConfig.botBodyRadius * 0.88
-  const pos = { ...origin }
-  const v = { ...vel }
-  const spawn = { ...origin }
   const minTravel = maxR * 0.06
   const g = gameConfig.fistGravity
   const drag = gameConfig.fistAirDrag
+
+  if (g < 1e-6 && drag < 1e-6) {
+    const speed = Math.hypot(vel.x, vel.y, vel.z) || 1
+    const dir = { x: vel.x / speed, y: vel.y / speed, z: vel.z / speed }
+    const dt = 1 / 240
+    for (let s = 0; s <= maxR + 1e-3; s += speed * dt) {
+      const px = origin.x + dir.x * s
+      const py = origin.y + dir.y * s
+      const pz = origin.z + dir.z * s
+      const dx = px - oppCenter.x
+      const dy = py - oppCenter.y
+      const dz = pz - oppCenter.z
+      const dist = Math.hypot(dx, dy * 0.75, dz)
+      if (dist < reach && s > minTravel) {
+        const h = Math.hypot(dx, dz)
+        const kx = h > 1e-6 ? dx / h : 0
+        const kz = h > 1e-6 ? dz / h : 1
+        return { hit: true, dx: kx, dz: kz }
+      }
+    }
+    return { hit: false }
+  }
+
+  const pos = { ...origin }
+  const v = { ...vel }
+  const spawn = { ...origin }
   const dt = 1 / 120
 
   for (let step = 0; step < 4000; step++) {

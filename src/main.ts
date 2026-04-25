@@ -4,14 +4,12 @@
 import './style.css'
 import {
   AmbientLight,
-  BoxGeometry,
   Clock,
   Color,
   DirectionalLight,
   Group,
   MathUtils,
   Mesh,
-  MeshStandardMaterial,
   PerspectiveCamera,
   Raycaster,
   Scene,
@@ -75,10 +73,8 @@ const usernameForm = document.getElementById('username-form') as HTMLFormElement
 const usernameInput = document.getElementById('username-input') as HTMLInputElement
 const gameRoot = document.getElementById('game-root') as HTMLDivElement
 
-const scorePEl = document.getElementById('score-p')
-const scoreBEl = document.getElementById('score-b')
-const hitsNeedEnemyEl = document.getElementById('hits-need-enemy')
-const hitsNeedPlayerEl = document.getElementById('hits-need-player')
+const percentYouEl = document.getElementById('percent-you')
+const percentFoeEl = document.getElementById('percent-foe')
 
 const matchEndOverlay = document.getElementById('match-end-overlay') as HTMLDivElement | null
 const matchEndTitle = document.getElementById('match-end-title')
@@ -114,6 +110,7 @@ const dashScanEl = document.getElementById('dash-scanlines') as HTMLDivElement |
 const chargeBarWrap = document.getElementById('charge-bar-wrap') as HTMLDivElement | null
 const chargeBarFill = document.getElementById('charge-bar-fill') as HTMLDivElement | null
 const chargeBarMinMark = document.getElementById('charge-bar-min') as HTMLDivElement | null
+const chargeBarStatus = document.getElementById('charge-bar-status') as HTMLDivElement | null
 const micBlockedOverlay = document.getElementById('mic-blocked-overlay') as HTMLDivElement | null
 const micBlockedSubEl = document.getElementById('mic-blocked-sub') as HTMLParagraphElement | null
 const countdownTitleEl = document.getElementById('countdown-title') as HTMLParagraphElement | null
@@ -331,6 +328,8 @@ function initGame(lobby: LobbyResult) {
   const seenVoiceShotIds = new Set<string>()
   /** Peer voice clips keyed by shotId — play when authoritative authDamage confirms a hit. */
   const pendingPeerShotAudioById = new Map<string, AudioBuffer>()
+  /** Local aggressor: replay own shot clip on authoritative hit confirm. */
+  const pendingAttackerShotAudioById = new Map<string, AudioBuffer>()
   /** authDamage can arrive before async decode finishes — play clip once buffer exists. */
   const pendingVictimVoiceShotIds = new Set<string>()
 
@@ -376,34 +375,7 @@ function initGame(lobby: LobbyResult) {
   const ground = addArena(hubRoot)
   const colliders: Mesh[] = [ground]
 
-  let parryGuardRoot: Group | null = null
-  let parryArmMeshL: Mesh | null = null
-  let parryArmMeshR: Mesh | null = null
-
   scene.add(camera)
-
-  {
-    const root = new Group()
-    const fistCol = new Color(0xc45c6b)
-    const pgMat = new MeshStandardMaterial({
-      color: fistCol,
-      roughness: 0.55,
-      metalness: 0.14,
-    })
-    const pgGeo = new BoxGeometry(0.52, 0.13, 0.3)
-    const armL = new Mesh(pgGeo, pgMat)
-    const armR = new Mesh(pgGeo, pgMat.clone())
-    armL.position.set(-0.44, -0.28, -0.55)
-    armR.position.set(0.44, -0.28, -0.55)
-    armL.rotation.set(0.28, 0.38, 0.92)
-    armR.rotation.set(0.28, -0.38, -0.92)
-    root.add(armL, armR)
-    root.visible = false
-    camera.add(root)
-    parryGuardRoot = root
-    parryArmMeshL = armL
-    parryArmMeshR = armR
-  }
 
   const arms = new PlayerArms(camera, scene)
 
@@ -463,10 +435,9 @@ function initGame(lobby: LobbyResult) {
     }
   }
 
-  let playerHits = 0
-  let botHits = 0
+  let playerPercent = 0
+  let enemyPercent = 0
   let matchOutcome: null | 'win' | 'lose' = null
-  let lastQAt = -1e12
 
   const playerKnock = new Vector3()
   const dashVel = new Vector3()
@@ -495,8 +466,6 @@ function initGame(lobby: LobbyResult) {
     right: false,
   }
 
-  let shiftDashArmed = true
-  let parryGuardUntil = 0
   /** Blocks gameplay during KO rematch cinematic (black → swipe → countdown). */
   let rematchSequenceActive = false
 
@@ -550,6 +519,8 @@ function initGame(lobby: LobbyResult) {
     voiceChargeSmoothed = 0
     if (chargeBarFill) chargeBarFill.style.width = '0%'
     if (chargeBarWrap) chargeBarWrap.classList.remove('charge-bar-wrap--overload')
+    if (chargeBarWrap) chargeBarWrap.classList.remove('charge-bar-wrap--ready')
+    updateChargeStatusUi(0)
     await voice.finishChargeRecording()
 
     applyRoundReset()
@@ -562,15 +533,15 @@ function initGame(lobby: LobbyResult) {
     matchOutcome = null
     winFinisher = null
     hideWinGameSplash()
-    parryGuardUntil = 0
-    playerHits = 0
-    botHits = 0
+    playerPercent = 0
+    enemyPercent = 0
     playerHurt = 'none'
     playerHurtRecoverLeft = 0
     playerInvulnUntil = 0
     if (matchEndOverlay) matchEndOverlay.hidden = true
     browserHost?.reset()
     pendingPeerShotAudioById.clear()
+    pendingAttackerShotAudioById.clear()
     pendingVictimVoiceShotIds.clear()
     spawnActors()
     syncHud()
@@ -593,7 +564,34 @@ function initGame(lobby: LobbyResult) {
     voiceResumeCountdownActive = false
   }
 
-  async function runMatchBeginCountdown(): Promise<void> {
+  function pvpExpectedSpawn(): { camZ: number; oppZ: number; oppRootY: number } {
+    const spacing = arenaSpacing()
+    const { camZ, opponentBotZ } = pvpSpawnZs(spacing)
+    const oppRootY = bot.getFootOffset() + 0.08
+    return { camZ, oppZ: opponentBotZ, oppRootY }
+  }
+
+  /** Wait until local camera + replicated opponent capsule are near spawn (extends countdown). */
+  async function waitForPvpSpawnSettled(maxWaitMs: number): Promise<void> {
+    if (!isOnline || lobby.mode !== 'online' || bot.mode !== 'network') return
+    const t0 = performance.now()
+    const epsXZ = 2.6
+    const epsY = 2.2
+    const exp = pvpExpectedSpawn()
+    const expOpp = new Vector3(0, exp.oppRootY, exp.oppZ)
+    while (performance.now() - t0 < maxWaitMs) {
+      const camOk =
+        Math.abs(camera.position.x) < epsXZ &&
+        Math.abs(camera.position.z - exp.camZ) < epsXZ &&
+        Math.abs(feetY()) < 1.15
+      const opp = bot.root.position
+      const oppOk = opp.distanceTo(expOpp) < epsXZ && Math.abs(opp.y - exp.oppRootY) < epsY
+      if (camOk && oppOk) return
+      await sleepMs(72)
+    }
+  }
+
+  async function runPvpCountdown321(): Promise<void> {
     if (!countdownOverlay || !countdownNumEl) return
     if (countdownTitleEl) {
       countdownTitleEl.hidden = false
@@ -601,6 +599,9 @@ function initGame(lobby: LobbyResult) {
     }
     countdownOverlay.hidden = false
     for (const n of [3, 2, 1] as const) {
+      if (isOnline && lobby.mode === 'online' && bot.mode === 'network') {
+        await waitForPvpSpawnSettled(4800)
+      }
       countdownNumEl.textContent = String(n)
       countdownOverlay.classList.remove('countdown-overlay--pulse')
       void countdownOverlay.offsetWidth
@@ -610,6 +611,10 @@ function initGame(lobby: LobbyResult) {
     if (countdownTitleEl) countdownTitleEl.hidden = true
     countdownOverlay.hidden = true
     countdownOverlay.classList.remove('countdown-overlay--pulse')
+  }
+
+  async function runMatchBeginCountdown(): Promise<void> {
+    await runPvpCountdown321()
   }
 
   async function initVoiceInput(): Promise<void> {
@@ -659,13 +664,13 @@ function initGame(lobby: LobbyResult) {
     if (isOnline && lobby.mode === 'online') {
       spawnActors()
       const spacing = arenaSpacing()
-      const botFeetY = gameConfig.botBodyRadius * 1.15 + 0.72
       const { opponentBotZ } = pvpSpawnZs(spacing)
       bot.dispose(scene)
       botMode = 'network'
-      bot = new BotFighter(scene, 'network', new Vector3(0, botFeetY, opponentBotZ), {
+      bot = new BotFighter(scene, 'network', new Vector3(0, 0, opponentBotZ), {
         bodyColor: randomOpponentCapsuleColor(),
       })
+      bot.root.position.set(0, bot.getFootOffset() + 0.08, opponentBotZ)
       bot.alignFacingToward(camera.position)
     }
 
@@ -719,7 +724,23 @@ function initGame(lobby: LobbyResult) {
     return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
   }
 
-  function syncMatchEndRematchControlsIdle(): void {
+  /** Hide match-end overlay and all rematch negotiation UI (incoming / waiting / cancel). */
+  function hideMatchEndAndRematchUiFully(): void {
+    if (matchEndOverlay) matchEndOverlay.hidden = true
+    if (matchRematchIncomingEl) matchRematchIncomingEl.hidden = true
+    if (matchRematchPrimaryActionsEl) matchRematchPrimaryActionsEl.hidden = true
+    if (matchRematchBtnEl) matchRematchBtnEl.hidden = true
+    if (matchCloseBtnEl) matchCloseBtnEl.hidden = true
+    if (matchRematchStatusEl) {
+      matchRematchStatusEl.hidden = true
+      matchRematchStatusEl.textContent = ''
+    }
+    if (matchRematchCancelBtnEl) matchRematchCancelBtnEl.hidden = true
+  }
+
+  /** After a match ends: show Rematch + Continue (no incoming offer). */
+  function showMatchEndRematchControlsDefault(): void {
+    if (matchRematchIncomingEl) matchRematchIncomingEl.hidden = true
     if (matchRematchPrimaryActionsEl) matchRematchPrimaryActionsEl.hidden = false
     if (matchRematchBtnEl) matchRematchBtnEl.hidden = false
     if (matchCloseBtnEl) matchCloseBtnEl.hidden = false
@@ -728,18 +749,37 @@ function initGame(lobby: LobbyResult) {
       matchRematchStatusEl.textContent = ''
     }
     if (matchRematchCancelBtnEl) matchRematchCancelBtnEl.hidden = true
-    if (matchRematchIncomingEl) matchRematchIncomingEl.hidden = true
+  }
+
+  function syncMatchEndRematchControlsIdle(): void {
+    if (matchOutcome) {
+      showMatchEndRematchControlsDefault()
+    } else {
+      hideMatchEndAndRematchUiFully()
+    }
+  }
+
+  function returnToLobbyReload(): void {
+    try {
+      mpSocket?.close()
+    } catch {
+      /* ignore */
+    }
+    window.setTimeout(() => {
+      window.location.reload()
+    }, 80)
   }
 
   function beginOnlineRematchRequest(): void {
     if (!isOnline || lobby.mode !== 'online' || !matchOutcome) return
+    if (pendingIncomingRematchId !== null) return
     const id = generateRematchRoundId()
     pendingOutgoingRematchId = id
     sendGameTraffic({ type: 'rematchOffer', roundId: id })
     if (matchRematchBtnEl) matchRematchBtnEl.hidden = true
     if (matchRematchStatusEl) {
       matchRematchStatusEl.hidden = false
-      matchRematchStatusEl.textContent = 'Waiting for opponent to accept…'
+      matchRematchStatusEl.textContent = 'Waiting for rematch…'
     }
     if (matchRematchCancelBtnEl) matchRematchCancelBtnEl.hidden = false
   }
@@ -764,12 +804,13 @@ function initGame(lobby: LobbyResult) {
       sendGameTraffic({ type: 'rematchAccept', roundId })
       pendingOutgoingRematchId = null
       pendingIncomingRematchId = null
-      syncMatchEndRematchControlsIdle()
+      hideMatchEndAndRematchUiFully()
       void runRematchSequence()
       return
     }
     pendingIncomingRematchId = roundId
     if (matchRematchPrimaryActionsEl) matchRematchPrimaryActionsEl.hidden = true
+    if (matchRematchBtnEl) matchRematchBtnEl.hidden = true
     if (matchRematchIncomingEl) matchRematchIncomingEl.hidden = false
     if (matchRematchStatusEl) {
       matchRematchStatusEl.hidden = false
@@ -781,7 +822,7 @@ function initGame(lobby: LobbyResult) {
     if (pendingOutgoingRematchId === roundId) {
       pendingOutgoingRematchId = null
       pendingIncomingRematchId = null
-      syncMatchEndRematchControlsIdle()
+      hideMatchEndAndRematchUiFully()
       void runRematchSequence()
     }
   }
@@ -834,15 +875,15 @@ function initGame(lobby: LobbyResult) {
 
     if (ty === 'authDamage' && lobby.mode === 'online') {
       mpDiagCounters.recvAuthDamage++
-      const sh = data.scoreHost
-      const sg = data.scoreGuest
-      if (typeof sh === 'number' && typeof sg === 'number') {
+      const ph = data.percentHost
+      const pg = data.percentGuest
+      if (typeof ph === 'number' && typeof pg === 'number') {
         if (lobby.role === 'host') {
-          playerHits = sh
-          botHits = sg
+          playerPercent = ph
+          enemyPercent = pg
         } else {
-          playerHits = sg
-          botHits = sh
+          playerPercent = pg
+          enemyPercent = ph
         }
         syncHud()
       }
@@ -852,19 +893,28 @@ function initGame(lobby: LobbyResult) {
           : undefined
       if (aggressorRole === lobby.role) {
         triggerAggressorHitConfirmFx()
+        const sid = typeof data.shotId === 'string' ? data.shotId : null
+        if (sid) {
+          const attackerClip = pendingAttackerShotAudioById.get(sid)
+          if (attackerClip) {
+            voice.resumeAudio()
+            voice.playBuffer(attackerClip)
+            pendingAttackerShotAudioById.delete(sid)
+          }
+        }
       }
       if (
         data.victimRole === lobby.role &&
         typeof data.dx === 'number' &&
         typeof data.dz === 'number'
       ) {
-        applyPeerMeleeHit(data.dx, data.dz, { authoritative: true })
+        applyPeerMeleeHit(data.dx, data.dz, { authoritative: true, victimPercent: playerPercent })
         const sid = data.shotId
         if (typeof sid === 'string') {
           const clip = pendingPeerShotAudioById.get(sid)
           if (clip) {
             voice.resumeAudio()
-            voice.playBufferFading(clip)
+            voice.playBuffer(clip)
             pendingPeerShotAudioById.delete(sid)
             pendingVictimVoiceShotIds.delete(sid)
           } else {
@@ -895,6 +945,11 @@ function initGame(lobby: LobbyResult) {
       handleRematchWithdrawFromPeer(data.roundId)
       return
     }
+    if (ty === 'rematchDeclineToLobby') {
+      hideMatchEndAndRematchUiFully()
+      returnToLobbyReload()
+      return
+    }
 
     if (bot.mode !== 'network') return
 
@@ -915,6 +970,7 @@ function initGame(lobby: LobbyResult) {
       }
       bot.networkTargetPos.set(data.x, data.fy + bot.getFootOffset(), data.z)
       bot.networkTargetYaw = data.ry
+      bot.setRecordingTelegraph(data.recording === true)
       return
     }
 
@@ -996,7 +1052,7 @@ function initGame(lobby: LobbyResult) {
   function applyPeerMeleeHit(
     dx: number,
     dz: number,
-    opts?: { authoritative?: boolean },
+    opts?: { authoritative?: boolean; victimPercent?: number },
   ): void {
     _knDir.set(dx, 0, dz)
     if (_knDir.lengthSq() < 1e-8) _knDir.set(0, 0, 1)
@@ -1015,9 +1071,11 @@ function initGame(lobby: LobbyResult) {
     playerHurt = 'air'
     playerHurtAirSince = now
     dashVel.set(0, 0, 0)
+    const victimPct = Math.max(0, opts?.victimPercent ?? playerPercent)
+    const launchMul = launchKnockMulFromPercent(victimPct)
     playerKnock.addScaledVector(
       _knDir,
-      gameConfig.knockbackOnPlayer * gameConfig.playerHurtKnockMul * comboMul,
+      gameConfig.knockbackOnPlayer * gameConfig.playerHurtKnockMul * comboMul * launchMul,
     )
     vy += gameConfig.playerHurtVyBoost * comboMul
     triggerHitImpactFx()
@@ -1059,7 +1117,7 @@ function initGame(lobby: LobbyResult) {
         pendingVictimVoiceShotIds.delete(data.shotId)
         pendingPeerShotAudioById.delete(data.shotId)
         voice.resumeAudio()
-        voice.playBufferFading(buf)
+        voice.playBuffer(buf)
       }
     } catch {
       debugMpLog('peer voiceShot decode/inject failed')
@@ -1069,20 +1127,26 @@ function initGame(lobby: LobbyResult) {
   async function releaseVoiceShot(): Promise<void> {
     const blob = await voice.finishChargeRecording()
     const buf = await voice.decodeRecording(blob)
-    const raw = voiceChargeSmoothed
-    voice.resetChargeMeter()
-    voiceChargeSmoothed = 0
-    if (chargeBarFill) chargeBarFill.style.width = '0%'
-    if (chargeBarWrap) chargeBarWrap.classList.remove('charge-bar-wrap--overload')
-    if (raw < gameConfig.voiceChargeMinRelease) return
+    const raw = voiceInputBlocked
+      ? Math.max(0, Math.min(1, gameConfig.voiceDryFireT))
+      : voiceChargeSmoothed
+    const minCharge = Math.max(0.01, Math.min(1, gameConfig.voiceMinChargeToFire))
+    if (raw < minCharge) return
     const cap = Math.round(gameConfig.voiceShotAmmoMax)
     if (cap > 0 && voiceAmmoLeft <= 0) return
-    const span = Math.max(0.05, 1 - gameConfig.voiceChargeMinRelease)
-    const t = Math.min(1, (raw - gameConfig.voiceChargeMinRelease) / span)
+    const span = Math.max(0.05, 1 - minCharge)
+    const t = Math.min(1, (raw - minCharge) / span)
     const speedMul =
       gameConfig.voiceShotSpeedMinMul +
       t * (gameConfig.voiceShotSpeedMaxMul - gameConfig.voiceShotSpeedMinMul)
-    const fired = arms.tryFire(speedMul, buf)
+    const fired = arms.tryFire(speedMul, buf, t)
+    if (fired) {
+      voice.resetChargeMeter()
+      voiceChargeSmoothed = 0
+      if (chargeBarFill) chargeBarFill.style.width = '0%'
+      if (chargeBarWrap) chargeBarWrap.classList.remove('charge-bar-wrap--overload')
+      if (chargeBarWrap) chargeBarWrap.classList.remove('charge-bar-wrap--ready')
+    }
     if (fired && cap > 0 && voiceAmmoLeft > 0) voiceAmmoLeft -= 1
 
     if (
@@ -1107,14 +1171,21 @@ function initGame(lobby: LobbyResult) {
           vx: v.x,
           vy: v.y,
           vz: v.z,
+          chargeT: raw,
           mime: blob.type || 'audio/webm',
           audioB64,
           fromRole: lobby.role,
         }
+        if (buf) {
+          pendingAttackerShotAudioById.set(shotId, buf)
+          if (pendingAttackerShotAudioById.size > 240) {
+            const first = pendingAttackerShotAudioById.keys().next().value as string | undefined
+            if (first) pendingAttackerShotAudioById.delete(first)
+          }
+        }
         sendGameTraffic(payload)
         if (lobby.role === 'host' && browserHost) {
-          const landed = browserHost.processVoiceShot('host', payload)
-          if (landed) triggerAggressorHitConfirmFx()
+          browserHost.processVoiceShot('host', payload)
         }
       } catch {
         mpDiagCounters.voiceShotSendFail++
@@ -1124,10 +1195,23 @@ function initGame(lobby: LobbyResult) {
   }
 
   function syncHud(): void {
-    if (scorePEl) scorePEl.textContent = String(playerHits)
-    if (scoreBEl) scoreBEl.textContent = String(botHits)
-    if (hitsNeedEnemyEl) hitsNeedEnemyEl.textContent = String(Math.round(gameConfig.enemyHitsToWin))
-    if (hitsNeedPlayerEl) hitsNeedPlayerEl.textContent = String(Math.round(gameConfig.hitsToWin))
+    if (percentYouEl) percentYouEl.textContent = `${Math.round(Math.min(100, playerPercent))}%`
+    if (percentFoeEl) percentFoeEl.textContent = `${Math.round(Math.min(100, enemyPercent))}%`
+    if (chargeBarMinMark) {
+      chargeBarMinMark.style.left = `${Math.max(0, Math.min(1, gameConfig.voiceMinChargeToFire)) * 100}%`
+    }
+    updateChargeStatusUi(voiceChargeSmoothed)
+  }
+
+  function updateChargeStatusUi(charge: number): void {
+    if (!chargeBarWrap || !chargeBarStatus) return
+    const min = Math.max(0.01, Math.min(1, gameConfig.voiceMinChargeToFire))
+    const ready = charge >= min && !voiceInputBlocked && !multiplayerBlocksPlay()
+    chargeBarStatus.textContent = ready ? 'Ready to Shoot' : 'Make Sound to Charge'
+    chargeBarStatus.classList.toggle('charge-bar-label--ready', ready)
+    chargeBarStatus.classList.toggle('charge-bar-label--prompt', !ready)
+    chargeBarStatus.classList.toggle('shimmer', ready)
+    chargeBarWrap.classList.toggle('charge-bar-wrap--ready', ready)
   }
 
   let dashTiltDeg = 0
@@ -1147,7 +1231,6 @@ function initGame(lobby: LobbyResult) {
 
   function spawnActors(): void {
     const spacing = arenaSpacing()
-    const botFeetY = gameConfig.botBodyRadius * 1.15 + 0.72
     const { camZ, opponentBotZ } = pvpSpawnZs(spacing)
 
     const yaw =
@@ -1157,7 +1240,8 @@ function initGame(lobby: LobbyResult) {
     camera.rotation.reorder('YXZ')
     camera.rotation.set(0, yaw, 0)
 
-    bot.root.position.set(0, botFeetY, opponentBotZ)
+    const oppRootY = bot.getFootOffset() + 0.08
+    bot.root.position.set(0, oppRootY, opponentBotZ)
     bot.root.rotation.set(0, 0, 0)
     bot.resetRoundState()
     bot.alignFacingToward(camera.position)
@@ -1182,6 +1266,9 @@ function initGame(lobby: LobbyResult) {
     playerHurt = 'none'
     playerHurtRecoverLeft = 0
     playerInvulnUntil = 0
+    bot.setRecordingTelegraph(false)
+    /** Spawn pose is always on the deck; keep in sync when movement ticks are skipped (e.g. voice countdown). */
+    grounded = true
   }
 
   type WinFinisherState =
@@ -1245,11 +1332,27 @@ function initGame(lobby: LobbyResult) {
     out.normalize()
   }
 
+  function percentGainFromCharge(charge: number): number {
+    const minCharge = Math.max(0.01, Math.min(0.99, gameConfig.voiceMinChargeToFire))
+    const c = Math.max(minCharge, Math.min(1, charge))
+    const t = (c - minCharge) / (1 - minCharge + 1e-6)
+    return gameConfig.percentGainMin + t * (gameConfig.percentGainMax - gameConfig.percentGainMin)
+  }
+
+  function launchKnockMulFromPercent(victimPercent: number): number {
+    const p = Math.max(0, Math.min(100, victimPercent)) / 100
+    const expo = Math.max(0.25, gameConfig.launchKnockExponent)
+    return (
+      Math.max(0, gameConfig.launchKnockFloor) +
+      Math.max(0, gameConfig.launchKnockScale) * Math.pow(p, expo)
+    )
+  }
+
   async function runRematchSequence(): Promise<void> {
     rematchSequenceActive = true
     pendingOutgoingRematchId = null
     pendingIncomingRematchId = null
-    syncMatchEndRematchControlsIdle()
+    hideMatchEndAndRematchUiFully()
     chargingLmb = false
     controls.unlock()
     keys.forward = false
@@ -1259,12 +1362,11 @@ function initGame(lobby: LobbyResult) {
     matchOutcome = null
     winFinisher = null
     hideWinGameSplash()
-    parryGuardUntil = 0
-    playerHits = 0
-    botHits = 0
+    playerPercent = 0
+    enemyPercent = 0
     syncHud()
     browserHost?.reset()
-    if (matchEndOverlay) matchEndOverlay.hidden = true
+    hideMatchEndAndRematchUiFully()
 
     if (rematchSeqLayer && rematchBlackSheet) {
       rematchSeqLayer.hidden = false
@@ -1284,19 +1386,7 @@ function initGame(lobby: LobbyResult) {
       rematchBlackSheet.classList.remove('rematch-black-sheet--slide')
     }
 
-    if (countdownOverlay && countdownNumEl) {
-      if (countdownTitleEl) countdownTitleEl.hidden = true
-      countdownOverlay.hidden = false
-      for (const n of [3, 2, 1] as const) {
-        countdownNumEl.textContent = String(n)
-        countdownOverlay.classList.remove('countdown-overlay--pulse')
-        void countdownOverlay.offsetWidth
-        countdownOverlay.classList.add('countdown-overlay--pulse')
-        await sleepMs(840)
-      }
-      countdownOverlay.hidden = true
-      countdownOverlay.classList.remove('countdown-overlay--pulse')
-    }
+    await runPvpCountdown321()
 
     rematchSequenceActive = false
     tryPointerLock()
@@ -1327,17 +1417,12 @@ function initGame(lobby: LobbyResult) {
     if (matchEndSub) {
       matchEndSub.textContent =
         outcome === 'win'
-          ? 'Opponent knocked out or out of bounds.'
-          : 'You were KO’d or fell off the stage.'
+          ? 'Opponent got launched out of bounds.'
+          : 'You were launched out of bounds.'
     }
-  }
-
-  function hitsToKoEnemy(): number {
-    return Math.max(1, Math.round(gameConfig.enemyHitsToWin))
-  }
-
-  function hitsToKoPlayer(): number {
-    return Math.max(1, Math.round(gameConfig.hitsToWin))
+    if (isOnline && lobby.mode === 'online') {
+      showMatchEndRematchControlsDefault()
+    }
   }
 
   function recreateBot(mode: BotMode): void {
@@ -1464,7 +1549,7 @@ function initGame(lobby: LobbyResult) {
     lastJumpAt = now
   }
 
-  /** Dash matches WASD in camera-local space (same idea as PointerLock walk). */
+  /** Slide direction matches WASD in camera-local space. */
   function computeDashDirection(out: Vector3): void {
     const ix = Number(keys.right) - Number(keys.left)
     const iz = Number(keys.forward) - Number(keys.back)
@@ -1483,7 +1568,7 @@ function initGame(lobby: LobbyResult) {
     out.normalize()
   }
 
-  function tryDash(): void {
+  function trySlide(): void {
     if (
       matchOutcome ||
       winFinisher ||
@@ -1496,8 +1581,10 @@ function initGame(lobby: LobbyResult) {
     )
       return
     computeDashDirection(_knDir)
-    const mul = gameConfig.dashVelocityMul
-    dashVel.copy(_knDir).multiplyScalar(gameConfig.dashImpulse * mul)
+    const distance = Math.max(0, gameConfig.dashImpulse) * Math.max(0.1, gameConfig.dashVelocityMul)
+    const decay = Math.max(0.5, gameConfig.dashDecay)
+    const startSpeed = distance * decay
+    dashVel.copy(_knDir).multiplyScalar(startSpeed)
 
     camera.getWorldDirection(_camFwd)
     _camFwd.y = 0
@@ -1546,32 +1633,17 @@ function initGame(lobby: LobbyResult) {
       if (_fp.distanceTo(bot.bodyCenter) < reach) {
         const hitAudio = arms.takeHitAudio()
         arms.markDealt()
-        voice.playBufferFading(hitAudio)
+        voice.playBuffer(hitAudio)
         knockDirFromFistImpact(_fp, _knDir)
-        playerHits += 1
+        const gain = percentGainFromCharge(arms.peekShotT())
+        enemyPercent = Math.min(100, enemyPercent + gain)
         syncHud()
-        const clinch = playerHits >= hitsToKoEnemy()
-
         if (isPvp()) {
-          if (clinch) {
-            sendMp({ type: 'youLose' })
-            endMatch('win')
-            triggerHitImpactFx()
-            return
-          }
           sendMp({ type: 'hitMelee', dx: _knDir.x, dz: _knDir.z })
           triggerHitImpactFx()
-        } else if (clinch) {
-          winFinisher = { phase: 'launch', started: performance.now(), sawAir: false }
-          arms.resetAll()
-          bot.applyFinisherKnockback(
-            _knDir,
-            gameConfig.winFinisherKnockXZ,
-            gameConfig.winFinisherVy,
-          )
-          triggerHitImpactFx()
         } else {
-          bot.applyKnockback(_knDir, gameConfig.knockbackOnBot)
+          const launchMul = launchKnockMulFromPercent(enemyPercent)
+          bot.applyKnockback(_knDir, gameConfig.knockbackOnBot * launchMul)
           triggerHitImpactFx()
         }
       }
@@ -1589,42 +1661,32 @@ function initGame(lobby: LobbyResult) {
       } else {
         const victimClip = bot.peekProjectileVoice()
         _fp.copy(bot.projPos)
-        const parried =
-          !chargingLmb &&
-          arms.canParry() &&
-          now - lastQAt <= gameConfig.parryWindowMs
         bot.markHitDealt()
-        if (!parried) {
-          if (victimClip) voice.playBufferSpatialAt(victimClip, _fp, camera)
-          _knDir.subVectors(camera.position, _fp)
-          _knDir.y = 0
-          if (_knDir.lengthSq() < 1e-8) _knDir.set(0, 0, 1)
-          _knDir.normalize()
-          playerHurt = 'air'
-          playerHurtAirSince = performance.now()
-          dashVel.set(0, 0, 0)
-          playerKnock.addScaledVector(
-            _knDir,
-            gameConfig.knockbackOnPlayer * gameConfig.playerHurtKnockMul,
-          )
-          vy += gameConfig.playerHurtVyBoost
-          botHits += 1
-          syncHud()
-          triggerHitImpactFx()
-          if (botHits >= hitsToKoPlayer()) {
-            if (isPvp()) sendMp({ type: 'youWin' })
-            endMatch('lose')
-          }
-        }
+        if (victimClip) voice.playBufferSpatialAt(victimClip, _fp, camera)
+        _knDir.subVectors(camera.position, _fp)
+        _knDir.y = 0
+        if (_knDir.lengthSq() < 1e-8) _knDir.set(0, 0, 1)
+        _knDir.normalize()
+        playerPercent = Math.min(100, playerPercent + Math.max(0, gameConfig.botFistPercentGain))
+        syncHud()
+        applyPeerMeleeHit(_knDir.x, _knDir.z, { victimPercent: playerPercent })
       }
     }
 
     if (!authPvp()) {
       if (isBlastZone(camera.position)) {
+        if (lobbyDummyPractice) {
+          applyRoundReset()
+          return
+        }
         if (isPvp()) sendMp({ type: 'youWin' })
         endMatch('lose')
       }
       if (isBlastZone(bot.root.position)) {
+        if (lobbyDummyPractice) {
+          applyRoundReset()
+          return
+        }
         if (isPvp()) sendMp({ type: 'youLose' })
         endMatch('win')
       }
@@ -1632,22 +1694,6 @@ function initGame(lobby: LobbyResult) {
   }
 
   function onKeyDown(e: KeyboardEvent) {
-    if (e.code === 'KeyQ') {
-      if (
-        !tweaksPanelOpen &&
-        !matchOutcome &&
-        !winFinisher &&
-        !rematchSequenceActive &&
-        !multiplayerBlocksPlay() &&
-        playerHurt === 'none' &&
-        !chargingLmb &&
-        arms.canParry()
-      ) {
-        lastQAt = performance.now()
-        parryGuardUntil = performance.now() + gameConfig.parryGuardVisibleMs
-      }
-    }
-
     /** 1 dummy · 2 smart · 3 toggle bot · R restart (also when match-end overlay is open). */
     const shortcutBlock =
       tweaksPanelOpen ||
@@ -1693,10 +1739,10 @@ function initGame(lobby: LobbyResult) {
     switch (e.code) {
       case 'ShiftLeft':
       case 'ShiftRight':
-        if (shiftDashArmed) {
-          shiftDashArmed = false
-          tryDash()
-        }
+        trySlide()
+        break
+      case 'ControlLeft':
+      case 'ControlRight':
         break
       case 'Space':
         e.preventDefault()
@@ -1724,9 +1770,6 @@ function initGame(lobby: LobbyResult) {
   }
 
   function onKeyUp(e: KeyboardEvent) {
-    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
-      shiftDashArmed = true
-    }
     if (tweaksPanelOpen || matchOutcome) return
     switch (e.code) {
       case 'KeyW':
@@ -1758,7 +1801,6 @@ function initGame(lobby: LobbyResult) {
     const ammoCap = Math.round(gameConfig.voiceShotAmmoMax)
     if (ammoCap > 0 && voiceAmmoLeft <= 0) return
     if (
-      voiceInputBlocked ||
       voiceResumeCountdownActive ||
       multiplayerBlocksPlay() ||
       tweaksPanelOpen ||
@@ -1796,8 +1838,8 @@ function initGame(lobby: LobbyResult) {
   window.addEventListener('resize', onResize)
 
   function updateMovement(delta: number) {
-    /* Mic blocked must not freeze physics — victims still need knockback integration + pose sync. */
-    if (voiceResumeCountdownActive || multiplayerBlocksPlay()) return
+    /* Online lobby / pre-live: freeze local player. Voice resume countdown still runs physics so grounded / jump stay consistent. */
+    if (multiplayerBlocksPlay()) return
 
     const groundedBeforeResolve = grounded
 
@@ -1917,8 +1959,8 @@ function initGame(lobby: LobbyResult) {
           y: camera.position.y,
           z: camera.position.z,
         }
-        mpDiagSnapshot.scoresYou = playerHits
-        mpDiagSnapshot.scoresOpp = botHits
+        mpDiagSnapshot.scoresYou = Math.round(playerPercent)
+        mpDiagSnapshot.scoresOpp = Math.round(enemyPercent)
       }
     }
 
@@ -1952,27 +1994,26 @@ function initGame(lobby: LobbyResult) {
           z: camera.position.z,
           fy,
           ry: camera.rotation.y,
+          recording: chargingLmb,
         })
       }
     }
 
-    if ((voiceInputBlocked || multiplayerBlocksPlay()) && chargingLmb) {
+    if (multiplayerBlocksPlay() && chargingLmb) {
       chargingLmb = false
       voice.resetChargeMeter()
       voiceChargeSmoothed = 0
       void voice.finishChargeRecording()
       if (chargeBarFill) chargeBarFill.style.width = '0%'
+      bot.setRecordingTelegraph(false)
     }
 
     if (!voiceInputBlocked && !voiceResumeCountdownActive && !multiplayerBlocksPlay()) {
-      voiceChargeSmoothed = voice.tickChargeMeter(delta, chargingLmb)
+      voiceChargeSmoothed = voice.tickChargeAccum(delta, chargingLmb)
     }
     if (chargeBarFill) {
       const pct = Math.min(150, voiceChargeSmoothed * 100)
       chargeBarFill.style.width = `${pct}%`
-    }
-    if (chargeBarMinMark) {
-      chargeBarMinMark.style.left = `${gameConfig.voiceChargeMinRelease * 100}%`
     }
     if (chargeBarWrap) {
       if (voiceChargeSmoothed >= gameConfig.voiceOverloadThreshold) {
@@ -1981,6 +2022,7 @@ function initGame(lobby: LobbyResult) {
         chargeBarWrap.classList.remove('charge-bar-wrap--overload')
       }
     }
+    updateChargeStatusUi(voiceChargeSmoothed)
 
     const dashSpd = dashVel.length()
     dashTiltDeg *= Math.exp(-13.5 * delta)
@@ -1997,27 +2039,10 @@ function initGame(lobby: LobbyResult) {
       if (dashSpd < 0.18) dashScanEl.style.opacity = '0'
     }
 
-    if (parryArmMeshL && parryArmMeshR && parryGuardRoot) {
-      const showGuard =
-        performance.now() < parryGuardUntil &&
-        !matchOutcome &&
-        !tweaksPanelOpen &&
-        !winFinisher &&
-        !rematchSequenceActive &&
-        !multiplayerBlocksPlay() &&
-        playerHurt === 'none' &&
-        !chargingLmb &&
-        !arms.isProjectileActive()
-      parryArmMeshL.visible = showGuard
-      parryArmMeshR.visible = showGuard
-      parryGuardRoot.visible = showGuard
-    }
-
     if (!tweaksPanelOpen) {
       if (
         !matchOutcome &&
         !rematchSequenceActive &&
-        !voiceResumeCountdownActive &&
         !multiplayerBlocksPlay()
       ) {
         updateMovement(delta)
@@ -2192,17 +2217,31 @@ function initGame(lobby: LobbyResult) {
     sendGameTraffic({ type: 'rematchAccept', roundId: id })
     pendingIncomingRematchId = null
     pendingOutgoingRematchId = null
-    syncMatchEndRematchControlsIdle()
+    hideMatchEndAndRematchUiFully()
     void runRematchSequence()
   })
   matchRematchDeclineBtnEl?.addEventListener('click', () => {
-    if (pendingIncomingRematchId) {
-      sendGameTraffic({ type: 'rematchWithdraw', roundId: pendingIncomingRematchId })
-    }
+    sendGameTraffic({ type: 'rematchDeclineToLobby' })
     pendingIncomingRematchId = null
-    if (matchRematchIncomingEl) matchRematchIncomingEl.hidden = true
-    syncMatchEndRematchControlsIdle()
+    pendingOutgoingRematchId = null
+    hideMatchEndAndRematchUiFully()
+    returnToLobbyReload()
   })
+
+  /** Escape: always offer exit (capture + before tweaks so T panel still owns Escape when open). */
+  function onEscapeLeaveMatch(e: KeyboardEvent): void {
+    if (e.code !== 'Escape' || e.repeat) return
+    const el = e.target as HTMLElement | null
+    if (el?.closest?.('input, textarea, select, [contenteditable="true"]')) return
+    if (tweaksPanelOpen) return
+    if (gameRoot.hidden) return
+    e.preventDefault()
+    const ok = window.confirm('Leave match and return to lobby?')
+    if (!ok) return
+    if (lobby.mode === 'online') dismissMatchEndOnline()
+    returnToLobbyReload()
+  }
+  window.addEventListener('keydown', onEscapeLeaveMatch, true)
 
   const tweaksHost = document.getElementById('tweaks-panel-host')
   if (tweaksHost) {
@@ -2220,6 +2259,10 @@ function initGame(lobby: LobbyResult) {
         ? { onPracticeWithDummy: beginLobbyDummyPractice }
         : {}),
     })
+  }
+
+  if (isOnline && lobby.mode === 'online' && lobby.role === 'host' && lobby.startWithDummyPractice) {
+    void beginLobbyDummyPractice()
   }
 }
 

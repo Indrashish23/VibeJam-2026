@@ -23,6 +23,8 @@ type ProjectileState = {
   spawnPos: Vector3
   /** Decoded clip to play on hit (optional). */
   hitAudio: AudioBuffer | null
+  /** 0..1 at fire time: damage / knock lerp. */
+  shotT: number
 }
 
 /**
@@ -67,6 +69,7 @@ export class PlayerArms {
       shoulderLocal: new Vector3(),
       spawnPos: new Vector3(),
       hitAudio: null,
+      shotT: 0,
     }
   }
 
@@ -81,9 +84,13 @@ export class PlayerArms {
   }
 
   /**
-   * `speedFactor` scales base `punchProjectileSpeed` (from voice charge 0–1+).
+   * `speedFactor` is the lerped speed mul; `shotT` is 0..1 for damage and knock.
    */
-  tryFire(speedFactor: number, hitAudio: AudioBuffer | null): boolean {
+  tryFire(
+    speedFactor: number,
+    hitAudio: AudioBuffer | null,
+    shotT: number,
+  ): boolean {
     if (this.proj.active) return false
 
     this.proj.shoulderLocal.set(0.32, -0.22, -0.48)
@@ -100,6 +107,7 @@ export class PlayerArms {
     this.proj.pos.copy(this._tmp)
     this.proj.spawnPos.copy(this.proj.pos)
     this.proj.hitAudio = hitAudio
+    this.proj.shotT = Math.max(0, Math.min(1, shotT))
     this.proj.active = true
     this.proj.flying = true
     this.dealt = false
@@ -145,8 +153,23 @@ export class PlayerArms {
 
     const maxR = gameConfig.punchMaxRange
     const g = gameConfig.fistGravity
-
     const drag = gameConfig.fistAirDrag
+
+    if (g < 1e-6 && drag < 1e-6) {
+      this.proj.pos.addScaledVector(this.proj.vel, delta)
+      this._tmp.subVectors(this.proj.pos, this.proj.spawnPos)
+      if (this._tmp.length() > maxR + 1e-3) {
+        this.resetProjectile()
+        return
+      }
+      const hw = gameConfig.groundWidth / 2 + PROJECTILE_R
+      const hd = gameConfig.groundDepth / 2 + PROJECTILE_R
+      if (Math.abs(this.proj.pos.x) > hw || Math.abs(this.proj.pos.z) > hd) {
+        this.resetProjectile()
+      }
+      return
+    }
+
     if (drag > 1e-6) {
       const k = Math.exp(-drag * delta)
       this.proj.vel.x *= k
@@ -204,6 +227,7 @@ export class PlayerArms {
     this.proj.flying = false
     this.proj.vel.set(0, 0, 0)
     this.proj.hitAudio = null
+    this.proj.shotT = 0
     this.mesh.visible = false
     this.dealt = true
   }
@@ -228,14 +252,15 @@ export class PlayerArms {
     this.resetProjectile()
   }
 
-  /** Live projectile (for parry / bot logic). */
+  /** Live projectile (for bot / UI logic). */
   isProjectileActive(): boolean {
     return this.proj.active && this.proj.flying
   }
 
-  /** Parry allowed when no shot in flight (charging is handled in main). */
-  canParry(): boolean {
-    return !this.isProjectileActive()
+  /** Voice 0..1 for current shot; valid while projectile active. */
+  peekShotT(): number {
+    if (!this.proj.active) return 0
+    return this.proj.shotT
   }
 
   projectileRadius(): number {

@@ -42,6 +42,12 @@ export class BotFighter {
   private smartShotGapMs = 2500
 
   mesh: Mesh
+  private readonly bodyMat: MeshStandardMaterial
+  private readonly baseBodyColor: Color
+  private readonly recordingBodyColor = new Color(0xff4d4f)
+  private recordingTelegraph = false
+  private recordingTelegraphMix = 0
+  private recordingShakeT = 0
   readonly projMesh: Mesh
 
   private readonly feetFromCenter: number
@@ -81,6 +87,8 @@ export class BotFighter {
       roughness: 0.78,
       metalness: 0.12,
     })
+    this.bodyMat = mat
+    this.baseBodyColor = new Color(bodyHex)
     let geo: BoxGeometry | CapsuleGeometry
     let feet: number
     try {
@@ -156,7 +164,38 @@ export class BotFighter {
     this.hurtPhase = 'none'
     this.hurtRecoverLeft = 0
     this.hurtFinisher = false
+    this.recordingTelegraph = false
+    this.recordingTelegraphMix = 0
+    this.recordingShakeT = 0
+    this.mesh.position.set(0, 0, 0)
+    this.mesh.rotation.z = 0
+    this.bodyMat.color.copy(this.baseBodyColor)
     this.clearProjectile()
+  }
+
+  setRecordingTelegraph(active: boolean): void {
+    this.recordingTelegraph = active
+  }
+
+  private updateRecordingTelegraph(delta: number): void {
+    const target = this.recordingTelegraph ? 1 : 0
+    const k = this.recordingTelegraph ? 2.8 : 4.2
+    this.recordingTelegraphMix += (target - this.recordingTelegraphMix) * (1 - Math.exp(-k * delta))
+    const mix = this.recordingTelegraphMix
+    this.bodyMat.color.copy(this.baseBodyColor).lerp(this.recordingBodyColor, mix)
+
+    if (mix < 1e-3) {
+      this.mesh.position.x = 0
+      this.mesh.position.z = 0
+      this.mesh.rotation.z = 0
+      return
+    }
+
+    this.recordingShakeT += delta
+    const amp = 0.06 * mix
+    this.mesh.position.x = Math.sin(this.recordingShakeT * 7.2) * amp
+    this.mesh.position.z = Math.cos(this.recordingShakeT * 5.4) * amp * 0.7
+    this.mesh.rotation.z = Math.sin(this.recordingShakeT * 4.6) * 0.045 * mix
   }
 
   alignFacingToward(worldPos: Vector3): void {
@@ -260,6 +299,22 @@ export class BotFighter {
     const maxR = gameConfig.punchMaxRange
     const g = gameConfig.fistGravity
     const drag = gameConfig.fistAirDrag
+
+    if (g < 1e-6 && drag < 1e-6) {
+      this.projPos.addScaledVector(this.projVel, delta)
+      _work.subVectors(this.projPos, this.projSpawn)
+      if (_work.length() > maxR + 1e-3) {
+        this.clearProjectile()
+        return
+      }
+      const hw = gameConfig.groundWidth / 2 + PROJECTILE_R
+      const hd = gameConfig.groundDepth / 2 + PROJECTILE_R
+      if (Math.abs(this.projPos.x) > hw || Math.abs(this.projPos.z) > hd) {
+        this.clearProjectile()
+      }
+      return
+    }
+
     if (drag > 1e-6) {
       const k = Math.exp(-drag * delta)
       this.projVel.x *= k
@@ -322,6 +377,7 @@ export class BotFighter {
     colliders: Object3D[],
     _playerProjectileActive: boolean,
   ): void {
+    this.updateRecordingTelegraph(delta)
     if (this.mode === 'network') {
       const a = Math.min(1, delta * 16)
       this.root.position.lerp(this.networkTargetPos, a)
@@ -497,6 +553,16 @@ export class BotFighter {
   markHitDealt(): void {
     this.projDealt = true
     this.clearProjectile()
+  }
+
+  /**
+   * Dev / Tweaks: dummy (or smart) fires a single fist at `playerPos` for combat testing. No-op in network mode.
+   */
+  tryTweakTestShot(playerPos: Vector3, speedMul: number): boolean {
+    if (this.mode === 'network') return false
+    if (this.hurtPhase !== 'none' || this.projActive) return false
+    this.spawnProjectile(playerPos, speedMul)
+    return true
   }
 }
 

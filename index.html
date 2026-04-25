@@ -32,6 +32,9 @@
         <p id="lobby-error" class="lobby-error" role="alert" hidden></p>
         <div class="lobby-actions">
           <button type="button" id="lobby-create" class="lobby-btn">Create lobby</button>
+          <button type="button" id="lobby-practice" class="lobby-btn lobby-btn--ghost">
+            Practice with Dummy
+          </button>
           <label class="lobby-join-row">
             <span>Friend's code</span>
             <input id="lobby-join-code" maxlength="16" autocomplete="off" placeholder="abc123" />
@@ -66,8 +69,20 @@
         <p id="countdown-title" class="countdown-title" hidden>Match begins in</p>
         <span id="countdown-num" class="countdown-num">3</span>
       </div>
+      <div id="percent-hud" class="percent-hud" aria-label="Launch percent">
+        <div class="percent-hud__row percent-hud__row--you">
+          <span class="percent-hud__label">You</span>
+          <span id="percent-you" class="percent-hud__value">0%</span>
+        </div>
+        <div class="percent-hud__row percent-hud__row--foe">
+          <span class="percent-hud__label">Foe</span>
+          <span id="percent-foe" class="percent-hud__value">0%</span>
+        </div>
+      </div>
       <div id="charge-bar-wrap" class="charge-bar-wrap">
-        <div class="charge-bar-label">Voice charge</div>
+        <div id="charge-bar-status" class="charge-bar-label charge-bar-label--prompt">
+          Make Sound to Charge
+        </div>
         <div class="charge-bar-track">
           <div id="charge-bar-fill" class="charge-bar-fill"></div>
           <span id="charge-bar-min" class="charge-bar-min" title="Minimum to fire"></span>

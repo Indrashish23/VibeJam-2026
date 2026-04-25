@@ -1,6 +1,6 @@
 import type { PerspectiveCamera } from 'three'
 import type { PointerLockControls } from 'three/addons/controls/PointerLockControls.js'
-import { gameConfig, resetGameConfig, type GameConfigKey } from './gameConfig'
+import { defaultGameConfig, gameConfig, resetGameConfig, type GameConfigKey } from './gameConfig'
 import { TWEAK_DISPLAY_NAME, TWEAK_RANGE, TWEAK_SECTIONS, TWEAK_TOOLTIP } from './tweakRanges'
 
 function isTypingTarget(el: EventTarget | null): boolean {
@@ -32,6 +32,11 @@ export type TweaksPanelHooks = {
 }
 
 type RowInput = { key: GameConfigKey; range: HTMLInputElement; num: HTMLInputElement }
+
+function formatTweakValue(v: number): string {
+  if (Number.isInteger(v)) return String(v)
+  return Number(v.toFixed(6)).toString()
+}
 
 function appendConfigRow(
   key: GameConfigKey,
@@ -235,6 +240,43 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
     hooks.onConfigChanged?.()
   })
   actions.appendChild(resetBtn)
+
+  const copyBtn = document.createElement('button')
+  copyBtn.type = 'button'
+  copyBtn.textContent = 'Copy current tweaks as code'
+  copyBtn.addEventListener('click', () => {
+    const changed = rows.filter((row) => Math.abs(gameConfig[row.key] - defaultGameConfig[row.key]) > 1e-9)
+    const source = changed.length ? changed : rows
+    const lines = source.map((row) => `  ${row.key}: ${formatTweakValue(gameConfig[row.key])},`)
+    const snippet = `// Paste into defaultGameConfig in src/gameConfig.ts\n{\n${lines.join('\n')}\n}`
+    const onCopied = () => {
+      copyBtn.textContent = 'Copied tweaks'
+      window.setTimeout(() => {
+        copyBtn.textContent = 'Copy current tweaks as code'
+      }, 1400)
+    }
+    const fallbackCopy = () => {
+      const ta = document.createElement('textarea')
+      ta.value = snippet
+      ta.setAttribute('readonly', 'true')
+      ta.style.position = 'fixed'
+      ta.style.left = '-9999px'
+      document.body.appendChild(ta)
+      ta.select()
+      try {
+        document.execCommand('copy')
+        onCopied()
+      } finally {
+        ta.remove()
+      }
+    }
+    if (navigator.clipboard?.writeText) {
+      void navigator.clipboard.writeText(snippet).then(onCopied).catch(fallbackCopy)
+    } else {
+      fallbackCopy()
+    }
+  })
+  actions.appendChild(copyBtn)
 
   if (hooks.onPracticeWithDummy) {
     const practiceBtn = document.createElement('button')

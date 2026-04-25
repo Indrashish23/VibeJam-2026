@@ -12,13 +12,20 @@ function randomRoomId(): string {
 
 export type LobbyResult =
   | { mode: 'offline' }
-  | { mode: 'online'; role: 'host' | 'guest'; roomId: string; shortCode: string }
+  | {
+      mode: 'online'
+      role: 'host' | 'guest'
+      roomId: string
+      shortCode: string
+      startWithDummyPractice?: boolean
+    }
 
 function wireLobbyDom(): {
   overlay: HTMLDivElement
   intro: HTMLElement
   err: HTMLElement
   create: HTMLButtonElement
+  practice: HTMLButtonElement
   joinCode: HTMLInputElement
   joinBtn: HTMLButtonElement
   offline: HTMLButtonElement
@@ -29,6 +36,7 @@ function wireLobbyDom(): {
     intro: document.getElementById('lobby-intro') as HTMLElement,
     err: document.getElementById('lobby-error') as HTMLElement,
     create: document.getElementById('lobby-create') as HTMLButtonElement,
+    practice: document.getElementById('lobby-practice') as HTMLButtonElement,
     joinCode: document.getElementById('lobby-join-code') as HTMLInputElement,
     joinBtn: document.getElementById('lobby-join') as HTMLButtonElement,
     offline: document.getElementById('lobby-offline') as HTMLButtonElement,
@@ -45,7 +53,7 @@ export function runLobbyGate(initialDisplayName: string): Promise<LobbyResult> {
   let displayName = initialDisplayName
 
   ui.overlay.hidden = false
-  ui.intro.textContent = `Signed in as ${displayName}. Create a lobby and share your code, join a friend with theirs, or play offline.`
+  ui.intro.textContent = `Signed in as ${displayName}. Create a lobby and share your code, practice with dummy, join a friend with theirs, or play offline.`
   ui.err.hidden = true
   ui.err.textContent = ''
 
@@ -86,7 +94,7 @@ export function runLobbyGate(initialDisplayName: string): Promise<LobbyResult> {
         displayName = name
         userOv.hidden = true
         ui.overlay.hidden = false
-        ui.intro.textContent = `Signed in as ${displayName}. Create a lobby and share your code, join a friend with theirs, or play offline.`
+        ui.intro.textContent = `Signed in as ${displayName}. Create a lobby and share your code, practice with dummy, join a friend with theirs, or play offline.`
       }
       form.addEventListener('submit', onSubmit, { once: true })
     }
@@ -105,6 +113,17 @@ export function runLobbyGate(initialDisplayName: string): Promise<LobbyResult> {
       const roomId = randomRoomId()
       const shortCode = roomId.replace(/^vj-/, '')
       finish({ mode: 'online', role: 'host', roomId, shortCode })
+    }
+
+    ui.practice.onclick = () => {
+      clearErr()
+      if (onlineUnavailable()) {
+        setErr('Practice with Dummy needs online lobby transport configured.')
+        return
+      }
+      const roomId = randomRoomId()
+      const shortCode = roomId.replace(/^vj-/, '')
+      finish({ mode: 'online', role: 'host', roomId, shortCode, startWithDummyPractice: true })
     }
 
     ui.joinBtn.onclick = () => {

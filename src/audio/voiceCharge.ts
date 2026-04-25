@@ -9,7 +9,9 @@ const _listenerUp = new Vector3(0, 1, 0)
 export type MicStatus = 'pending' | 'ok' | 'denied'
 
 /**
- * Microphone RMS → charge meter + MediaRecorder capture for playback on hit.
+ * Microphone → **charge** meter (0–1, not raw voice level on the bar) + MediaRecorder for hit playback.
+ * Louder RMS increases charge faster while `wantRise` (e.g. LMB held). After `voiceSilenceBeforeDecaySec`
+ * of quiet mic, charge decays at `voiceChargeDecayPerSec`.
  */
 export class VoiceChargeManager {
   status: MicStatus = 'pending'
@@ -23,8 +25,10 @@ export class VoiceChargeManager {
   private recordChunks: BlobPart[] = []
   private recordingMime = ''
 
-  /** Smoothed display charge 0..can exceed 1 for overload UI */
-  private smoothedCharge = 0
+  /** Accumulated fire charge 0..1 (bar shows this, not instantaneous RMS). */
+  private charge = 0
+  /** Seconds of continuous quiet mic while charge > 0. */
+  private quietAcc = 0
 
   /** Request mic; sets status ok/denied. */
   async ensureMic(): Promise<boolean> {
@@ -165,25 +169,47 @@ export class VoiceChargeManager {
   }
 
   /**
-   * Integrate smoothed charge from RMS while holding; call each frame while charging.
-   * Returns normalized charge (can exceed 1 when screaming hard — UI overload).
+   * @param wantRise — LMB held and gameplay allows building charge (mic not blocked).
    */
-  tickChargeMeter(delta: number, charging: boolean): number {
+  tickChargeAccum(delta: number, wantRise: boolean): number {
     const raw = this.sampleRms()
-    const sens = Math.max(0.05, gameConfig.voiceChargeSensitivity)
-    const scale = Math.max(0.1, gameConfig.voiceChargeRmsScale)
-    const target = Math.min(2.2, raw * sens * scale)
+    const threshold = Math.max(1e-5, gameConfig.voiceSilenceRmsThreshold)
+    const loud = raw >= threshold
 
-    const atk = gameConfig.voiceChargeAttack
-    const rel = gameConfig.voiceChargeRelease
-    const k = Math.exp(-(charging ? atk : rel) * delta)
-    this.smoothedCharge = this.smoothedCharge * k + target * (1 - k)
+    if (loud) {
+      this.quietAcc = 0
+    } else {
+      this.quietAcc += delta
+    }
 
-    return this.smoothedCharge
+    const silenceNeed = Math.max(0.05, gameConfig.voiceSilenceBeforeDecaySec)
+    if (this.charge > 1e-6 && this.quietAcc >= silenceNeed) {
+      const decay = Math.max(0, gameConfig.voiceChargeDecayPerSec) * delta
+      this.charge = Math.max(0, this.charge - decay)
+      if (this.charge < 1e-6) {
+        this.charge = 0
+        this.quietAcc = 0
+      }
+    }
+
+    if (wantRise) {
+      const sens = Math.max(0.05, gameConfig.voiceChargeSensitivity)
+      const scale = Math.max(0.1, gameConfig.voiceChargeRmsScale)
+      const loudness = Math.min(1, Math.min(2.2, raw * sens * scale))
+      const risePerSec = Math.max(0.02, gameConfig.voiceChargeRisePerSec)
+      this.charge = Math.min(1, this.charge + risePerSec * loudness * delta)
+    }
+
+    return this.charge
+  }
+
+  getCharge(): number {
+    return this.charge
   }
 
   resetChargeMeter(): void {
-    this.smoothedCharge = 0
+    this.charge = 0
+    this.quietAcc = 0
   }
 
   getAudioContext(): AudioContext | null {

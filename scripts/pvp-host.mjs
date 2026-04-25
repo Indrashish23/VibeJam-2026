@@ -22,7 +22,7 @@ import {
 
 const PORT = Number(process.env.PVP_LISTEN_PORT || 8765)
 
-/** @typedef {{ peers: Set<import('ws').WebSocket>, poses: { host: object | null, guest: object | null }, scores: { host: number, guest: number }, shots: Set<string>, ended: boolean }} Room */
+/** @typedef {{ peers: Set<import('ws').WebSocket>, poses: { host: object | null, guest: object | null }, percent: { host: number, guest: number }, shots: Set<string>, ended: boolean }} Room */
 
 /** @type {Map<string, Room>} */
 const rooms = new Map()
@@ -33,7 +33,7 @@ function getOrCreateRoom(roomId) {
     r = {
       peers: new Set(),
       poses: { host: null, guest: null },
-      scores: { host: 0, guest: 0 },
+      percent: { host: 0, guest: 0 },
       shots: new Set(),
       ended: false,
     }
@@ -136,6 +136,14 @@ function validateVoiceShot(roomId, ws, raw, data) {
 
   if (typeof ox !== 'number' || typeof shotId !== 'string') return
 
+  const tRaw = data.chargeT
+  const chargeT = typeof tRaw === 'number' ? Math.max(0, Math.min(1, tRaw)) : 0.5
+  if (chargeT < COMBAT.voiceMinChargeToFire - 1e-6) return
+  const minF = Math.max(0.01, Math.min(0.99, COMBAT.voiceMinChargeToFire))
+  const c = Math.max(minF, Math.min(1, chargeT))
+  const t = (c - minF) / (1 - minF + 1e-6)
+  const gain = COMBAT.percentGainMin + t * (COMBAT.percentGainMax - COMBAT.percentGainMin)
+
   const sim = simulateVoiceShotHit(
     { x: ox, y: oy, z: oz },
     { x: vx, y: vy, z: vz },
@@ -147,8 +155,7 @@ function validateVoiceShot(roomId, ws, raw, data) {
   r.shots.add(shotId)
   if (r.shots.size > 512) r.shots.clear()
 
-  const key = aggressor === 'host' ? 'host' : 'guest'
-  r.scores[key] += 1
+  r.percent[victim] = Math.min(100, r.percent[victim] + gain)
 
   const dmg = JSON.stringify({
     type: 'authDamage',
@@ -157,23 +164,12 @@ function validateVoiceShot(roomId, ws, raw, data) {
     dx: sim.dx,
     dz: sim.dz,
     shotId,
-    scoreHost: r.scores.host,
-    scoreGuest: r.scores.guest,
+    percentHost: r.percent.host,
+    percentGuest: r.percent.guest,
+    chargeT,
+    percentGain: gain,
   })
   broadcastAll(roomId, dmg)
-
-  const cap = COMBAT.enemyHitsToWin
-  if (r.scores[key] >= cap) {
-    r.ended = true
-    broadcastAll(
-      roomId,
-      JSON.stringify({
-        type: 'authMatchEnd',
-        winnerRole: aggressor,
-        reason: 'ko',
-      }),
-    )
-  }
 }
 
 function relay(sender, raw) {
