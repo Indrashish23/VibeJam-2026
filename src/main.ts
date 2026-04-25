@@ -4,12 +4,13 @@
 import './style.css'
 import {
   AmbientLight,
+  BasicShadowMap,
   CapsuleGeometry,
   Clock,
   Color,
   DirectionalLight,
+  EquirectangularReflectionMapping,
   EdgesGeometry,
-  PCFSoftShadowMap,
   Group,
   BufferGeometry,
   LineBasicMaterial,
@@ -20,6 +21,8 @@ import {
   PerspectiveCamera,
   Raycaster,
   Scene,
+  SRGBColorSpace,
+  TextureLoader,
   Vector3,
   WebGLRenderer,
 } from 'three'
@@ -56,6 +59,7 @@ import {
 /** Stunned FX SVGs live in `public/ui/` so Vercel/production resolves them without bundling `../Assets/`. */
 const stunnedEffectBgUrl = `${import.meta.env.BASE_URL}ui/StunnedEffectBg.svg`
 const stunnedStarUrl = `${import.meta.env.BASE_URL}ui/StunnedStar.svg`
+const skyboxEquirectUrl = `${import.meta.env.BASE_URL}skyboxes/fdfb9a9e-6d70-45a9-b505-3b7029a1ba4b.png`
 
 /** Production without baked host: open once with `?pk=your-deployment.partykit.dev` (stored in session). */
 try {
@@ -280,7 +284,8 @@ if (DEBUG_MP && debugMpPanel) {
   debugMpCopyBtn?.addEventListener('click', () => void copyMpDiagnosticReport())
 }
 
-const HUB_SKY = 0x87b8e8
+/** Fallback clear color if the equirect sky texture fails to load. */
+const HUB_SKY = 0x1a2330
 
 const _knDir = new Vector3()
 const _fp = new Vector3()
@@ -391,9 +396,25 @@ function initGame(lobby: LobbyResult) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
   renderer.setSize(window.innerWidth, window.innerHeight)
   renderer.shadowMap.enabled = true
-  renderer.shadowMap.type = PCFSoftShadowMap
+  /* Hard-edged shadows (harsher than PCF soft). */
+  renderer.shadowMap.type = BasicShadowMap
   /** Canvas first in DOM so HUD / hit-flash overlays stack above it. */
   gameRoot.prepend(renderer.domElement)
+
+  const skyLoader = new TextureLoader()
+  skyLoader.load(
+    skyboxEquirectUrl,
+    (tex) => {
+      tex.colorSpace = SRGBColorSpace
+      tex.mapping = EquirectangularReflectionMapping
+      tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy())
+      scene.background = tex
+    },
+    undefined,
+    () => {
+      scene.background = new Color(HUB_SKY)
+    },
+  )
 
   const composer = new EffectComposer(renderer)
   composer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -412,14 +433,14 @@ function initGame(lobby: LobbyResult) {
   scene.add(ambient)
 
   const sun = new DirectionalLight(0xffffff, gameConfig.sunIntensity)
-  /* Top-down key light so character meshes cast readable shadows on the deck. */
-  sun.position.set(0, 72, 0.1)
+  /* Low sun angle → longer, harsher shadows on the deck (reads against moody skybox). */
+  sun.position.set(58, 34, 42)
   sun.castShadow = true
-  sun.shadow.mapSize.set(2048, 2048)
-  sun.shadow.camera.near = 2
-  sun.shadow.camera.far = 160
-  sun.shadow.bias = -0.00025
-  sun.shadow.normalBias = 0.02
+  sun.shadow.mapSize.set(4096, 4096)
+  sun.shadow.camera.near = 0.5
+  sun.shadow.camera.far = 220
+  sun.shadow.bias = -0.0004
+  sun.shadow.normalBias = 0.035
   function applySunShadowFrustum(): void {
     const ext = Math.max(gameConfig.groundWidth, gameConfig.groundDepth) * 0.5 + gameConfig.blastMargin + 10
     const cam = sun.shadow.camera

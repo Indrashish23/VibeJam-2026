@@ -19,8 +19,10 @@ export const defaultGameConfig = {
   /** Pixel pass edge hint strength (subtle retro contour). */
   retroEdgeStrength: 0.12,
 
-  ambientIntensity: 0.5,
-  sunIntensity: 1.05,
+  /** Fill light; keep low so the directional sun reads harsh against the skybox. */
+  ambientIntensity: 0.22,
+  /** Key directional sun strength (shadow caster). */
+  sunIntensity: 1.85,
   movementMaxDelta: 0.1,
 
   gravity: 38,
