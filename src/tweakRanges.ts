@@ -106,6 +106,23 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   pcMouthHeight: { min: -1, max: 1.4, step: 0.01 },
   pcMouthSide: { min: -1, max: 1, step: 0.01 },
   pcCameraHeightBias: { min: -1, max: 1.5, step: 0.01 },
+  pcAvatarYawOffset: { min: -Math.PI, max: Math.PI, step: 0.05 },
+  pcCollisionView: { min: 0, max: 1, step: 1 },
+  pcCapsuleRadius: { min: 0.1, max: 2, step: 0.01 },
+  pcCapsuleHeight: { min: 0.4, max: 4, step: 0.05 },
+  pcCapsuleOffsetY: { min: -1, max: 1.5, step: 0.01 },
+
+  ecAvatarYOffset: { min: -2, max: 2, step: 0.01 },
+  ecAvatarForward: { min: -1.5, max: 1.5, step: 0.01 },
+  ecAvatarSide: { min: -1, max: 1, step: 0.01 },
+  ecAvatarScale: { min: 0.3, max: 2, step: 0.01 },
+  ecAvatarYawOffset: { min: -Math.PI, max: Math.PI, step: 0.05 },
+  ecCollisionView: { min: 0, max: 1, step: 1 },
+  ecCapsuleRadius: { min: 0.1, max: 2, step: 0.01 },
+  ecCapsuleHeight: { min: 0.4, max: 4, step: 0.05 },
+  ecCapsuleOffsetY: { min: -1, max: 1.5, step: 0.01 },
+
+  debugRoomActive: { min: 0, max: 1, step: 1 },
 
   cameraFov: { min: 20, max: 120, step: 1 },
   cameraNear: { min: 0.001, max: 50, step: 0.01 },
@@ -234,6 +251,21 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   pcMouthHeight: 'Mouth muzzle height offset',
   pcMouthSide: 'Mouth muzzle side offset',
   pcCameraHeightBias: 'Camera height bias (extra eye lift)',
+  pcAvatarYawOffset: 'Body yaw correction (rad, default π = 180°)',
+  pcCollisionView: 'Show collision capsule (red wireframe, 0/1)',
+  pcCapsuleRadius: 'Player capsule radius',
+  pcCapsuleHeight: 'Player capsule total height',
+  pcCapsuleOffsetY: 'Player capsule center Y offset (relative to feet)',
+  ecAvatarYOffset: 'Enemy body Y offset',
+  ecAvatarForward: 'Enemy body forward offset',
+  ecAvatarSide: 'Enemy body side offset',
+  ecAvatarScale: 'Enemy body uniform scale',
+  ecAvatarYawOffset: 'Enemy body yaw correction (rad)',
+  ecCollisionView: 'Show enemy collision capsule (0/1)',
+  ecCapsuleRadius: 'Enemy capsule radius',
+  ecCapsuleHeight: 'Enemy capsule total height',
+  ecCapsuleOffsetY: 'Enemy capsule center Y offset (relative to feet)',
+  debugRoomActive: 'Debug room active (0/1)',
 }
 
 /**
@@ -282,6 +314,36 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
     'Lateral offset for the mouth spawn (left/right of the camera).',
   pcCameraHeightBias:
     'Extra eye-height added to the player camera so you can fine-tune how far inside the head the camera sits.',
+  pcAvatarYawOffset:
+    'Yaw correction (radians) applied to the monkey root so its forward axis matches gameplay forward. Default π (180°) flips the model when the GLB is back-facing.',
+  pcCollisionView:
+    '1 = render a red wireframe capsule at the player position so you can see/tune its size in real time. 0 = hidden.',
+  pcCapsuleRadius:
+    'Radius of the player collision capsule (visualization + spec). Use this with collision view to size the capsule like a game engine.',
+  pcCapsuleHeight:
+    'Total height of the player capsule (cylinder + 2 hemispheres). Bottom is anchored at your feet by default.',
+  pcCapsuleOffsetY:
+    'Y offset for the capsule center relative to the player feet. Positive lifts the capsule.',
+  ecAvatarYOffset:
+    'Lift or lower the enemy monkey body relative to its feet (independent from the player rig).',
+  ecAvatarForward:
+    'Forward / back nudge for the enemy body relative to its facing direction.',
+  ecAvatarSide:
+    'Lateral nudge for the enemy body.',
+  ecAvatarScale:
+    'Multiplier on top of the enemy auto-fit scale.',
+  ecAvatarYawOffset:
+    'Yaw correction for the enemy monkey forward axis. 0 keeps current behavior; π flips it 180°.',
+  ecCollisionView:
+    '1 = render a red wireframe capsule at the enemy position. 0 = hidden.',
+  ecCapsuleRadius:
+    'Enemy collision capsule radius.',
+  ecCapsuleHeight:
+    'Enemy collision capsule total height.',
+  ecCapsuleOffsetY:
+    'Enemy capsule center Y relative to its feet.',
+  debugRoomActive:
+    'When 1, the game enters an in-place debug arena: the player + dummy are teleported to a side area and round-resets are suppressed while you tweak.',
 
   ambientIntensity: 'Fill light strength from all directions (shadow softness).',
   sunIntensity: 'Main directional light strength (contrast and shadows).',
@@ -500,11 +562,36 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'pcAvatarForward',
       'pcAvatarSide',
       'pcAvatarScale',
+      'pcAvatarYawOffset',
       'pcHideHead',
       'pcMouthForward',
       'pcMouthHeight',
       'pcMouthSide',
+      'pcCollisionView',
+      'pcCapsuleRadius',
+      'pcCapsuleHeight',
+      'pcCapsuleOffsetY',
     ],
+  },
+  {
+    id: 'enemyCamera',
+    title: 'EnemyCamera (FPS rig)',
+    keys: [
+      'ecAvatarYOffset',
+      'ecAvatarForward',
+      'ecAvatarSide',
+      'ecAvatarScale',
+      'ecAvatarYawOffset',
+      'ecCollisionView',
+      'ecCapsuleRadius',
+      'ecCapsuleHeight',
+      'ecCapsuleOffsetY',
+    ],
+  },
+  {
+    id: 'debugRoom',
+    title: 'Debug Room',
+    keys: ['debugRoomActive'],
   },
   {
     id: 'lighting',

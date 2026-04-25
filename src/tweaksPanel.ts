@@ -291,6 +291,29 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
     actions.appendChild(practiceBtn)
   }
 
+  const debugRoomBtn = document.createElement('button')
+  debugRoomBtn.type = 'button'
+  debugRoomBtn.className = 'tweaks-debug-room-btn'
+  function refreshDebugRoomBtnLabel() {
+    debugRoomBtn.textContent =
+      gameConfig.debugRoomActive >= 0.5 ? 'Exit Debug Room' : 'Enter Debug Room'
+  }
+  refreshDebugRoomBtnLabel()
+  debugRoomBtn.addEventListener('click', () => {
+    const next = gameConfig.debugRoomActive >= 0.5 ? 0 : 1
+    gameConfig.debugRoomActive = next
+    /* Sync any matching slider row so its UI stays consistent. */
+    for (const row of rows) {
+      if (row.key === 'debugRoomActive') {
+        row.range.value = String(next)
+        row.num.value = String(next)
+      }
+    }
+    refreshDebugRoomBtnLabel()
+    hooks.onConfigChanged?.()
+  })
+  actions.appendChild(debugRoomBtn)
+
   panel.appendChild(actions)
 
   host.appendChild(panel)

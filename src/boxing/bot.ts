@@ -7,6 +7,7 @@ import {
   CapsuleGeometry,
   Color,
   Group,
+  LoopOnce,
   Mesh,
   MeshStandardMaterial,
   Object3D,
@@ -17,8 +18,19 @@ import {
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { gameConfig } from '../gameConfig'
 import { PROJECTILE_R } from './playerArms'
+import {
+  pickClipForSlot,
+  type AvatarBaseClip,
+  type AvatarClipName,
+  type AvatarOneShotClip,
+} from './localPlayerAvatar'
 
-const BOT_MONKEY_GLB = new URL('../../Assets/MonkeyModel/Idle.glb', import.meta.url).href
+const BOT_GLB_IDLE = new URL('../../Assets/MonkeyModel/Idle.glb', import.meta.url).href
+const BOT_GLB_RUNNING = new URL('../../Assets/MonkeyModel/Running.glb', import.meta.url).href
+const BOT_GLB_JUMPING = new URL('../../Assets/MonkeyModel/Jumping.glb', import.meta.url).href
+const BOT_GLB_HITREACT = new URL('../../Assets/MonkeyModel/HitReact.glb', import.meta.url).href
+const BOT_GLB_RECORDING = new URL('../../Assets/MonkeyModel/RecordingSound.glb', import.meta.url).href
+const BOT_GLB_SHOOTING = new URL('../../Assets/MonkeyModel/ShootingSound.glb', import.meta.url).href
 
 export type BotMode = 'dummy' | 'smart' | 'network'
 
@@ -63,8 +75,23 @@ export class BotFighter {
   private monkeyWrap: Group | null = null
   private monkeyRoot: Object3D | null = null
   private monkeyMixer: AnimationMixer | null = null
-  private monkeyIdleAction: AnimationAction | null = null
+  private readonly monkeyActions = new Map<AvatarClipName, AnimationAction>()
+  private monkeyCurrentBase: AvatarBaseClip = 'idle'
+  private monkeyActiveOneShot: AvatarOneShotClip | null = null
+  private monkeyAutoFitScale = 1
+  private monkeyBboxMinYAtUnit = 0
+  private monkeyShakeX = 0
+  private monkeyShakeZ = 0
+  private monkeyShakeRollZ = 0
+  private monkeyFinishedHandler: ((ev: { action?: AnimationAction }) => void) | null = null
   private readonly monkeyMaterials: { mat: MeshStandardMaterial; baseColor: Color }[] = []
+
+  /** Set by network mode (overrides locally-derived animation evaluation). */
+  private remoteAnimBase: AvatarBaseClip | null = null
+  private remoteAnimOneShot: AvatarOneShotClip | null = null
+  private lastRemoteOneShotEpoch = 0
+  /** Bot's current speed-normalized for run blend / future tuning. */
+  speedN = 0
 
   /** World-space ballistic (matches player projectile integration). */
   projActive = false
@@ -139,19 +166,12 @@ export class BotFighter {
     void this.loadMonkeyVisual()
   }
 
-  /** Load and attach the monkey GLB; once it's in, hide the capsule mesh and use the monkey for the body/telegraph. */
+  /** Load and attach the monkey GLB + every animation slot; once it's in, hide the capsule mesh. */
   private async loadMonkeyVisual(): Promise<void> {
     try {
       const loader = new GLTFLoader()
-      const gltf = await new Promise<{ scene: Group; animations: AnimationClip[] }>((res, rej) => {
-        loader.load(
-          BOT_MONKEY_GLB,
-          (g) => res(g as { scene: Group; animations: AnimationClip[] }),
-          undefined,
-          rej,
-        )
-      })
-      const sceneRoot = gltf.scene as Object3D
+      const idleGltf = await loadBotGltf(loader, BOT_GLB_IDLE)
+      const sceneRoot = idleGltf.scene as Object3D
 
       /* Auto-fit the monkey to the same target height the local player uses (eyeHeight + 0.20). */
       sceneRoot.updateMatrixWorld(true)
@@ -159,13 +179,12 @@ export class BotFighter {
       const naturalH = Math.max(0.1, bbox.max.y - bbox.min.y)
       const targetH = gameConfig.eyeHeight + 0.2
       const scaleNum = targetH / naturalH
+      this.monkeyAutoFitScale = scaleNum
+      this.monkeyBboxMinYAtUnit = bbox.min.y
 
       const wrap = new Group()
       wrap.add(sceneRoot)
-      wrap.scale.setScalar(scaleNum)
-      /* The bot's `root` is at body center; we want the monkey's feet at root.y - feetFromCenter.
-         After scaling, bbox.min.y * scaleNum is the local-y of the feet relative to wrap origin. */
-      wrap.position.y = -this.feetFromCenter - bbox.min.y * scaleNum
+      this.applyMonkeyTransform(wrap)
       this.root.add(wrap)
       this.monkeyWrap = wrap
       this.monkeyRoot = sceneRoot
@@ -192,19 +211,160 @@ export class BotFighter {
         }
       })
 
-      /* Loop the idle clip if present. */
-      const clip = gltf.animations?.[0]
-      if (clip) {
-        this.monkeyMixer = new AnimationMixer(sceneRoot)
-        const action = this.monkeyMixer.clipAction(clip)
-        action.enabled = true
-        action.setEffectiveWeight(1)
-        action.play()
-        this.monkeyIdleAction = action
+      this.monkeyMixer = new AnimationMixer(sceneRoot)
+      this.monkeyFinishedHandler = (ev) => {
+        const shot = this.monkeyActiveOneShot
+        if (!shot) return
+        const a = this.monkeyActions.get(shot)
+        if (!a || ev.action !== a) return
+        this.monkeyActiveOneShot = null
+        a.stop()
+        this.playMonkeyBase(this.monkeyCurrentBase, true)
       }
+      this.monkeyMixer.addEventListener('finished', this.monkeyFinishedHandler)
+
+      /* Bind idle from this gltf, then load other slots in parallel. */
+      const idleClip = pickClipForSlot(idleGltf, 'idle')
+      if (idleClip) this.bindMonkeyClip('idle', idleClip)
+
+      await Promise.all([
+        this.loadAndBindBotClip(loader, BOT_GLB_RUNNING, 'running'),
+        this.loadAndBindBotClip(loader, BOT_GLB_JUMPING, 'jumping'),
+        this.loadAndBindBotClip(loader, BOT_GLB_HITREACT, 'hitreact'),
+        this.loadAndBindBotClip(loader, BOT_GLB_RECORDING, 'recording'),
+        this.loadAndBindBotClip(loader, BOT_GLB_SHOOTING, 'shooting'),
+      ])
+
+      this.playMonkeyBase('idle', true)
     } catch (err) {
       console.warn('[bot] Failed to load monkey GLB; keeping capsule fallback', err)
     }
+  }
+
+  private async loadAndBindBotClip(
+    loader: GLTFLoader,
+    url: string,
+    slot: AvatarClipName,
+  ): Promise<void> {
+    try {
+      const gltf = await loadBotGltf(loader, url)
+      const clip = pickClipForSlot(gltf, slot)
+      if (!clip) {
+        console.warn(`[bot] ${slot} clip missing in`, url)
+        return
+      }
+      this.bindMonkeyClip(slot, clip)
+    } catch (err) {
+      console.warn(`[bot] Failed to load ${slot} clip`, err)
+    }
+  }
+
+  private bindMonkeyClip(slot: AvatarClipName, clip: AnimationClip): void {
+    if (!this.monkeyMixer) return
+    const action = this.monkeyMixer.clipAction(clip)
+    action.enabled = true
+    action.clampWhenFinished = slot === 'recording' || slot === 'shooting'
+    this.monkeyActions.set(slot, action)
+  }
+
+  private playMonkeyBase(next: AvatarBaseClip, immediate = false): void {
+    if (this.monkeyCurrentBase === next && !immediate) return
+    const nextAction = this.monkeyActions.get(next)
+    if (!nextAction) return
+    const prevAction = this.monkeyActions.get(this.monkeyCurrentBase)
+    if (immediate || !prevAction) {
+      prevAction?.stop()
+      nextAction.reset().setEffectiveWeight(1).play()
+    } else {
+      prevAction.fadeOut(0.14)
+      nextAction.reset().setEffectiveWeight(1).fadeIn(0.14).play()
+    }
+    this.monkeyCurrentBase = next
+  }
+
+  private playMonkeyOneShot(name: AvatarOneShotClip): void {
+    const action = this.monkeyActions.get(name)
+    if (!action) return
+    if (this.monkeyActiveOneShot) {
+      const prev = this.monkeyActions.get(this.monkeyActiveOneShot)
+      prev?.fadeOut(0.05)
+      prev?.stop()
+    }
+    const base = this.monkeyActions.get(this.monkeyCurrentBase)
+    base?.fadeOut(0.06)
+    action.reset()
+    action.setEffectiveWeight(1)
+    action.setLoop(LoopOnce, 1)
+    action.clampWhenFinished = true
+    action.fadeIn(0.06)
+    action.play()
+    this.monkeyActiveOneShot = name
+  }
+
+  /** Compute & apply monkey wrap transform: feet pinned to capsule bottom, ec* offsets, yaw correction, shake. */
+  private applyMonkeyTransform(wrap: Group): void {
+    const scaleMul = Math.max(0.05, gameConfig.ecAvatarScale)
+    const finalScale = this.monkeyAutoFitScale * scaleMul
+    if (Math.abs(wrap.scale.x - finalScale) > 1e-3) wrap.scale.setScalar(finalScale)
+
+    /* Pin feet at root.y - feetFromCenter (capsule bottom in root-local space).
+       In wrap-local space the model's feet are at `bboxMinYAtUnit * finalScale`. */
+    const feetLocalAtScale = this.monkeyBboxMinYAtUnit * finalScale
+    wrap.position.set(
+      gameConfig.ecAvatarSide + this.monkeyShakeX,
+      -this.feetFromCenter - feetLocalAtScale + gameConfig.ecAvatarYOffset,
+      gameConfig.ecAvatarForward + this.monkeyShakeZ,
+    )
+    wrap.rotation.set(0, gameConfig.ecAvatarYawOffset, this.monkeyShakeRollZ)
+  }
+
+  /** Network-mode: feed authoritative animation state from the peer's pose packet. */
+  setRemoteAnimState(base: AvatarBaseClip, oneShot: AvatarOneShotClip | null, oneShotEpoch?: number): void {
+    this.remoteAnimBase = base
+    if (oneShot && oneShotEpoch !== undefined && oneShotEpoch !== this.lastRemoteOneShotEpoch) {
+      this.remoteAnimOneShot = oneShot
+      this.lastRemoteOneShotEpoch = oneShotEpoch
+    }
+  }
+
+  /** Resolve the monkey's locomotor base from this bot's own physics (used by dummy/smart modes). */
+  private resolveLocalBase(): AvatarBaseClip {
+    if (this.hurtPhase !== 'none') return 'hitreact'
+    if (!this.grounded) return 'jumping'
+    const speedSq = this.velocity.x * this.velocity.x + this.velocity.z * this.velocity.z
+    return speedSq > 0.08 * 0.08 ? 'running' : 'idle'
+  }
+
+  private updateMonkeyAnimation(delta: number): void {
+    if (!this.monkeyMixer) return
+
+    let base: AvatarBaseClip
+    if (this.mode === 'network' && this.remoteAnimBase) {
+      base = this.remoteAnimBase
+      if (this.remoteAnimOneShot) {
+        const shot = this.remoteAnimOneShot
+        this.remoteAnimOneShot = null
+        this.playMonkeyOneShot(shot)
+      }
+    } else {
+      base = this.resolveLocalBase()
+      /* Recording telegraph drives a one-shot for dummy/smart bots. */
+      if (this.recordingTelegraph && this.monkeyActiveOneShot !== 'recording' && base !== 'hitreact') {
+        this.playMonkeyOneShot('recording')
+      }
+    }
+
+    if (this.monkeyActiveOneShot && base === 'hitreact') {
+      const prev = this.monkeyActions.get(this.monkeyActiveOneShot)
+      this.monkeyActiveOneShot = null
+      prev?.fadeOut(0.04)
+      prev?.stop()
+      this.playMonkeyBase('hitreact')
+    } else if (!this.monkeyActiveOneShot) {
+      this.playMonkeyBase(base)
+    }
+
+    this.monkeyMixer.update(delta)
   }
 
   /** Feet offset from root Y (capsule geometry). */
@@ -244,13 +404,14 @@ export class BotFighter {
     this.projMesh.geometry.dispose()
     ;(this.projMesh.material as MeshStandardMaterial).dispose()
     if (this.monkeyMixer) {
+      if (this.monkeyFinishedHandler) {
+        this.monkeyMixer.removeEventListener('finished', this.monkeyFinishedHandler)
+        this.monkeyFinishedHandler = null
+      }
       this.monkeyMixer.stopAllAction()
       this.monkeyMixer = null
     }
-    if (this.monkeyIdleAction) {
-      this.monkeyIdleAction.stop()
-      this.monkeyIdleAction = null
-    }
+    this.monkeyActions.clear()
     if (this.monkeyRoot) {
       this.monkeyRoot.traverse((o) => {
         const meshObj = o as Mesh
@@ -281,14 +442,13 @@ export class BotFighter {
     this.recordingTelegraph = false
     this.recordingTelegraphMix = 0
     this.recordingShakeT = 0
+    this.monkeyShakeX = 0
+    this.monkeyShakeZ = 0
+    this.monkeyShakeRollZ = 0
     this.mesh.position.set(0, 0, 0)
     this.mesh.rotation.z = 0
     this.bodyMat.color.copy(this.baseBodyColor)
-    if (this.monkeyWrap) {
-      this.monkeyWrap.position.x = 0
-      this.monkeyWrap.position.z = 0
-      this.monkeyWrap.rotation.z = 0
-    }
+    if (this.monkeyWrap) this.applyMonkeyTransform(this.monkeyWrap)
     for (const { mat, baseColor } of this.monkeyMaterials) {
       mat.color.copy(baseColor)
     }
@@ -310,21 +470,27 @@ export class BotFighter {
       mat.color.copy(baseColor).lerp(this.recordingBodyColor, mix)
     }
 
-    /* Shake target: monkey wrap if loaded, else the legacy capsule mesh. */
-    const shakeTarget: Object3D = this.monkeyWrap ?? this.mesh
-
     if (mix < 1e-3) {
-      shakeTarget.position.x = 0
-      shakeTarget.position.z = 0
-      shakeTarget.rotation.z = 0
+      this.monkeyShakeX = 0
+      this.monkeyShakeZ = 0
+      this.monkeyShakeRollZ = 0
+      this.mesh.position.x = 0
+      this.mesh.position.z = 0
+      this.mesh.rotation.z = 0
       return
     }
 
     this.recordingShakeT += delta
     const amp = 0.06 * mix
-    shakeTarget.position.x = Math.sin(this.recordingShakeT * 7.2) * amp
-    shakeTarget.position.z = Math.cos(this.recordingShakeT * 5.4) * amp * 0.7
-    shakeTarget.rotation.z = Math.sin(this.recordingShakeT * 4.6) * 0.045 * mix
+    this.monkeyShakeX = Math.sin(this.recordingShakeT * 7.2) * amp
+    this.monkeyShakeZ = Math.cos(this.recordingShakeT * 5.4) * amp * 0.7
+    this.monkeyShakeRollZ = Math.sin(this.recordingShakeT * 4.6) * 0.045 * mix
+    /* Fallback shake on the capsule too (in case the monkey didn't load yet). */
+    if (!this.monkeyWrap) {
+      this.mesh.position.x = this.monkeyShakeX
+      this.mesh.position.z = this.monkeyShakeZ
+      this.mesh.rotation.z = this.monkeyShakeRollZ
+    }
   }
 
   alignFacingToward(worldPos: Vector3): void {
@@ -511,7 +677,13 @@ export class BotFighter {
     _playerProjectileActive: boolean,
   ): void {
     this.updateRecordingTelegraph(delta)
-    if (this.monkeyMixer) this.monkeyMixer.update(delta)
+    if (this.monkeyWrap) this.applyMonkeyTransform(this.monkeyWrap)
+    /* Track normalized speed for replication / future blend tree usage. */
+    this.speedN = Math.min(
+      1,
+      Math.hypot(this.velocity.x, this.velocity.z) / Math.max(0.5, gameConfig.moveSpeed),
+    )
+    this.updateMonkeyAnimation(delta)
     if (this.mode === 'network') {
       const a = Math.min(1, delta * 16)
       this.root.position.lerp(this.networkTargetPos, a)
@@ -704,3 +876,17 @@ export class BotFighter {
 const _work = new Vector3()
 const _rad = new Vector3()
 const _tan = new Vector3()
+
+function loadBotGltf(
+  loader: GLTFLoader,
+  url: string,
+): Promise<{ scene: Group; animations: AnimationClip[] }> {
+  return new Promise((resolve, reject) => {
+    loader.load(
+      url,
+      (gltf) => resolve(gltf as { scene: Group; animations: AnimationClip[] }),
+      undefined,
+      reject,
+    )
+  })
+}

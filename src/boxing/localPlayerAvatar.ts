@@ -25,17 +25,10 @@ export function computeMonkeyAutoFitScale(model: Object3D): number {
   return targetMonkeyHeight() / natural
 }
 
-type AvatarClipName =
-  | 'idle'
-  | 'running'
-  | 'jumping'
-  | 'hitreact'
-  | 'recording'
-  | 'shooting'
-
-type OneShotClip = 'recording' | 'shooting'
-type BaseClip = 'idle' | 'running' | 'jumping' | 'hitreact'
-type HurtPhase = 'none' | 'air' | 'recover'
+export type AvatarBaseClip = 'idle' | 'running' | 'jumping' | 'hitreact'
+export type AvatarOneShotClip = 'recording' | 'shooting'
+export type AvatarClipName = AvatarBaseClip | AvatarOneShotClip
+export type AvatarHurtPhase = 'none' | 'air' | 'recover'
 
 export type LocalAvatarSnapshot = {
   x: number
@@ -44,7 +37,7 @@ export type LocalAvatarSnapshot = {
   yaw: number
   grounded: boolean
   moving: boolean
-  playerHurt: HurtPhase
+  playerHurt: AvatarHurtPhase
   slideActive: boolean
 }
 
@@ -54,6 +47,16 @@ const GLB_JUMPING = new URL('../../Assets/MonkeyModel/Jumping.glb', import.meta.
 const GLB_HITREACT = new URL('../../Assets/MonkeyModel/HitReact.glb', import.meta.url).href
 const GLB_RECORDING = new URL('../../Assets/MonkeyModel/RecordingSound.glb', import.meta.url).href
 const GLB_SHOOTING = new URL('../../Assets/MonkeyModel/ShootingSound.glb', import.meta.url).href
+
+/** Heuristic clip-name match per slot (so we pick the right clip even if the GLB ships several). */
+const CLIP_NAME_PATTERNS: Record<AvatarClipName, RegExp> = {
+  idle: /idle/i,
+  running: /run/i,
+  jumping: /jump/i,
+  hitreact: /hit|react|damage|hurt/i,
+  recording: /record/i,
+  shooting: /shoot|fire|throw|attack/i,
+}
 
 function loadGltf(loader: GLTFLoader, url: string): Promise<{ scene: Group; animations: AnimationClip[] }> {
   return new Promise((resolve, reject) => {
@@ -66,8 +69,17 @@ function loadGltf(loader: GLTFLoader, url: string): Promise<{ scene: Group; anim
   })
 }
 
-function firstClip(gltf: { animations: AnimationClip[] }): AnimationClip | null {
-  return gltf.animations?.[0] ?? null
+/** Prefer a clip whose name matches the slot's pattern; fall back to the first clip in the GLB. */
+export function pickClipForSlot(
+  gltf: { animations: AnimationClip[] },
+  slot: AvatarClipName,
+): AnimationClip | null {
+  if (!gltf.animations || gltf.animations.length === 0) return null
+  const pat = CLIP_NAME_PATTERNS[slot]
+  for (const c of gltf.animations) {
+    if (pat.test(c.name || '')) return c
+  }
+  return gltf.animations[0] ?? null
 }
 
 /** Collect all bones whose name matches /head/i. We toggle visibility live based on `pcHideHead`. */
@@ -87,8 +99,11 @@ export class LocalPlayerAvatar {
   private readonly scene: Scene
   private readonly mixer: AnimationMixer
   private readonly actions = new Map<AvatarClipName, AnimationAction>()
-  private currentBase: BaseClip = 'idle'
-  private activeOneShot: OneShotClip | null = null
+  private currentBase: AvatarBaseClip = 'idle'
+  private activeOneShot: AvatarOneShotClip | null = null
+  /** Latest one-shot fired (sticky between calls) + monotonic epoch so peers can detect new triggers. */
+  private lastOneShot: AvatarOneShotClip | null = null
+  private oneShotEpoch = 0
   private lastSnapshot: LocalAvatarSnapshot = {
     x: 0,
     feetY: 0,
@@ -104,11 +119,17 @@ export class LocalPlayerAvatar {
   private lastHideHead = -1
   /** Auto-fit scale so the monkey is exactly capsule-height (eyeHeight + small headroom) at scale 1.0. */
   private readonly autoFitScale: number
+  /** Local-Y of the model's feet (bbox.min.y) at scale 1; used to pin feet to the capsule bottom. */
+  private readonly bboxMinYAtUnitScale: number
 
   private constructor(scene: Scene, modelRoot: Object3D, mixer: AnimationMixer) {
     this.scene = scene
     this.mixer = mixer
     this.root.add(modelRoot)
+    /* Capture bbox at native scale before any auto-fit, so we can cleanly anchor feet later. */
+    modelRoot.updateMatrixWorld(true)
+    const bbox = new Box3().setFromObject(modelRoot)
+    this.bboxMinYAtUnitScale = bbox.min.y
     this.autoFitScale = computeMonkeyAutoFitScale(modelRoot)
     this.root.scale.setScalar(this.autoFitScale * Math.max(0.05, gameConfig.pcAvatarScale))
     this.scene.add(this.root)
@@ -136,7 +157,7 @@ export class LocalPlayerAvatar {
       return null
     }
 
-    const idleClip = firstClip(idleGltf)
+    const idleClip = pickClipForSlot(idleGltf, 'idle')
     if (!idleClip) {
       console.warn('[avatar] Idle.glb has no animation clip')
       return null
@@ -161,7 +182,7 @@ export class LocalPlayerAvatar {
   private async loadAndBind(loader: GLTFLoader, url: string, key: AvatarClipName): Promise<void> {
     try {
       const gltf = await loadGltf(loader, url)
-      const clip = firstClip(gltf)
+      const clip = pickClipForSlot(gltf, key)
       if (!clip) {
         console.warn(`[avatar] ${key} clip missing in`, url)
         return
@@ -179,14 +200,15 @@ export class LocalPlayerAvatar {
     this.actions.set(key, action)
   }
 
-  private resolveBase(s: LocalAvatarSnapshot): BaseClip {
+  /** Public so the host can compute and replicate the base clip from the same rules. */
+  resolveBase(s: LocalAvatarSnapshot): AvatarBaseClip {
     if (s.playerHurt !== 'none') return 'hitreact'
     if (!s.grounded || s.slideActive) return 'jumping'
     if (s.moving) return 'running'
     return 'idle'
   }
 
-  private playBase(next: BaseClip, immediate = false): void {
+  private playBase(next: AvatarBaseClip, immediate = false): void {
     if (this.currentBase === next && !immediate) return
     const nextAction = this.actions.get(next)
     if (!nextAction) return
@@ -211,7 +233,7 @@ export class LocalPlayerAvatar {
     action.stop()
   }
 
-  private playOneShot(name: OneShotClip): void {
+  private playOneShot(name: AvatarOneShotClip): void {
     if (this.lastSnapshot.playerHurt !== 'none') return
     const action = this.actions.get(name)
     if (!action) return
@@ -231,10 +253,23 @@ export class LocalPlayerAvatar {
 
   onRecordingStarted(): void {
     this.playOneShot('recording')
+    this.lastOneShot = 'recording'
+    this.oneShotEpoch += 1
   }
 
   onRecordingReleased(): void {
     this.playOneShot('shooting')
+    this.lastOneShot = 'shooting'
+    this.oneShotEpoch += 1
+  }
+
+  /** Returns the current high-level animation state (used to replicate to peers). */
+  getNetAnimState(): {
+    base: AvatarBaseClip
+    oneShot: AvatarOneShotClip | null
+    epoch: number
+  } {
+    return { base: this.currentBase, oneShot: this.lastOneShot, epoch: this.oneShotEpoch }
   }
 
   update(delta: number, snapshot: LocalAvatarSnapshot): void {
@@ -249,16 +284,23 @@ export class LocalPlayerAvatar {
     const rightZ = -sinY
     const bodyFwd = gameConfig.pcAvatarForward
     const bodySide = gameConfig.pcAvatarSide
-    this.root.position.set(
-      snapshot.x + fwdX * bodyFwd + rightX * bodySide,
-      snapshot.feetY + gameConfig.pcAvatarYOffset,
-      snapshot.z + fwdZ * bodyFwd + rightZ * bodySide,
-    )
-    this.root.rotation.set(0, snapshot.yaw, 0)
+
     const desiredScale = this.autoFitScale * Math.max(0.05, gameConfig.pcAvatarScale)
     if (Math.abs(this.root.scale.x - desiredScale) > 1e-3) {
       this.root.scale.setScalar(desiredScale)
     }
+
+    /* Pin model feet to the capsule bottom (snapshot.feetY).
+       The model's local feet Y at scale=1 is `bboxMinYAtUnitScale`; scale it by current root scale.
+       Then user-controllable `pcAvatarYOffset` lifts/lowers from there. */
+    const feetLocalAtScale = this.bboxMinYAtUnitScale * desiredScale
+    this.root.position.set(
+      snapshot.x + fwdX * bodyFwd + rightX * bodySide,
+      snapshot.feetY - feetLocalAtScale + gameConfig.pcAvatarYOffset,
+      snapshot.z + fwdZ * bodyFwd + rightZ * bodySide,
+    )
+    /* Yaw + 180° model-forward correction (configurable in case the GLB changes). */
+    this.root.rotation.set(0, snapshot.yaw + gameConfig.pcAvatarYawOffset, 0)
 
     /* Live head-bones visibility toggle (1 = hide for FPS, 0 = show). */
     const hideHead = gameConfig.pcHideHead >= 0.5 ? 1 : 0
@@ -297,4 +339,3 @@ export class LocalPlayerAvatar {
     this.mixer.stopAllAction()
   }
 }
-

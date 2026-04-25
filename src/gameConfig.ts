@@ -206,6 +206,35 @@ export const defaultGameConfig = {
   pcMouthSide: 0,
   /** Camera height bias from the default eye height (negative lowers, positive raises). */
   pcCameraHeightBias: 0,
+  /** Yaw correction applied to the monkey root so its forward axis matches gameplay yaw (rad). */
+  pcAvatarYawOffset: Math.PI,
+
+  /**
+   * PlayerCamera collision view + capsule sizing.
+   * `pcCollisionView` toggles a red wireframe capsule around the player so you can size it like a game engine.
+   * The capsule visual is purely a debug aid (the underlying physics is XZ-only with `playerRadius`).
+   */
+  pcCollisionView: 0,
+  pcCapsuleRadius: 0.42,
+  pcCapsuleHeight: 1.75,
+  pcCapsuleOffsetY: 0,
+
+  /**
+   * EnemyCamera (FPS rig for opponent / dummy monkey) — independent knobs for tuning the enemy's avatar
+   * placement and debug capsule. Defaults are chosen so existing gameplay looks identical until tweaked.
+   */
+  ecAvatarYOffset: 0,
+  ecAvatarForward: 0,
+  ecAvatarSide: 0,
+  ecAvatarScale: 1,
+  ecAvatarYawOffset: 0,
+  ecCollisionView: 0,
+  ecCapsuleRadius: 0.62,
+  ecCapsuleHeight: 1.75,
+  ecCapsuleOffsetY: 0,
+
+  /** Debug Room: when 1, slider edits do NOT trigger a round reset; teleports you + dummy to a side arena. */
+  debugRoomActive: 0,
 } as const
 
 export type GameConfigKey = keyof typeof defaultGameConfig

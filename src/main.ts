@@ -4,10 +4,14 @@
 import './style.css'
 import {
   AmbientLight,
+  CapsuleGeometry,
   Clock,
   Color,
   DirectionalLight,
+  EdgesGeometry,
   Group,
+  LineBasicMaterial,
+  LineSegments,
   MathUtils,
   Mesh,
   PerspectiveCamera,
@@ -396,6 +400,53 @@ function initGame(lobby: LobbyResult) {
   let botMode: BotMode = isOnline ? 'dummy' : 'dummy'
   let bot = new BotFighter(scene, botMode, new Vector3())
 
+  /**
+   * Red wireframe capsule debug helpers. Lazily-rebuilt geometry when sizing changes; always-on listener
+   * for the matching `*CollisionView` flag in the tweaks panel.
+   */
+  type CapsuleDebug = {
+    line: LineSegments
+    radius: number
+    height: number
+  }
+  const _capsuleMaterial = new LineBasicMaterial({ color: 0xff3030, transparent: true, opacity: 0.85 })
+  function makeCapsuleDebug(radius: number, height: number): CapsuleDebug {
+    const cylH = Math.max(0.05, height - radius * 2)
+    const geom = new EdgesGeometry(new CapsuleGeometry(radius, cylH, 6, 12))
+    const line = new LineSegments(geom, _capsuleMaterial)
+    line.visible = false
+    scene.add(line)
+    return { line, radius, height }
+  }
+  function syncCapsuleDebug(
+    debug: CapsuleDebug,
+    radius: number,
+    height: number,
+    centerX: number,
+    centerY: number,
+    centerZ: number,
+    visible: boolean,
+  ): void {
+    debug.line.visible = visible
+    if (!visible) return
+    if (Math.abs(debug.radius - radius) > 1e-3 || Math.abs(debug.height - height) > 1e-3) {
+      const cylH = Math.max(0.05, height - radius * 2)
+      debug.line.geometry.dispose()
+      debug.line.geometry = new EdgesGeometry(new CapsuleGeometry(radius, cylH, 6, 12))
+      debug.radius = radius
+      debug.height = height
+    }
+    debug.line.position.set(centerX, centerY, centerZ)
+  }
+  const playerCapsuleDebug = makeCapsuleDebug(
+    gameConfig.pcCapsuleRadius,
+    gameConfig.pcCapsuleHeight,
+  )
+  const enemyCapsuleDebug = makeCapsuleDebug(
+    gameConfig.ecCapsuleRadius,
+    gameConfig.ecCapsuleHeight,
+  )
+
   function isPvp(): boolean {
     return isOnline && mpPhase === 'live' && bot.mode === 'network'
   }
@@ -524,11 +575,85 @@ function initGame(lobby: LobbyResult) {
   }
 
   function scheduleRoundResetAfterTweak(): void {
+    /* While in debug room, never trigger a round reset on slider edits — the user is live-tuning. */
+    if (gameConfig.debugRoomActive >= 0.5) return
     if (tweakConfigDebounce) window.clearTimeout(tweakConfigDebounce)
     tweakConfigDebounce = window.setTimeout(() => {
       tweakConfigDebounce = null
       tweakConfigResetChain = tweakConfigResetChain.then(() => resetRoundAfterTweakEdit())
     }, 420)
+  }
+
+  /* Debug Room: stay on the existing arena (no off-deck blast zone), force a dummy bot in front, suppress
+     round resets on tweak. Restores prior state on exit. Disabled in online/PvP mode. */
+  let debugRoomActiveLast = 0
+  const debugRoomSaved = {
+    playerX: 0,
+    playerY: 0,
+    playerZ: 0,
+    botX: 0,
+    botY: 0,
+    botZ: 0,
+    botMode: 'dummy' as BotMode,
+  }
+  /** Place player + dummy at the corner of the deck so they don't collide with regular spawn or fall off. */
+  const DEBUG_ROOM_PLAYER_FEET = new Vector3(-18, 0, -18)
+  const DEBUG_ROOM_BOT_OFFSET = new Vector3(0, 0, 4) // 4m in front along +Z
+  function updateDebugRoom(): void {
+    const requested = gameConfig.debugRoomActive >= 0.5 ? 1 : 0
+    /* Online / PvP: refuse and reset the flag so the user gets a clear no-op rather than weird teleports. */
+    if (requested === 1 && (isOnline || bot.mode === 'network')) {
+      gameConfig.debugRoomActive = 0
+      return
+    }
+    if (requested === debugRoomActiveLast) return
+    if (requested === 1) {
+      debugRoomSaved.playerX = camera.position.x
+      debugRoomSaved.playerY = camera.position.y
+      debugRoomSaved.playerZ = camera.position.z
+      debugRoomSaved.botX = bot.root.position.x
+      debugRoomSaved.botY = bot.root.position.y
+      debugRoomSaved.botZ = bot.root.position.z
+      debugRoomSaved.botMode = bot.mode
+
+      const botStart = new Vector3(
+        DEBUG_ROOM_PLAYER_FEET.x + DEBUG_ROOM_BOT_OFFSET.x,
+        bot.getFootOffset() + 0.08,
+        DEBUG_ROOM_PLAYER_FEET.z + DEBUG_ROOM_BOT_OFFSET.z,
+      )
+      if (bot.mode !== 'dummy') {
+        bot.dispose(scene)
+        bot = new BotFighter(scene, 'dummy', botStart)
+      } else {
+        bot.root.position.copy(botStart)
+      }
+      bot.resetRoundState()
+
+      camera.position.set(
+        DEBUG_ROOM_PLAYER_FEET.x,
+        DEBUG_ROOM_PLAYER_FEET.y + eyeH(),
+        DEBUG_ROOM_PLAYER_FEET.z,
+      )
+      velocity.set(0, 0, 0)
+      vy = 0
+      grounded = true
+    } else {
+      camera.position.set(debugRoomSaved.playerX, debugRoomSaved.playerY, debugRoomSaved.playerZ)
+      velocity.set(0, 0, 0)
+      vy = 0
+      if (bot.mode !== debugRoomSaved.botMode) {
+        bot.dispose(scene)
+        bot = new BotFighter(
+          scene,
+          debugRoomSaved.botMode,
+          new Vector3(debugRoomSaved.botX, debugRoomSaved.botY, debugRoomSaved.botZ),
+        )
+      } else {
+        bot.root.position.set(debugRoomSaved.botX, debugRoomSaved.botY, debugRoomSaved.botZ)
+      }
+      bot.resetRoundState()
+    }
+    debugRoomActiveLast = requested
   }
 
   async function resetRoundAfterTweakEdit(): Promise<void> {
@@ -993,6 +1118,22 @@ function initGame(lobby: LobbyResult) {
       bot.networkTargetPos.set(data.x, data.fy + bot.getFootOffset(), data.z)
       bot.networkTargetYaw = data.ry
       bot.setRecordingTelegraph(data.recording === true)
+      const baseRaw = typeof data.animBase === 'string' ? data.animBase : null
+      const base: 'idle' | 'running' | 'jumping' | 'hitreact' =
+        baseRaw === 'idle' ||
+        baseRaw === 'running' ||
+        baseRaw === 'jumping' ||
+        baseRaw === 'hitreact'
+          ? baseRaw
+          : data.recording === true
+            ? 'idle'
+            : 'idle'
+      const oneShotRaw = typeof data.animOneShot === 'string' ? data.animOneShot : null
+      const oneShot: 'recording' | 'shooting' | null =
+        oneShotRaw === 'recording' || oneShotRaw === 'shooting' ? oneShotRaw : null
+      const epoch = typeof data.animEpoch === 'number' ? data.animEpoch : undefined
+      bot.setRemoteAnimState(base, oneShot, epoch)
+      if (typeof data.speedN === 'number') bot.speedN = Math.max(0, Math.min(1, data.speedN))
       return
     }
 
@@ -2073,6 +2214,11 @@ function initGame(lobby: LobbyResult) {
       poseSendAcc += delta
       if (poseSendAcc >= 0.05) {
         poseSendAcc -= 0.05
+        const animState = localAvatar?.getNetAnimState()
+        const speedN = Math.min(
+          1,
+          Math.hypot(velocity.x, velocity.z) / Math.max(0.5, gameConfig.moveSpeed),
+        )
         sendGameTraffic({
           type: 'pose',
           x: camera.position.x,
@@ -2080,6 +2226,10 @@ function initGame(lobby: LobbyResult) {
           fy,
           ry: camera.rotation.y,
           recording: chargingLmb,
+          animBase: animState?.base ?? (grounded ? 'idle' : 'jumping'),
+          animOneShot: animState?.oneShot ?? null,
+          animEpoch: animState?.epoch ?? 0,
+          speedN,
         })
       }
     }
@@ -2162,6 +2312,37 @@ function initGame(lobby: LobbyResult) {
       playerHurt,
       slideActive: performance.now() < slideAnimUntilMs,
     })
+
+    /* Debug capsule visualization (red wireframe). Player capsule is centered on (camera.x, feetY+offset+H/2, camera.z). */
+    {
+      const pcVisible = gameConfig.pcCollisionView >= 0.5
+      const pcRadius = Math.max(0.05, gameConfig.pcCapsuleRadius)
+      const pcHeight = Math.max(pcRadius * 2 + 0.02, gameConfig.pcCapsuleHeight)
+      syncCapsuleDebug(
+        playerCapsuleDebug,
+        pcRadius,
+        pcHeight,
+        camera.position.x,
+        feetY() + gameConfig.pcCapsuleOffsetY + pcHeight * 0.5,
+        camera.position.z,
+        pcVisible,
+      )
+      const ecVisible = gameConfig.ecCollisionView >= 0.5
+      const ecRadius = Math.max(0.05, gameConfig.ecCapsuleRadius)
+      const ecHeight = Math.max(ecRadius * 2 + 0.02, gameConfig.ecCapsuleHeight)
+      const ecFeetY = bot.root.position.y - bot.getFootOffset()
+      syncCapsuleDebug(
+        enemyCapsuleDebug,
+        ecRadius,
+        ecHeight,
+        bot.root.position.x,
+        ecFeetY + gameConfig.ecCapsuleOffsetY + ecHeight * 0.5,
+        bot.root.position.z,
+        ecVisible,
+      )
+    }
+    /* Debug Room toggle: detect transitions and teleport / restore. Reset suppression is wired via scheduleRoundResetAfterTweak. */
+    updateDebugRoom()
 
     if (invulnShineEl) {
       const now = performance.now()
