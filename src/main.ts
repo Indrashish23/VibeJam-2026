@@ -537,6 +537,70 @@ function initGame(lobby: LobbyResult) {
     right: false,
   }
 
+  function isGameTextInputTarget(t: EventTarget | null): boolean {
+    if (!(t instanceof Element)) return false
+    return Boolean(t.closest('input, textarea, select, [contenteditable="true"]'))
+  }
+
+  function movementKeyTrackingEnabled(): boolean {
+    return !tweaksPanelOpen && !leaveMatchDialogOpen && !matchOutcome
+  }
+
+  function clearMovementKeys(): void {
+    keys.forward = false
+    keys.back = false
+    keys.left = false
+    keys.right = false
+  }
+
+  function onMovementKeyDown(e: KeyboardEvent): void {
+    if (isGameTextInputTarget(e.target)) return
+    if (!movementKeyTrackingEnabled()) return
+    switch (e.code) {
+      case 'KeyW':
+      case 'ArrowUp':
+        keys.forward = true
+        return
+      case 'KeyS':
+      case 'ArrowDown':
+        keys.back = true
+        return
+      case 'KeyA':
+      case 'ArrowLeft':
+        keys.left = true
+        return
+      case 'KeyD':
+      case 'ArrowRight':
+        keys.right = true
+        return
+      default:
+    }
+  }
+
+  function onMovementKeyUp(e: KeyboardEvent): void {
+    if (isGameTextInputTarget(e.target)) return
+    if (!movementKeyTrackingEnabled()) return
+    switch (e.code) {
+      case 'KeyW':
+      case 'ArrowUp':
+        keys.forward = false
+        return
+      case 'KeyS':
+      case 'ArrowDown':
+        keys.back = false
+        return
+      case 'KeyA':
+      case 'ArrowLeft':
+        keys.left = false
+        return
+      case 'KeyD':
+      case 'ArrowRight':
+        keys.right = false
+        return
+      default:
+    }
+  }
+
   /** Blocks gameplay during KO rematch cinematic (black → swipe → countdown). */
   let rematchSequenceActive = false
 
@@ -1618,6 +1682,7 @@ function initGame(lobby: LobbyResult) {
 
   function endMatch(outcome: 'win' | 'lose'): void {
     if (matchOutcome) return
+    clearMovementKeys()
     hideWinGameSplash()
     winFinisher = null
     matchOutcome = outcome
@@ -1954,6 +2019,8 @@ function initGame(lobby: LobbyResult) {
       }
     }
 
+    onMovementKeyDown(e)
+
     if (
       tweaksPanelOpen ||
       leaveMatchDialogOpen ||
@@ -1976,53 +2043,21 @@ function initGame(lobby: LobbyResult) {
         e.preventDefault()
         tryJump()
         break
-      case 'KeyW':
-      case 'ArrowUp':
-        keys.forward = true
-        break
-      case 'KeyS':
-      case 'ArrowDown':
-        keys.back = true
-        break
-      case 'KeyA':
-      case 'ArrowLeft':
-        keys.left = true
-        break
-      case 'KeyD':
-      case 'ArrowRight':
-        keys.right = true
-        break
       default:
         break
     }
   }
 
   function onKeyUp(e: KeyboardEvent) {
-    if (tweaksPanelOpen || leaveMatchDialogOpen || matchOutcome) return
-    switch (e.code) {
-      case 'KeyW':
-      case 'ArrowUp':
-        keys.forward = false
-        break
-      case 'KeyS':
-      case 'ArrowDown':
-        keys.back = false
-        break
-      case 'KeyA':
-      case 'ArrowLeft':
-        keys.left = false
-        break
-      case 'KeyD':
-      case 'ArrowRight':
-        keys.right = false
-        break
-      default:
-        break
-    }
+    onMovementKeyUp(e)
   }
 
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
+  window.addEventListener('blur', clearMovementKeys)
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) clearMovementKeys()
+  })
 
   function onMouseDown(e: MouseEvent): void {
     if (e.button !== 0) return
@@ -2384,6 +2419,7 @@ function initGame(lobby: LobbyResult) {
   function showLeaveMatchDialog(): void {
     if (!leaveMatchOverlay) return
     leaveMatchDialogOpen = true
+    clearMovementKeys()
     leaveMatchOverlay.hidden = false
     try {
       controls.unlock()
@@ -2572,6 +2608,7 @@ function initGame(lobby: LobbyResult) {
       sun,
       onToggle(open) {
         tweaksPanelOpen = open
+        if (open) clearMovementKeys()
         if (!open) tryPointerLock()
       },
       onConfigChanged: scheduleRoundResetAfterTweak,

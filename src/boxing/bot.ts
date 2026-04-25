@@ -8,6 +8,7 @@ import {
   Color,
   Group,
   LoopOnce,
+  LoopRepeat,
   Mesh,
   MeshStandardMaterial,
   Object3D,
@@ -183,6 +184,7 @@ export class BotFighter {
       this.monkeyBboxMinYAtUnit = bbox.min.y
 
       const wrap = new Group()
+      wrap.rotation.order = 'YXZ'
       wrap.add(sceneRoot)
       this.applyMonkeyTransform(wrap)
       this.root.add(wrap)
@@ -215,6 +217,9 @@ export class BotFighter {
       this.monkeyFinishedHandler = (ev) => {
         const shot = this.monkeyActiveOneShot
         if (!shot) return
+        if (shot === 'recording' && this.recordingTelegraph) {
+          return
+        }
         const a = this.monkeyActions.get(shot)
         if (!a || ev.action !== a) return
         this.monkeyActiveOneShot = null
@@ -294,8 +299,14 @@ export class BotFighter {
     base?.fadeOut(0.06)
     action.reset()
     action.setEffectiveWeight(1)
-    action.setLoop(LoopOnce, 1)
-    action.clampWhenFinished = true
+    if (name === 'recording') {
+      /* Hold LMB / peer charging: keep the recording motion cycling until release. */
+      action.setLoop(LoopRepeat, Number.POSITIVE_INFINITY)
+      action.clampWhenFinished = false
+    } else {
+      action.setLoop(LoopOnce, 1)
+      action.clampWhenFinished = true
+    }
     action.fadeIn(0.06)
     action.play()
     this.monkeyActiveOneShot = name
@@ -311,11 +322,15 @@ export class BotFighter {
        In wrap-local space the model's feet are at `bboxMinYAtUnit * finalScale`. */
     const feetLocalAtScale = this.monkeyBboxMinYAtUnit * finalScale
     wrap.position.set(
-      gameConfig.ecAvatarSide + this.monkeyShakeX,
-      -this.feetFromCenter - feetLocalAtScale + gameConfig.ecAvatarYOffset,
-      gameConfig.ecAvatarForward + this.monkeyShakeZ,
+      gameConfig.ecAvatarSide + gameConfig.ecModelTransX + this.monkeyShakeX,
+      -this.feetFromCenter - feetLocalAtScale + gameConfig.ecAvatarYOffset + gameConfig.ecModelTransY,
+      gameConfig.ecAvatarForward + gameConfig.ecModelTransZ + this.monkeyShakeZ,
     )
-    wrap.rotation.set(0, gameConfig.ecAvatarYawOffset, this.monkeyShakeRollZ)
+    wrap.rotation.set(
+      gameConfig.ecModelRotX,
+      gameConfig.ecAvatarYawOffset + gameConfig.ecModelRotY,
+      this.monkeyShakeRollZ,
+    )
   }
 
   /** Network-mode: feed authoritative animation state from the peer's pose packet. */
@@ -337,6 +352,15 @@ export class BotFighter {
 
   private updateMonkeyAnimation(delta: number): void {
     if (!this.monkeyMixer) return
+
+    if (!this.recordingTelegraph && this.monkeyActiveOneShot === 'recording') {
+      const rec = this.monkeyActions.get('recording')
+      this.monkeyActiveOneShot = null
+      if (rec) {
+        rec.fadeOut(0.1)
+        rec.stop()
+      }
+    }
 
     let base: AvatarBaseClip
     if (this.mode === 'network' && this.remoteAnimBase) {

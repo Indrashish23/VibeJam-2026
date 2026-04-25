@@ -208,6 +208,13 @@ export const defaultGameConfig = {
   pcCameraHeightBias: 0,
   /** Yaw correction applied to the monkey root so its forward axis matches gameplay yaw (rad). */
   pcAvatarYawOffset: Math.PI,
+  /** Model-space translation (m) along local right (X), up (Y), forward (Z) after body forward/side offsets. */
+  pcModelTransX: 0,
+  pcModelTransY: 0,
+  pcModelTransZ: 0,
+  /** Extra model pitch (X) and yaw trim (Y) in radians; applied in YXZ order on top of look yaw + `pcAvatarYawOffset`. */
+  pcModelRotX: 0,
+  pcModelRotY: 0,
 
   /**
    * PlayerCamera collision view + capsule sizing.
@@ -227,7 +234,18 @@ export const defaultGameConfig = {
   ecAvatarForward: 0,
   ecAvatarSide: 0,
   ecAvatarScale: 1,
-  ecAvatarYawOffset: Math.PI,
+  /**
+   * Yaw correction for the enemy monkey in root-local space (rad). Default 0: root already faces the target;
+   * the previous default π made the dummy often appear backward; use the tweaks panel to adjust.
+   */
+  ecAvatarYawOffset: 0,
+  /** Extra model translation (m) in bot root local space: right (X), up (Y), forward (Z). */
+  ecModelTransX: 0,
+  ecModelTransY: 0,
+  ecModelTransZ: 0,
+  /** Extra model pitch (X) and yaw trim (Y) on the monkey wrap (rad), applied in YXZ order. */
+  ecModelRotX: 0,
+  ecModelRotY: 0,
   ecCollisionView: 0,
   ecCapsuleRadius: 0.62,
   ecCapsuleHeight: 1.75,

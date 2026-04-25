@@ -5,6 +5,7 @@ import {
   Box3,
   Group,
   LoopOnce,
+  LoopRepeat,
   Material,
   Object3D,
   Scene,
@@ -125,6 +126,7 @@ export class LocalPlayerAvatar {
   private constructor(scene: Scene, modelRoot: Object3D, mixer: AnimationMixer) {
     this.scene = scene
     this.mixer = mixer
+    this.root.rotation.order = 'YXZ'
     this.root.add(modelRoot)
     /* Capture bbox at native scale before any auto-fit, so we can cleanly anchor feet later. */
     modelRoot.updateMatrixWorld(true)
@@ -244,8 +246,13 @@ export class LocalPlayerAvatar {
 
     action.reset()
     action.setEffectiveWeight(1)
-    action.setLoop(LoopOnce, 1)
-    action.clampWhenFinished = true
+    if (name === 'recording') {
+      action.setLoop(LoopRepeat, Number.POSITIVE_INFINITY)
+      action.clampWhenFinished = false
+    } else {
+      action.setLoop(LoopOnce, 1)
+      action.clampWhenFinished = true
+    }
     action.fadeIn(0.06)
     action.play()
     this.activeOneShot = name
@@ -294,13 +301,20 @@ export class LocalPlayerAvatar {
        The model's local feet Y at scale=1 is `bboxMinYAtUnitScale`; scale it by current root scale.
        Then user-controllable `pcAvatarYOffset` lifts/lowers from there. */
     const feetLocalAtScale = this.bboxMinYAtUnitScale * desiredScale
+    const mdx = gameConfig.pcModelTransX
+    const mdy = gameConfig.pcModelTransY
+    const mdz = gameConfig.pcModelTransZ
     this.root.position.set(
-      snapshot.x + fwdX * bodyFwd + rightX * bodySide,
-      snapshot.feetY - feetLocalAtScale + gameConfig.pcAvatarYOffset,
-      snapshot.z + fwdZ * bodyFwd + rightZ * bodySide,
+      snapshot.x + fwdX * bodyFwd + rightX * bodySide + rightX * mdx + fwdX * mdz,
+      snapshot.feetY - feetLocalAtScale + gameConfig.pcAvatarYOffset + mdy,
+      snapshot.z + fwdZ * bodyFwd + rightZ * bodySide + rightZ * mdx + fwdZ * mdz,
     )
-    /* Yaw + 180° model-forward correction (configurable in case the GLB changes). */
-    this.root.rotation.set(0, snapshot.yaw + gameConfig.pcAvatarYawOffset, 0)
+    /* Yaw + 180° model-forward correction (configurable in case the GLB changes) + model pitch / yaw trim. */
+    this.root.rotation.set(
+      gameConfig.pcModelRotX,
+      snapshot.yaw + gameConfig.pcAvatarYawOffset + gameConfig.pcModelRotY,
+      0,
+    )
 
     /* Live head-bones visibility toggle (1 = hide for FPS, 0 = show). */
     const hideHead = gameConfig.pcHideHead >= 0.5 ? 1 : 0
