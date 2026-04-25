@@ -21,6 +21,8 @@ export type LobbyResult =
       startWithDummyPractice?: boolean
       /** `public` = listed in the browser room list; `private` = join by code only. */
       lobbyVisibility?: 'public' | 'private'
+      /** Guest joining from the public browser: host display name from the listing (until hello overwrites HUD). */
+      listingHostName?: string
     }
 
 function wireLobbyDom(): {
@@ -132,6 +134,7 @@ export function runLobbyGate(initialDisplayName: string): Promise<LobbyResult> {
             role: 'guest',
             roomId: row.roomId,
             shortCode: row.shortCode,
+            listingHostName: row.hostName,
           })
         })
         li.appendChild(btn)

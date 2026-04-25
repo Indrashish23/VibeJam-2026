@@ -158,7 +158,7 @@ function validateVoiceShot(roomId, ws, raw, data) {
   r.shots.add(shotId)
   if (r.shots.size > 512) r.shots.clear()
 
-  r.percent[victim] = Math.min(100, r.percent[victim] + gain)
+  r.percent[victim] = Math.min(999, r.percent[victim] + gain)
 
   const dmg = JSON.stringify({
     type: 'authDamage',

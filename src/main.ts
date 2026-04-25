@@ -341,11 +341,15 @@ function initGame(lobby: LobbyResult) {
   let mpPresenceCount = 0
   let mpOpponentName: string | null = null
 
-  /** Percent HUD foe line: real peer name when online; never the internal "dummy" bot label. */
+  /** Percent HUD foe line: peer hello name, else public-listing host name for guests; never internal dummy label. */
   function opponentHudName(): string {
     if (lobby.mode === 'online') {
       const n = mpOpponentName?.trim()
       if (n) return n
+      if (lobby.role === 'guest') {
+        const listed = lobby.listingHostName?.trim()
+        if (listed) return listed
+      }
     }
     return 'Opponent'
   }
@@ -1116,7 +1120,13 @@ function initGame(lobby: LobbyResult) {
       mpBeginTimer = null
       if (mpSeqStarted || mpPhase === 'live') return
       if (mpPresenceCount < 2) return
-      if (!mpOpponentName) mpOpponentName = 'Player'
+      if (!mpOpponentName) {
+        const hint =
+          lobby.mode === 'online' && lobby.role === 'guest'
+            ? lobby.listingHostName?.trim() || null
+            : null
+        mpOpponentName = hint || 'Player'
+      }
       void runMpBeginNow()
     }, 550)
   }
@@ -1287,6 +1297,21 @@ function initGame(lobby: LobbyResult) {
       mpDiagCounters.recvAuthDamage++
       const ph = data.percentHost
       const pg = data.percentGuest
+      const gain =
+        typeof data.percentGain === 'number' && Number.isFinite(data.percentGain) ? data.percentGain : 0
+      const victimRoleKnown =
+        data.victimRole === 'host' || data.victimRole === 'guest' ? data.victimRole : undefined
+      let crossedLaunch150 = false
+      if (
+        typeof ph === 'number' &&
+        typeof pg === 'number' &&
+        victimRoleKnown &&
+        gain > 0
+      ) {
+        const victimNew = victimRoleKnown === 'host' ? ph : pg
+        const victimOld = victimNew - gain
+        crossedLaunch150 = victimNew >= 150 && victimOld < 150 - 1e-6
+      }
       if (typeof ph === 'number' && typeof pg === 'number') {
         if (lobby.role === 'host') {
           playerPercent = ph
@@ -1297,6 +1322,7 @@ function initGame(lobby: LobbyResult) {
         }
         syncHud()
       }
+      if (crossedLaunch150) triggerLaunchPercent150Spectacle()
       const aggressorRole =
         data.aggressorRole === 'host' || data.aggressorRole === 'guest'
           ? data.aggressorRole
@@ -1322,7 +1348,12 @@ function initGame(lobby: LobbyResult) {
         typeof data.dx === 'number' &&
         typeof data.dz === 'number'
       ) {
-        applyPeerMeleeHit(data.dx, data.dz, { authoritative: true, victimPercent: playerPercent })
+        /* `playerPercent` was just set from auth payload — that is always the local player's launch %. */
+        applyPeerMeleeHit(data.dx, data.dz, {
+          authoritative: true,
+          victimPercent: playerPercent,
+          overkill150: crossedLaunch150,
+        })
         const sid = data.shotId
         if (typeof sid === 'string') {
           const clip = pendingPeerShotAudioById.get(sid)
@@ -1499,7 +1530,7 @@ function initGame(lobby: LobbyResult) {
   function applyPeerMeleeHit(
     dx: number,
     dz: number,
-    opts?: { authoritative?: boolean; victimPercent?: number },
+    opts?: { authoritative?: boolean; victimPercent?: number; overkill150?: boolean },
   ): void {
     _knDir.set(dx, 0, dz)
     if (_knDir.lengthSq() < 1e-8) _knDir.set(0, 0, 1)
@@ -1519,12 +1550,26 @@ function initGame(lobby: LobbyResult) {
     playerHurtAirSince = now
     dashVel.set(0, 0, 0)
     const victimPct = Math.max(0, opts?.victimPercent ?? playerPercent)
+
+    if (opts?.overkill150) {
+      playerKnock.copy(_knDir).multiplyScalar(10_000)
+      vy += 4200
+      triggerLocalVictimWhiteFlash()
+      victimWhiteFlashUntil = Math.max(
+        victimWhiteFlashUntil,
+        performance.now() + Math.max(gameConfig.hitVictimWhiteFlashMs, 960),
+      )
+      return
+    }
+
     const launchMul = launchKnockMulFromPercent(victimPct)
     const pctN = Math.max(0, Math.min(1, victimPct / 100))
     const highGate = Math.max(0.05, Math.min(0.98, gameConfig.knockHighPctVictimThreshold))
     const highMul =
       pctN > highGate ? Math.max(0.05, Math.min(1.5, gameConfig.knockHighPctSpeedMul)) : 1
     const impulseMul = Math.max(0.05, Math.min(1.5, gameConfig.knockLaunchImpulseMul)) * highMul
+    const pctLift = Math.min(2.5, victimPct / 100)
+    const vyMul = 1 + pctLift * 0.52
     playerKnock.addScaledVector(
       _knDir,
       gameConfig.knockbackOnPlayer *
@@ -1533,7 +1578,7 @@ function initGame(lobby: LobbyResult) {
         launchMul *
         impulseMul,
     )
-    vy += gameConfig.playerHurtVyBoost * comboMul
+    vy += gameConfig.playerHurtVyBoost * comboMul * vyMul
     triggerHitImpactFx()
     triggerLocalVictimWhiteFlash()
   }
@@ -1682,8 +1727,10 @@ function initGame(lobby: LobbyResult) {
   function syncHud(): void {
     if (percentLabelYouEl) percentLabelYouEl.textContent = `${displayPlayerName()}[you]`
     if (percentLabelFoeEl) percentLabelFoeEl.textContent = opponentHudName()
-    if (percentYouEl) percentYouEl.textContent = `${Math.round(Math.min(100, playerPercent))}%`
-    if (percentFoeEl) percentFoeEl.textContent = `${Math.round(Math.min(100, enemyPercent))}%`
+    if (percentYouEl)
+      percentYouEl.textContent = `${Math.round(Math.min(999, Math.max(0, playerPercent)))}%`
+    if (percentFoeEl)
+      percentFoeEl.textContent = `${Math.round(Math.min(999, Math.max(0, enemyPercent)))}%`
     if (chargeBarMinMark) {
       chargeBarMinMark.style.left = `${Math.max(0, Math.min(1, gameConfig.voiceMinChargeToFire)) * 100}%`
     }
@@ -1842,12 +1889,18 @@ function initGame(lobby: LobbyResult) {
   }
 
   function launchKnockMulFromPercent(victimPercent: number): number {
-    const p = Math.max(0, Math.min(100, victimPercent)) / 100
+    const p = Math.max(0, Math.min(250, victimPercent)) / 100
     const expo = Math.max(0.25, gameConfig.launchKnockExponent)
     return (
       Math.max(0, gameConfig.launchKnockFloor) +
       Math.max(0, gameConfig.launchKnockScale) * Math.pow(p, expo)
     )
+  }
+
+  /** When a victim crosses 150% launch — heavy shake + main hit-flash on this client (host and guest). */
+  function triggerLaunchPercent150Spectacle(): void {
+    shakeIntensity = Math.max(shakeIntensity, 5.4)
+    flashIntensity = Math.max(flashIntensity, 1)
   }
 
   async function runRematchSequence(): Promise<void> {
@@ -2166,14 +2219,21 @@ function initGame(lobby: LobbyResult) {
         voice.playBuffer(hitAudio)
         knockDirFromFistImpact(_fp, _knDir)
         const gain = percentGainFromCharge(shotT)
-        enemyPercent = Math.min(100, enemyPercent + gain)
+        const prevEnemyPct = enemyPercent
+        enemyPercent = Math.min(999, enemyPercent + gain)
         syncHud()
         if (isPvp()) {
           sendMp({ type: 'hitMelee', dx: _knDir.x, dz: _knDir.z })
           triggerHitImpactFx()
         } else {
-          const launchMul = launchKnockMulFromPercent(enemyPercent)
-          bot.applyKnockback(_knDir, gameConfig.knockbackOnBot * launchMul)
+          const crossed150 = prevEnemyPct < 150 && enemyPercent >= 150
+          if (crossed150) {
+            triggerLaunchPercent150Spectacle()
+            bot.applyLaunchPercentCataclysm(_knDir)
+          } else {
+            const launchMul = launchKnockMulFromPercent(enemyPercent)
+            bot.applyKnockback(_knDir, gameConfig.knockbackOnBot * launchMul, enemyPercent)
+          }
           triggerHitImpactFx()
           bot.flashVictimInvuln(gameConfig.hitVictimWhiteFlashMs)
         }
@@ -2198,9 +2258,16 @@ function initGame(lobby: LobbyResult) {
         _knDir.y = 0
         if (_knDir.lengthSq() < 1e-8) _knDir.set(0, 0, 1)
         _knDir.normalize()
-        playerPercent = Math.min(100, playerPercent + Math.max(0, gameConfig.botFistPercentGain))
+        const prevPlPct = playerPercent
+        const bg = Math.max(0, gameConfig.botFistPercentGain)
+        playerPercent = Math.min(999, playerPercent + bg)
         syncHud()
-        applyPeerMeleeHit(_knDir.x, _knDir.z, { victimPercent: playerPercent })
+        const crossed150 = prevPlPct < 150 && playerPercent >= 150
+        if (crossed150) triggerLaunchPercent150Spectacle()
+        applyPeerMeleeHit(_knDir.x, _knDir.z, {
+          victimPercent: playerPercent,
+          overkill150: crossed150,
+        })
       }
     }
 
@@ -2714,7 +2781,7 @@ function initGame(lobby: LobbyResult) {
       if (mpCodeHud) mpCodeHud.hidden = false
       if (mpCodeValue) mpCodeValue.textContent = onlineLobby.shortCode
     }
-    if (opponentLabelEl) opponentLabelEl.textContent = 'Opponent'
+    if (opponentLabelEl) opponentLabelEl.textContent = opponentHudName()
 
     try {
       mpSocket = createMultiplayerSocket(onlineLobby.roomId)

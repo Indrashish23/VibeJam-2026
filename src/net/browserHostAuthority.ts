@@ -102,7 +102,7 @@ export function createBrowserHostAuthority(broadcast: AuthBroadcast) {
       shots.add(shotId)
       if (shots.size > 512) shots.clear()
 
-      percent[victim] = Math.min(100, percent[victim] + gain)
+      percent[victim] = Math.min(999, percent[victim] + gain)
 
       broadcast({
         type: 'authDamage',

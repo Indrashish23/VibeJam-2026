@@ -185,6 +185,17 @@ export class PlayerArms {
         return
       }
       const rad = PROJECTILE_R * this.proj.sizeMul
+      const hwIn = gameConfig.groundWidth / 2 - rad * 0.5
+      const hdIn = gameConfig.groundDepth / 2 - rad * 0.5
+      const minY = rad
+      if (
+        Math.abs(this.proj.pos.x) <= hwIn &&
+        Math.abs(this.proj.pos.z) <= hdIn &&
+        this.proj.pos.y <= minY + 0.08
+      ) {
+        this.resetProjectile()
+        return
+      }
       const hw = gameConfig.groundWidth / 2 + rad
       const hd = gameConfig.groundDepth / 2 + rad
       if (Math.abs(this.proj.pos.x) > hw || Math.abs(this.proj.pos.z) > hd) {

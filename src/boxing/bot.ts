@@ -579,7 +579,7 @@ export class BotFighter {
     this.root.rotation.y = Math.atan2(dx, dz)
   }
 
-  applyKnockback(dirXZ: Vector3, strength: number): void {
+  applyKnockback(dirXZ: Vector3, strength: number, victimPercent = 0): void {
     if (dirXZ.lengthSq() < 1e-8) return
     dirXZ.normalize()
     this.hurtPhase = 'air'
@@ -589,7 +589,23 @@ export class BotFighter {
     this.clearProjectile()
     const xzImpulse = strength * 1.12
     this.knockXZ.addScaledVector(dirXZ, xzImpulse)
-    this.vy += strength * 0.1
+    const pct = Math.max(0, victimPercent)
+    const pctN = Math.min(2.5, pct / 100)
+    /* Base pop plus extra lift that grows with launch percent (more consistent arc at high %). */
+    this.vy += strength * (0.1 + 0.045 * pctN) + 1.15 * pctN
+  }
+
+  /** Cataclysm knock when victim crosses 150% launch — huge send-off. */
+  applyLaunchPercentCataclysm(dirXZ: Vector3): void {
+    if (dirXZ.lengthSq() < 1e-8) dirXZ.set(0, 0, 1)
+    dirXZ.normalize()
+    this.hurtPhase = 'air'
+    this.hurtFinisher = false
+    this.hurtAirSince = performance.now()
+    this.velocity.set(0, 0, 0)
+    this.clearProjectile()
+    this.knockXZ.copy(dirXZ).multiplyScalar(10_000)
+    this.vy += 4200
   }
 
   applyFinisherKnockback(dirXZ: Vector3, xzImpulse: number, yImpulse: number): void {
@@ -660,6 +676,17 @@ export class BotFighter {
         return
       }
       const rad = PROJECTILE_R * this.projSizeMul
+      const hwIn = gameConfig.groundWidth / 2 - rad * 0.5
+      const hdIn = gameConfig.groundDepth / 2 - rad * 0.5
+      const minY = rad
+      if (
+        Math.abs(this.projPos.x) <= hwIn &&
+        Math.abs(this.projPos.z) <= hdIn &&
+        this.projPos.y <= minY + 0.08
+      ) {
+        this.clearProjectile()
+        return
+      }
       const hw = gameConfig.groundWidth / 2 + rad
       const hd = gameConfig.groundDepth / 2 + rad
       if (Math.abs(this.projPos.x) > hw || Math.abs(this.projPos.z) > hd) {
