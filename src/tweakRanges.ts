@@ -128,10 +128,6 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   ecModelTransZ: { min: -1.2, max: 1.2, step: 0.01 },
   ecModelRotX: { min: -1.2, max: 1.2, step: 0.02 },
   ecModelRotY: { min: -Math.PI, max: Math.PI, step: 0.05 },
-  ecCollisionView: { min: 0, max: 1, step: 1 },
-  ecCapsuleRadius: { min: 0.1, max: 2, step: 0.01 },
-  ecCapsuleHeight: { min: 0.4, max: 4, step: 0.05 },
-  ecCapsuleOffsetY: { min: -1, max: 1.5, step: 0.01 },
 
   debugRoomActive: { min: 0, max: 1, step: 1 },
 
@@ -269,10 +265,10 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   pcModelTransZ: 'Model translate Z (local forward, m)',
   pcModelRotX: 'Model pitch (rad)',
   pcModelRotY: 'Model yaw trim (rad)',
-  pcCollisionView: 'Show collision capsule (red wireframe, 0/1)',
-  pcCapsuleRadius: 'Player capsule radius',
-  pcCapsuleHeight: 'Player capsule total height',
-  pcCapsuleOffsetY: 'Player capsule center Y offset (relative to feet)',
+  pcCollisionView: 'Show shared hit capsules (you + foe, red wireframe 0/1)',
+  pcCapsuleRadius: 'Shared capsule radius (you + foe)',
+  pcCapsuleHeight: 'Shared capsule total height (you + foe)',
+  pcCapsuleOffsetY: 'Shared capsule center Y offset vs feet (you + foe)',
   ecAvatarYOffset: 'Enemy body Y offset',
   ecAvatarForward: 'Enemy body forward offset',
   ecAvatarSide: 'Enemy body side offset',
@@ -283,10 +279,6 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   ecModelTransZ: 'Model translate Z (local forward, m)',
   ecModelRotX: 'Model pitch (rad)',
   ecModelRotY: 'Model yaw trim (rad)',
-  ecCollisionView: 'Show enemy collision capsule (0/1)',
-  ecCapsuleRadius: 'Enemy capsule radius',
-  ecCapsuleHeight: 'Enemy capsule total height',
-  ecCapsuleOffsetY: 'Enemy capsule center Y offset (relative to feet)',
   debugRoomActive: 'Debug room active (0/1)',
 }
 
@@ -341,13 +333,13 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   pcAvatarYawOffset:
     'Yaw correction (radians) applied to the monkey root so its forward axis matches gameplay forward. Default π (180°) flips the model when the GLB is back-facing.',
   pcCollisionView:
-    '1 = render a red wireframe capsule at the player position so you can see/tune its size in real time. 0 = hidden.',
+    '1 = render matching red wireframe capsules at your position and the foe’s feet (same radius/height/offset). 0 = hidden.',
   pcCapsuleRadius:
-    'Radius of the player collision capsule (visualization + spec). Use this with collision view to size the capsule like a game engine.',
+    'Capsule radius used for both debug capsules (player and foe share the same hit volume for tuning).',
   pcCapsuleHeight:
-    'Total height of the player capsule (cylinder + 2 hemispheres). Bottom is anchored at your feet by default.',
+    'Total capsule height for both (cylinder + 2 hemispheres); foe uses the same value at its feet.',
   pcCapsuleOffsetY:
-    'Y offset for the capsule center relative to the player feet. Positive lifts the capsule.',
+    'Vertical offset of the capsule center vs feet for both you and the foe.',
   ecAvatarYOffset:
     'Lift or lower the enemy monkey body relative to its feet (independent from the player rig).',
   ecAvatarForward:
@@ -368,14 +360,6 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   pcModelTransZ: 'Nudge your first-person body backward (−) / forward (+) relative to the camera (after body forward).',
   pcModelRotX: 'Extra model pitch (rad) on your FPS body (YXZ, applied after look yaw + avatar yaw).',
   pcModelRotY: 'Extra model yaw (rad) trim (small corrections on top of body yaw).',
-  ecCollisionView:
-    '1 = render a red wireframe capsule at the enemy position. 0 = hidden.',
-  ecCapsuleRadius:
-    'Enemy collision capsule radius.',
-  ecCapsuleHeight:
-    'Enemy collision capsule total height.',
-  ecCapsuleOffsetY:
-    'Enemy capsule center Y relative to its feet.',
   debugRoomActive:
     'When 1, the game enters an in-place debug arena: the player + dummy are teleported to a side area and round-resets are suppressed while you tweak.',
 
@@ -596,7 +580,7 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
   },
   {
     id: 'playerCamera',
-    title: 'PlayerCamera (FPS rig)',
+    title: 'PlayerCamera (FPS rig + shared capsule)',
     keys: [
       'pcModelTransX',
       'pcModelTransY',
@@ -633,10 +617,6 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'ecAvatarSide',
       'ecAvatarScale',
       'ecAvatarYawOffset',
-      'ecCollisionView',
-      'ecCapsuleRadius',
-      'ecCapsuleHeight',
-      'ecCapsuleOffsetY',
     ],
   },
   {

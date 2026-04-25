@@ -47,9 +47,9 @@ export const defaultGameConfig = {
   fistGravity: 0,
   punchHitRadius: 0.72,
   /** Projectile base size multiplier (visual + hit radius baseline). */
-  projectileSizeBase: 1.81,
+  projectileSizeBase: 1.15,
   /** Extra projectile size bonus at full charge `t=1` (0.2 = +20%, 1 = +100%). */
-  projectileSizeChargeMaxBonus: 1,
+  projectileSizeChargeMaxBonus: 0.57,
   /** Horizontal knockback on player when bot lands a hit (non-parried). */
   knockbackOnPlayer: 26,
   /** Base knock on bot (multiplied by voice `t` lerp). */
@@ -72,7 +72,7 @@ export const defaultGameConfig = {
   /** 0..1: bot fist knock lerp (uses knockVoice min/max). */
   botFistKnockT: 0.52,
   /** 0 = off. Per-second auto shots from the dummy (offline dummy/smart) for testing. */
-  dummyTestFiresPerSec: 0,
+  dummyTestFiresPerSec: 1,
   /** Speed mult for `dummyTestFiresPerSec` shots (× punchProjectileSpeed). */
   dummyTestShotSpeedMul: 0.9,
   /** If the mic is still blocked, LMB uses this charge (0–1) for a test shot; should be ≥ voiceMinChargeToFire to fire. */
@@ -204,10 +204,10 @@ export const defaultGameConfig = {
 
   /** Mouth muzzle offset relative to the camera position (forward / up / side, in world meters). */
   pcMouthForward: 0.45,
-  pcMouthHeight: -0.05,
+  pcMouthHeight: -0.37,
   pcMouthSide: 0,
   /** Camera height bias from the default eye height (negative lowers, positive raises). */
-  pcCameraHeightBias: 0,
+  pcCameraHeightBias: -0.4,
   /** Yaw correction applied to the monkey root so its forward axis matches gameplay yaw (rad). */
   pcAvatarYawOffset: Math.PI,
   /** Model-space translation (m) along local right (X), up (Y), forward (Z) after body forward/side offsets. */
@@ -219,13 +219,12 @@ export const defaultGameConfig = {
   pcModelRotY: 0,
 
   /**
-   * PlayerCamera collision view + capsule sizing.
-   * `pcCollisionView` toggles a red wireframe capsule around the player so you can size it like a game engine.
-   * The capsule visual is purely a debug aid (the underlying physics is XZ-only with `playerRadius`).
+   * Shared character collision capsule (player + foe use the same radius/height/offset).
+   * `pcCollisionView` toggles red wireframe capsules for both; underlying move physics still uses `playerRadius`.
    */
-  pcCollisionView: 0,
-  pcCapsuleRadius: 0.42,
-  pcCapsuleHeight: 1.75,
+  pcCollisionView: 1,
+  pcCapsuleRadius: 0.75,
+  pcCapsuleHeight: 0.95,
   pcCapsuleOffsetY: 0,
 
   /**
@@ -248,10 +247,6 @@ export const defaultGameConfig = {
   /** Extra model pitch (X) and yaw trim (Y) on the monkey wrap (rad), applied in YXZ order. */
   ecModelRotX: 0,
   ecModelRotY: 0,
-  ecCollisionView: 0,
-  ecCapsuleRadius: 0.62,
-  ecCapsuleHeight: 1.75,
-  ecCapsuleOffsetY: 0,
 
   /** Debug Room: when 1, slider edits do NOT trigger a round reset; teleports you + dummy to a side arena. */
   debugRoomActive: 0,

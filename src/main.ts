@@ -472,8 +472,8 @@ function initGame(lobby: LobbyResult) {
     gameConfig.pcCapsuleHeight,
   )
   const enemyCapsuleDebug = makeCapsuleDebug(
-    gameConfig.ecCapsuleRadius,
-    gameConfig.ecCapsuleHeight,
+    gameConfig.pcCapsuleRadius,
+    gameConfig.pcCapsuleHeight,
   )
 
   /** Green XZ loop: ring-out boundary (|x|/|z| vs half-extent + blast margin). Toggle via Tweaks `showBlastBounds`. */
@@ -2463,32 +2463,29 @@ function initGame(lobby: LobbyResult) {
     pixelPass.depthEdgeStrength = Math.max(0, gameConfig.retroEdgeStrength)
     pixelPass.normalEdgeStrength = Math.max(0, gameConfig.retroEdgeStrength * 0.65)
 
-    /* Debug capsule visualization (red wireframe). Player capsule is centered on (camera.x, feetY+offset+H/2, camera.z). */
+    /* Debug capsule visualization (red wireframe). Same radius/height/offset for player and foe. */
     {
-      const pcVisible = gameConfig.pcCollisionView >= 0.5
-      const pcRadius = Math.max(0.05, gameConfig.pcCapsuleRadius)
-      const pcHeight = Math.max(pcRadius * 2 + 0.02, gameConfig.pcCapsuleHeight)
+      const capVisible = gameConfig.pcCollisionView >= 0.5
+      const capRadius = Math.max(0.05, gameConfig.pcCapsuleRadius)
+      const capHeight = Math.max(capRadius * 2 + 0.02, gameConfig.pcCapsuleHeight)
       syncCapsuleDebug(
         playerCapsuleDebug,
-        pcRadius,
-        pcHeight,
+        capRadius,
+        capHeight,
         camera.position.x,
-        feetY() + gameConfig.pcCapsuleOffsetY + pcHeight * 0.5,
+        feetY() + gameConfig.pcCapsuleOffsetY + capHeight * 0.5,
         camera.position.z,
-        pcVisible,
+        capVisible,
       )
-      const ecVisible = gameConfig.ecCollisionView >= 0.5
-      const ecRadius = Math.max(0.05, gameConfig.ecCapsuleRadius)
-      const ecHeight = Math.max(ecRadius * 2 + 0.02, gameConfig.ecCapsuleHeight)
       const ecFeetY = bot.root.position.y - bot.getFootOffset()
       syncCapsuleDebug(
         enemyCapsuleDebug,
-        ecRadius,
-        ecHeight,
+        capRadius,
+        capHeight,
         bot.root.position.x,
-        ecFeetY + gameConfig.ecCapsuleOffsetY + ecHeight * 0.5,
+        ecFeetY + gameConfig.pcCapsuleOffsetY + capHeight * 0.5,
         bot.root.position.z,
-        ecVisible,
+        capVisible,
       )
     }
     syncBlastBoundsLine()
