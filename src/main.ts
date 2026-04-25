@@ -341,9 +341,12 @@ function initGame(lobby: LobbyResult) {
   let mpPresenceCount = 0
   let mpOpponentName: string | null = null
 
+  /** Percent HUD foe line: real peer name when online; never the internal "dummy" bot label. */
   function opponentHudName(): string {
-    if (lobby.mode === 'online' && mpOpponentName) return mpOpponentName
-    if (bot.mode === 'dummy' || bot.mode === 'smart') return 'Dummy'
+    if (lobby.mode === 'online') {
+      const n = mpOpponentName?.trim()
+      if (n) return n
+    }
     return 'Opponent'
   }
 
