@@ -243,7 +243,7 @@ export const defaultGameConfig = {
   ecAvatarYawOffset: 0,
   /** Extra model translation (m) in bot root local space: right (X), up (Y), forward (Z). */
   ecModelTransX: 0,
-  ecModelTransY: 0,
+  ecModelTransY: -1.01,
   ecModelTransZ: 0,
   /** Extra model pitch (X) and yaw trim (Y) on the monkey wrap (rad), applied in YXZ order. */
   ecModelRotX: 0,

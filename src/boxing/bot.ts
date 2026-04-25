@@ -164,6 +164,7 @@ export class BotFighter {
     scene.add(this.projMesh)
 
     this.root.position.copy(startPos)
+    this.networkTargetPos.copy(this.root.position)
     scene.add(this.root)
 
     this.smartShotGapMs = 2000 + Math.random() * 1000
@@ -337,9 +338,11 @@ export class BotFighter {
       -this.feetFromCenter - feetLocalAtScale + gameConfig.ecAvatarYOffset + gameConfig.ecModelTransY,
       gameConfig.ecAvatarForward + gameConfig.ecModelTransZ + this.monkeyShakeZ,
     )
+    /** PvP opponent only: GLB forward vs gameplay facing; dummy/smart unchanged. */
+    const networkModelYaw = this.mode === 'network' ? Math.PI : 0
     wrap.rotation.set(
       gameConfig.ecModelRotX,
-      gameConfig.ecAvatarYawOffset + gameConfig.ecModelRotY,
+      gameConfig.ecAvatarYawOffset + gameConfig.ecModelRotY + networkModelYaw,
       this.monkeyShakeRollZ,
     )
   }

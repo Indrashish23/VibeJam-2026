@@ -110,6 +110,10 @@ const matchRematchDeclineBtnEl = document.getElementById(
 const leaveMatchOverlay = document.getElementById('leave-match-overlay') as HTMLDivElement | null
 const leaveMatchConfirmBtn = document.getElementById('leave-match-confirm') as HTMLButtonElement | null
 const leaveMatchCancelBtn = document.getElementById('leave-match-cancel') as HTMLButtonElement | null
+const matchCancelledOverlay = document.getElementById(
+  'match-cancelled-overlay',
+) as HTMLDivElement | null
+const matchCancelledOkBtn = document.getElementById('match-cancelled-ok') as HTMLButtonElement | null
 const hitFlashEl = document.getElementById('hit-flash') as HTMLDivElement | null
 const invulnShineEl = document.getElementById('invuln-shine') as HTMLDivElement | null
 const winGameSplashEl = document.getElementById('win-game-splash') as HTMLDivElement | null
@@ -979,6 +983,7 @@ function initGame(lobby: LobbyResult) {
         bodyColor: randomOpponentCapsuleColor(),
       })
       bot.root.position.set(0, bot.getFootOffset() + 0.08, opponentBotZ)
+      bot.networkTargetPos.copy(bot.root.position)
       bot.alignFacingToward(camera.position)
     }
 
@@ -1068,15 +1073,23 @@ function initGame(lobby: LobbyResult) {
     }
   }
 
-  function returnToLobbyReload(): void {
+  function returnToLobbyReload(notifyOpponent: boolean = false): void {
+    if (notifyOpponent && isOnline && lobby.mode === 'online' && (mpSocket?.readyState === 1 || rtcGame)) {
+      try {
+        sendGameTraffic({ type: 'matchCancelled' })
+      } catch {
+        /* ignore */
+      }
+    }
     try {
       mpSocket?.close()
     } catch {
       /* ignore */
     }
+    const delay = notifyOpponent ? 150 : 80
     window.setTimeout(() => {
       window.location.reload()
-    }, 80)
+    }, delay)
   }
 
   function beginOnlineRematchRequest(): void {
@@ -1257,6 +1270,21 @@ function initGame(lobby: LobbyResult) {
     if (ty === 'rematchDeclineToLobby') {
       hideMatchEndAndRematchUiFully()
       returnToLobbyReload()
+      return
+    }
+
+    if (ty === 'matchCancelled' && lobby.mode === 'online') {
+      if (matchCancelledOverlay) {
+        try {
+          controls.unlock()
+        } catch {
+          /* ignore */
+        }
+        matchCancelledOverlay.hidden = false
+        requestAnimationFrame(() => matchCancelledOkBtn?.focus())
+      } else {
+        returnToLobbyReload(false)
+      }
       return
     }
 
@@ -1604,6 +1632,9 @@ function initGame(lobby: LobbyResult) {
     bot.root.position.set(0, oppRootY, opponentBotZ)
     bot.root.rotation.set(0, 0, 0)
     bot.resetRoundState()
+    if (bot.mode === 'network') {
+      bot.networkTargetPos.copy(bot.root.position)
+    }
     bot.alignFacingToward(camera.position)
 
     dashTiltDeg = 0
@@ -2664,7 +2695,11 @@ function initGame(lobby: LobbyResult) {
   leaveMatchConfirmBtn?.addEventListener('click', () => {
     hideLeaveMatchDialog()
     if (lobby.mode === 'online') dismissMatchEndOnline()
-    returnToLobbyReload()
+    if (lobby.mode === 'online') returnToLobbyReload(true)
+    else returnToLobbyReload(false)
+  })
+  matchCancelledOkBtn?.addEventListener('click', () => {
+    returnToLobbyReload(false)
   })
   leaveMatchOverlay?.addEventListener('click', (e) => {
     if (e.target === leaveMatchOverlay) hideLeaveMatchDialog()

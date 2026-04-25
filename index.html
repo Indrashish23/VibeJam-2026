@@ -23,56 +23,66 @@
     </div>
 
     <div id="lobby-overlay" class="lobby-overlay" hidden>
-      <div class="lobby-card">
+      <div class="lobby-card lobby-card--wide">
         <h2 class="lobby-title">Play</h2>
         <p id="lobby-intro" class="lobby-intro"></p>
         <button type="button" id="lobby-change-name" class="lobby-link-btn">
           Change display name
         </button>
         <p id="lobby-error" class="lobby-error" role="alert" hidden></p>
-        <fieldset class="lobby-vis-fieldset">
-          <legend class="lobby-vis-legend">Match visibility (host)</legend>
-          <label
-            class="lobby-vis-option"
-            title="Only players with your lobby code can join. Your room is not listed in the public browser."
-          >
-            <input type="radio" name="lobby-vis" id="lobby-vis-private" value="private" checked />
-            Private (code only)
-          </label>
-          <label
-            class="lobby-vis-option"
-            title="While you wait for an opponent, your lobby appears in the public list so anyone can join without a code."
-          >
-            <input type="radio" name="lobby-vis" id="lobby-vis-public" value="public" />
-            Public (listed — join without code)
-          </label>
-        </fieldset>
-        <div id="lobby-browser-section" class="lobby-browser-section">
-          <div class="lobby-browser-head">
-            <span class="lobby-browser-title">Public lobbies</span>
-            <button type="button" id="lobby-browser-refresh" class="lobby-btn lobby-btn--small">
-              Refresh list
-            </button>
+        <div class="lobby-columns">
+          <div class="lobby-column">
+            <h3 class="lobby-column-title">Host game</h3>
+            <fieldset class="lobby-vis-fieldset">
+              <legend class="lobby-vis-legend">Match visibility (host)</legend>
+              <label
+                class="lobby-vis-option"
+                title="Only players with your lobby code can join. Your room is not listed in the public browser."
+              >
+                <input type="radio" name="lobby-vis" id="lobby-vis-private" value="private" />
+                Private (code only)
+              </label>
+              <label
+                class="lobby-vis-option"
+                title="While you wait for an opponent, your lobby appears in the public list so anyone can join without a code."
+              >
+                <input type="radio" name="lobby-vis" id="lobby-vis-public" value="public" checked />
+                Public (listed — join without code)
+              </label>
+            </fieldset>
+            <div class="lobby-actions">
+              <button type="button" id="lobby-create" class="lobby-btn">Create lobby</button>
+              <button type="button" id="lobby-practice" class="lobby-btn lobby-btn--ghost">
+                Practice with Dummy
+              </button>
+            </div>
           </div>
-          <p
-            id="lobby-browser-hint"
-            class="lobby-browser-hint"
-            title="Hosts who chose “Public” appear here while they wait. Click a row to join that room."
-          >
-            Open games from players who chose Public when hosting. Click Refresh, then Join on a row.
-          </p>
-          <ul id="lobby-browser-list" class="lobby-browser-list"></ul>
+          <div class="lobby-column">
+            <h3 class="lobby-column-title">Join game</h3>
+            <div id="lobby-browser-section" class="lobby-browser-section">
+              <div class="lobby-browser-head">
+                <span class="lobby-browser-title">Public lobbies</span>
+                <button type="button" id="lobby-browser-refresh" class="lobby-btn lobby-btn--small">
+                  Refresh list
+                </button>
+              </div>
+              <p
+                id="lobby-browser-hint"
+                class="lobby-browser-hint"
+                title="Hosts who chose “Public” appear here while they wait. Click a row to join that room."
+              >
+                Open games from players who chose Public when hosting. Click Refresh, then Join on a row.
+              </p>
+              <ul id="lobby-browser-list" class="lobby-browser-list"></ul>
+            </div>
+            <label class="lobby-join-row">
+              <span>Join with a friend’s code</span>
+              <input id="lobby-join-code" maxlength="16" autocomplete="off" placeholder="abc123" />
+            </label>
+            <button type="button" id="lobby-join" class="lobby-btn">Join with code</button>
+          </div>
         </div>
-        <div class="lobby-actions">
-          <button type="button" id="lobby-create" class="lobby-btn">Create lobby</button>
-          <button type="button" id="lobby-practice" class="lobby-btn lobby-btn--ghost">
-            Practice with Dummy
-          </button>
-          <label class="lobby-join-row">
-            <span>Friend's code</span>
-            <input id="lobby-join-code" maxlength="16" autocomplete="off" placeholder="abc123" />
-          </label>
-          <button type="button" id="lobby-join" class="lobby-btn">Join lobby</button>
+        <div class="lobby-offline-wrap">
           <button type="button" id="lobby-offline" class="lobby-btn lobby-btn--ghost">Play offline</button>
         </div>
       </div>
@@ -129,6 +139,24 @@
         </div>
       </div>
       <div id="crosshair" class="crosshair" aria-hidden="true"></div>
+      <div id="match-cancelled-overlay" class="match-end-overlay" hidden>
+        <div
+          class="match-end-card"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="match-cancelled-title"
+        >
+          <h2 id="match-cancelled-title" class="match-end-title">Match cancelled</h2>
+          <p class="match-end-sub">
+            Your opponent left the match. You will return to the lobby.
+          </p>
+          <div class="match-end-actions">
+            <button type="button" id="match-cancelled-ok" class="match-end-btn match-end-btn--primary">
+              Back to lobby
+            </button>
+          </div>
+        </div>
+      </div>
       <div id="leave-match-overlay" class="leave-match-overlay" hidden>
         <div
           class="match-end-card"

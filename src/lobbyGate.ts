@@ -154,7 +154,7 @@ export function runLobbyGate(initialDisplayName: string): Promise<LobbyResult> {
     ui.intro.textContent = `Signed in as ${displayName}. Host a public match (listed for anyone), a private code lobby, join a friend’s code, or play offline.`
     ui.err.hidden = true
     ui.err.textContent = ''
-    ui.visPrivate.checked = true
+    ui.visPublic.checked = true
 
     if (!onlineUnavailable()) {
       queueMicrotask(() => startBrowserClient())
