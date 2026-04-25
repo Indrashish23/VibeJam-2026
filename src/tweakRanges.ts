@@ -120,6 +120,7 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   gravity: { min: 0, max: CAP, step: 1 },
   jumpForce: { min: 0, max: CAP, step: 0.5 },
   jumpCooldownMs: { min: 0, max: CAP, step: 100 },
+  airJumpsMax: { min: 0, max: 4, step: 1 },
   playerRadius: { min: 0.01, max: CAP, step: 0.02 },
 }
 
@@ -136,6 +137,7 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   gravity: 'Gravity',
   jumpForce: 'Jump force',
   jumpCooldownMs: 'Jump cooldown (ms)',
+  airJumpsMax: 'Mid-air jumps (1 = double jump)',
   movementMaxDelta: 'Physics max delta',
   dashImpulse: 'Shift dash distance target',
   dashVelocityMul: 'Shift dash distance multiplier ×',
@@ -248,6 +250,8 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   gravity: 'Downward acceleration while you are in the air.',
   jumpForce: 'Upward impulse applied when you press jump.',
   jumpCooldownMs: 'Minimum milliseconds before you can jump again.',
+  airJumpsMax:
+    'Extra jumps allowed while airborne per landing cycle (0 = no double jump, 1 = single double jump, etc.). Refilled when you touch the ground.',
   movementMaxDelta: 'Caps each simulation step length for stability (also limits slow-motion spikes).',
 
   groundWidth: 'Half the stage is this wide in X; larger = more room before ring-out.',
@@ -400,6 +404,7 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'gravity',
       'jumpForce',
       'jumpCooldownMs',
+      'airJumpsMax',
       'movementMaxDelta',
       'dashImpulse',
       'dashVelocityMul',

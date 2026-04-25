@@ -476,6 +476,8 @@ function initGame(lobby: LobbyResult) {
   let voiceDownBoostReady = true
   /** One Shift dash while airborne per flight; reset on landing. */
   let airDashReady = true
+  /** Mid-air jumps remaining (e.g. double-jump = 1). Refilled on every landing. */
+  let airJumpsLeft = Math.max(0, Math.round(gameConfig.airJumpsMax))
 
   const keys = {
     forward: false,
@@ -1327,6 +1329,7 @@ function initGame(lobby: LobbyResult) {
     grounded = true
     voiceDownBoostReady = true
     airDashReady = true
+    airJumpsLeft = Math.max(0, Math.round(gameConfig.airJumpsMax))
   }
 
   type WinFinisherState =
@@ -1602,10 +1605,18 @@ function initGame(lobby: LobbyResult) {
       return
     const now = performance.now()
     if (now - lastJumpAt < gameConfig.jumpCooldownMs) return
-    if (!grounded) return
-    vy = gameConfig.jumpForce
-    grounded = false
-    lastJumpAt = now
+    if (grounded) {
+      vy = gameConfig.jumpForce
+      grounded = false
+      lastJumpAt = now
+      return
+    }
+    /* Mid-air double jump: replace (not add to) vertical velocity for a clean second pop. */
+    if (airJumpsLeft > 0) {
+      vy = gameConfig.jumpForce
+      airJumpsLeft -= 1
+      lastJumpAt = now
+    }
   }
 
   /** Slide direction matches WASD in camera-local space. */
@@ -1957,6 +1968,7 @@ function initGame(lobby: LobbyResult) {
     if (!groundedBeforeResolve && grounded) {
       voiceDownBoostReady = true
       airDashReady = true
+      airJumpsLeft = Math.max(0, Math.round(gameConfig.airJumpsMax))
     }
 
     if (playerHurt === 'air') {

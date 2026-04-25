@@ -23,9 +23,11 @@ export const defaultGameConfig = {
   sunIntensity: 1.05,
   movementMaxDelta: 0.1,
 
-  gravity: 42,
-  jumpForce: 10,
+  gravity: 38,
+  jumpForce: 25,
   jumpCooldownMs: 480,
+  /** How many extra mid-air jumps you get per landing cycle (1 = double jump). */
+  airJumpsMax: 1,
   playerRadius: 0.38,
 
   /** Bot hits on you before you lose (ring-out still applies). */
@@ -40,14 +42,14 @@ export const defaultGameConfig = {
   /**
    * Unused when fistGravity is 0; kept for Tweaks compatibility.
    */
-  fistAscentGravityScale: 0.38,
+  fistAscentGravityScale: 0.08,
   /** Gravity on flying fists; 0 = constant-velocity line in aim direction. */
   fistGravity: 0,
   punchHitRadius: 0.72,
   /** Projectile base size multiplier (visual + hit radius baseline). */
-  projectileSizeBase: 1,
-  /** Extra projectile size bonus at full charge `t=1` (0.2 = +20%). */
-  projectileSizeChargeMaxBonus: 0.2,
+  projectileSizeBase: 1.81,
+  /** Extra projectile size bonus at full charge `t=1` (0.2 = +20%, 1 = +100%). */
+  projectileSizeChargeMaxBonus: 1,
   /** Horizontal knockback on player when bot lands a hit (non-parried). */
   knockbackOnPlayer: 26,
   /** Base knock on bot (multiplied by voice `t` lerp). */
@@ -134,9 +136,9 @@ export const defaultGameConfig = {
   /** Winning hit: small vertical pop — mostly flies back along punch line. */
   winFinisherVy: 26,
   /** Speed multiplier at minimum valid voice charge when firing (× punchProjectileSpeed). */
-  voiceShotSpeedMinMul: 0.38,
+  voiceShotSpeedMinMul: 0.24,
   /** Speed multiplier cap when voice is maxed (× punchProjectileSpeed). */
-  voiceShotSpeedMaxMul: 1.35,
+  voiceShotSpeedMaxMul: 1.56,
   voiceChargeMinRelease: 0.22,
   /** Legacy unused (always fire on release; `t` from charge). */
   voiceChargeFullThreshold: 0,
