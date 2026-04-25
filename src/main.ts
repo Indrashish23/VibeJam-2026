@@ -1677,7 +1677,7 @@ function initGame(lobby: LobbyResult) {
   }
 
   function syncHud(): void {
-    if (percentLabelYouEl) percentLabelYouEl.textContent = `${displayPlayerName()} [you]`
+    if (percentLabelYouEl) percentLabelYouEl.textContent = `${displayPlayerName()}[you]`
     if (percentLabelFoeEl) percentLabelFoeEl.textContent = opponentHudName()
     if (percentYouEl) percentYouEl.textContent = `${Math.round(Math.min(100, playerPercent))}%`
     if (percentFoeEl) percentFoeEl.textContent = `${Math.round(Math.min(100, enemyPercent))}%`
