@@ -195,8 +195,8 @@ export const defaultGameConfig = {
   pcAvatarYOffset: 0,
   pcAvatarForward: -0.18,
   pcAvatarSide: 0,
-  /** Avatar uniform scale override (1 = use the default 0.96). */
-  pcAvatarScale: 0.96,
+  /** Multiplier on top of the auto-fit scale (which sizes the monkey to the player capsule). 1 = exact capsule fit. */
+  pcAvatarScale: 1,
   /** If 1, hide bones whose names match /head/i so the local model doesn't clip the camera. */
   pcHideHead: 1,
 

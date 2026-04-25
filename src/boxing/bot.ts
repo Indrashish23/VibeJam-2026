@@ -1,4 +1,8 @@
 import {
+  AnimationAction,
+  AnimationClip,
+  AnimationMixer,
+  Box3,
   BoxGeometry,
   CapsuleGeometry,
   Color,
@@ -10,8 +14,11 @@ import {
   Scene,
   Vector3,
 } from 'three'
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { gameConfig } from '../gameConfig'
 import { PROJECTILE_R } from './playerArms'
+
+const BOT_MONKEY_GLB = new URL('../../Assets/MonkeyModel/Idle.glb', import.meta.url).href
 
 export type BotMode = 'dummy' | 'smart' | 'network'
 
@@ -51,6 +58,13 @@ export class BotFighter {
   readonly projMesh: Mesh
 
   private readonly feetFromCenter: number
+
+  /** Monkey GLB visual (loaded async; replaces the capsule once ready). */
+  private monkeyWrap: Group | null = null
+  private monkeyRoot: Object3D | null = null
+  private monkeyMixer: AnimationMixer | null = null
+  private monkeyIdleAction: AnimationAction | null = null
+  private readonly monkeyMaterials: { mat: MeshStandardMaterial; baseColor: Color }[] = []
 
   /** World-space ballistic (matches player projectile integration). */
   projActive = false
@@ -121,6 +135,76 @@ export class BotFighter {
     scene.add(this.root)
 
     this.smartShotGapMs = 2000 + Math.random() * 1000
+
+    void this.loadMonkeyVisual()
+  }
+
+  /** Load and attach the monkey GLB; once it's in, hide the capsule mesh and use the monkey for the body/telegraph. */
+  private async loadMonkeyVisual(): Promise<void> {
+    try {
+      const loader = new GLTFLoader()
+      const gltf = await new Promise<{ scene: Group; animations: AnimationClip[] }>((res, rej) => {
+        loader.load(
+          BOT_MONKEY_GLB,
+          (g) => res(g as { scene: Group; animations: AnimationClip[] }),
+          undefined,
+          rej,
+        )
+      })
+      const sceneRoot = gltf.scene as Object3D
+
+      /* Auto-fit the monkey to the same target height the local player uses (eyeHeight + 0.20). */
+      sceneRoot.updateMatrixWorld(true)
+      const bbox = new Box3().setFromObject(sceneRoot)
+      const naturalH = Math.max(0.1, bbox.max.y - bbox.min.y)
+      const targetH = gameConfig.eyeHeight + 0.2
+      const scaleNum = targetH / naturalH
+
+      const wrap = new Group()
+      wrap.add(sceneRoot)
+      wrap.scale.setScalar(scaleNum)
+      /* The bot's `root` is at body center; we want the monkey's feet at root.y - feetFromCenter.
+         After scaling, bbox.min.y * scaleNum is the local-y of the feet relative to wrap origin. */
+      wrap.position.y = -this.feetFromCenter - bbox.min.y * scaleNum
+      this.root.add(wrap)
+      this.monkeyWrap = wrap
+      this.monkeyRoot = sceneRoot
+
+      /* Hide the capsule visual now that the monkey is rendering. The hit-detection capsule (math) is unaffected. */
+      this.mesh.visible = false
+
+      /* Collect material refs + their original colors so we can tint for the recording telegraph. */
+      sceneRoot.traverse((o) => {
+        const meshObj = o as Mesh
+        const m = meshObj.material as
+          | MeshStandardMaterial
+          | MeshStandardMaterial[]
+          | undefined
+        if (!m) return
+        const mats = Array.isArray(m) ? m : [m]
+        for (const mm of mats) {
+          if (mm && (mm as MeshStandardMaterial).color) {
+            this.monkeyMaterials.push({
+              mat: mm as MeshStandardMaterial,
+              baseColor: (mm as MeshStandardMaterial).color.clone(),
+            })
+          }
+        }
+      })
+
+      /* Loop the idle clip if present. */
+      const clip = gltf.animations?.[0]
+      if (clip) {
+        this.monkeyMixer = new AnimationMixer(sceneRoot)
+        const action = this.monkeyMixer.clipAction(clip)
+        action.enabled = true
+        action.setEffectiveWeight(1)
+        action.play()
+        this.monkeyIdleAction = action
+      }
+    } catch (err) {
+      console.warn('[bot] Failed to load monkey GLB; keeping capsule fallback', err)
+    }
   }
 
   /** Feet offset from root Y (capsule geometry). */
@@ -159,6 +243,29 @@ export class BotFighter {
     ;(this.mesh.material as MeshStandardMaterial).dispose()
     this.projMesh.geometry.dispose()
     ;(this.projMesh.material as MeshStandardMaterial).dispose()
+    if (this.monkeyMixer) {
+      this.monkeyMixer.stopAllAction()
+      this.monkeyMixer = null
+    }
+    if (this.monkeyIdleAction) {
+      this.monkeyIdleAction.stop()
+      this.monkeyIdleAction = null
+    }
+    if (this.monkeyRoot) {
+      this.monkeyRoot.traverse((o) => {
+        const meshObj = o as Mesh
+        const m = meshObj.material as
+          | MeshStandardMaterial
+          | MeshStandardMaterial[]
+          | undefined
+        if (Array.isArray(m)) for (const mm of m) mm?.dispose?.()
+        else m?.dispose?.()
+        meshObj.geometry?.dispose?.()
+      })
+      this.monkeyRoot = null
+    }
+    this.monkeyWrap = null
+    this.monkeyMaterials.length = 0
   }
 
   resetRoundState(): void {
@@ -177,6 +284,14 @@ export class BotFighter {
     this.mesh.position.set(0, 0, 0)
     this.mesh.rotation.z = 0
     this.bodyMat.color.copy(this.baseBodyColor)
+    if (this.monkeyWrap) {
+      this.monkeyWrap.position.x = 0
+      this.monkeyWrap.position.z = 0
+      this.monkeyWrap.rotation.z = 0
+    }
+    for (const { mat, baseColor } of this.monkeyMaterials) {
+      mat.color.copy(baseColor)
+    }
     this.clearProjectile()
   }
 
@@ -190,19 +305,26 @@ export class BotFighter {
     this.recordingTelegraphMix += (target - this.recordingTelegraphMix) * (1 - Math.exp(-k * delta))
     const mix = this.recordingTelegraphMix
     this.bodyMat.color.copy(this.baseBodyColor).lerp(this.recordingBodyColor, mix)
+    /* Tint the monkey materials toward the danger color while telegraphing. */
+    for (const { mat, baseColor } of this.monkeyMaterials) {
+      mat.color.copy(baseColor).lerp(this.recordingBodyColor, mix)
+    }
+
+    /* Shake target: monkey wrap if loaded, else the legacy capsule mesh. */
+    const shakeTarget: Object3D = this.monkeyWrap ?? this.mesh
 
     if (mix < 1e-3) {
-      this.mesh.position.x = 0
-      this.mesh.position.z = 0
-      this.mesh.rotation.z = 0
+      shakeTarget.position.x = 0
+      shakeTarget.position.z = 0
+      shakeTarget.rotation.z = 0
       return
     }
 
     this.recordingShakeT += delta
     const amp = 0.06 * mix
-    this.mesh.position.x = Math.sin(this.recordingShakeT * 7.2) * amp
-    this.mesh.position.z = Math.cos(this.recordingShakeT * 5.4) * amp * 0.7
-    this.mesh.rotation.z = Math.sin(this.recordingShakeT * 4.6) * 0.045 * mix
+    shakeTarget.position.x = Math.sin(this.recordingShakeT * 7.2) * amp
+    shakeTarget.position.z = Math.cos(this.recordingShakeT * 5.4) * amp * 0.7
+    shakeTarget.rotation.z = Math.sin(this.recordingShakeT * 4.6) * 0.045 * mix
   }
 
   alignFacingToward(worldPos: Vector3): void {
@@ -389,6 +511,7 @@ export class BotFighter {
     _playerProjectileActive: boolean,
   ): void {
     this.updateRecordingTelegraph(delta)
+    if (this.monkeyMixer) this.monkeyMixer.update(delta)
     if (this.mode === 'network') {
       const a = Math.min(1, delta * 16)
       this.root.position.lerp(this.networkTargetPos, a)

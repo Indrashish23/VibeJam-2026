@@ -2,6 +2,7 @@ import {
   AnimationAction,
   AnimationClip,
   AnimationMixer,
+  Box3,
   Group,
   LoopOnce,
   Material,
@@ -10,6 +11,19 @@ import {
 } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { gameConfig } from '../gameConfig'
+
+/** The capsule we want the monkey to fit into: feet on the floor, head ~ a tad above the camera. */
+function targetMonkeyHeight(): number {
+  return gameConfig.eyeHeight + 0.2
+}
+
+/** Compute a uniform fit-scale so the GLB's natural bounding-box height equals `targetMonkeyHeight`. */
+export function computeMonkeyAutoFitScale(model: Object3D): number {
+  model.updateMatrixWorld(true)
+  const bbox = new Box3().setFromObject(model)
+  const natural = Math.max(0.1, bbox.max.y - bbox.min.y)
+  return targetMonkeyHeight() / natural
+}
 
 type AvatarClipName =
   | 'idle'
@@ -88,12 +102,15 @@ export class LocalPlayerAvatar {
   private readonly finishedHandler: (ev: { action?: AnimationAction }) => void
   private readonly headBones: Object3D[]
   private lastHideHead = -1
+  /** Auto-fit scale so the monkey is exactly capsule-height (eyeHeight + small headroom) at scale 1.0. */
+  private readonly autoFitScale: number
 
   private constructor(scene: Scene, modelRoot: Object3D, mixer: AnimationMixer) {
     this.scene = scene
     this.mixer = mixer
     this.root.add(modelRoot)
-    this.root.scale.setScalar(Math.max(0.05, gameConfig.pcAvatarScale))
+    this.autoFitScale = computeMonkeyAutoFitScale(modelRoot)
+    this.root.scale.setScalar(this.autoFitScale * Math.max(0.05, gameConfig.pcAvatarScale))
     this.scene.add(this.root)
     this.headBones = collectHeadLikeBones(modelRoot)
 
@@ -238,7 +255,7 @@ export class LocalPlayerAvatar {
       snapshot.z + fwdZ * bodyFwd + rightZ * bodySide,
     )
     this.root.rotation.set(0, snapshot.yaw, 0)
-    const desiredScale = Math.max(0.05, gameConfig.pcAvatarScale)
+    const desiredScale = this.autoFitScale * Math.max(0.05, gameConfig.pcAvatarScale)
     if (Math.abs(this.root.scale.x - desiredScale) > 1e-3) {
       this.root.scale.setScalar(desiredScale)
     }

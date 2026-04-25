@@ -271,7 +271,7 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   pcAvatarSide:
     'Shift the body left/right relative to the camera. Usually 0.',
   pcAvatarScale:
-    'Uniform scale applied to the local monkey body. Default 0.96.',
+    'Multiplier on top of the auto-fit scale. 1.0 = exactly the player capsule height; >1 makes the body bigger, <1 smaller.',
   pcHideHead:
     '1 = hide head bones (default for first-person, prevents camera clipping). 0 = show head.',
   pcMouthForward:
