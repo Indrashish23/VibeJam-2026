@@ -558,12 +558,6 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
     title: 'PlayerCamera (FPS rig)',
     keys: [
       'pcCameraHeightBias',
-      'pcAvatarYOffset',
-      'pcAvatarForward',
-      'pcAvatarSide',
-      'pcAvatarScale',
-      'pcAvatarYawOffset',
-      'pcHideHead',
       'pcMouthForward',
       'pcMouthHeight',
       'pcMouthSide',

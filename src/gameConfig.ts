@@ -227,7 +227,7 @@ export const defaultGameConfig = {
   ecAvatarForward: 0,
   ecAvatarSide: 0,
   ecAvatarScale: 1,
-  ecAvatarYawOffset: 0,
+  ecAvatarYawOffset: Math.PI,
   ecCollisionView: 0,
   ecCapsuleRadius: 0.62,
   ecCapsuleHeight: 1.75,

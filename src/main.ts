@@ -28,7 +28,6 @@ import { gameConfig } from './gameConfig'
 import { addArena, isBlastZone } from './arena'
 import { BotFighter, type BotMode } from './boxing/bot'
 import { PlayerArms } from './boxing/playerArms'
-import { LocalPlayerAvatar } from './boxing/localPlayerAvatar'
 import { VoiceChargeManager } from './audio/voiceCharge'
 import { mountTweaksPanel } from './tweaksPanel'
 import { runLobbyGate, type LobbyResult } from './lobbyGate'
@@ -388,14 +387,15 @@ function initGame(lobby: LobbyResult) {
   scene.add(camera)
 
   const arms = new PlayerArms(camera, scene)
-  let localAvatar: LocalPlayerAvatar | null = null
-  void LocalPlayerAvatar.create(scene)
-    .then((avatar) => {
-      localAvatar = avatar
-    })
-    .catch((err) => {
-      console.warn('[avatar] Local monkey avatar failed to initialize', err)
-    })
+  /** Outgoing compact anim state for networked enemy playback (local mesh is intentionally disabled). */
+  type NetAnimBase = 'idle' | 'running' | 'jumping' | 'hitreact'
+  type NetAnimOneShot = 'recording' | 'shooting' | null
+  let localAnimOneShot: NetAnimOneShot = null
+  let localAnimEpoch = 0
+  function queueLocalAnimOneShot(name: Exclude<NetAnimOneShot, null>): void {
+    localAnimOneShot = name
+    localAnimEpoch += 1
+  }
 
   let botMode: BotMode = isOnline ? 'dummy' : 'dummy'
   let bot = new BotFighter(scene, botMode, new Vector3())
@@ -545,6 +545,18 @@ function initGame(lobby: LobbyResult) {
   let playerHurtRecoverLeft = 0
   let playerHurtAirSince = 0
   let playerInvulnUntil = 0
+  function deriveLocalAnimBase(): NetAnimBase {
+    if (playerHurt !== 'none') return 'hitreact'
+    if (!grounded || performance.now() < slideAnimUntilMs) return 'jumping'
+    const moving =
+      keys.forward ||
+      keys.back ||
+      keys.left ||
+      keys.right ||
+      Math.abs(velocity.x) > 0.08 ||
+      Math.abs(velocity.z) > 0.08
+    return moving ? 'running' : 'idle'
+  }
 
   const voice = new VoiceChargeManager()
   let chargingLmb = false
@@ -905,8 +917,6 @@ function initGame(lobby: LobbyResult) {
   }
 
   function returnToLobbyReload(): void {
-    localAvatar?.dispose()
-    localAvatar = null
     try {
       mpSocket?.close()
     } catch {
@@ -1291,7 +1301,7 @@ function initGame(lobby: LobbyResult) {
 
   async function releaseVoiceShot(): Promise<void> {
     const blob = await voice.finishChargeRecording()
-    localAvatar?.onRecordingReleased()
+    queueLocalAnimOneShot('shooting')
     const buf = await voice.decodeRecording(blob)
     const raw = voiceInputBlocked
       ? Math.max(0, Math.min(1, gameConfig.voiceDryFireT))
@@ -2032,7 +2042,7 @@ function initGame(lobby: LobbyResult) {
       return
     voice.resumeAudio()
     voice.startChargeRecording()
-    if (!voiceInputBlocked) localAvatar?.onRecordingStarted()
+    if (!voiceInputBlocked) queueLocalAnimOneShot('recording')
     chargingLmb = true
   }
 
@@ -2214,7 +2224,6 @@ function initGame(lobby: LobbyResult) {
       poseSendAcc += delta
       if (poseSendAcc >= 0.05) {
         poseSendAcc -= 0.05
-        const animState = localAvatar?.getNetAnimState()
         const speedN = Math.min(
           1,
           Math.hypot(velocity.x, velocity.z) / Math.max(0.5, gameConfig.moveSpeed),
@@ -2226,9 +2235,9 @@ function initGame(lobby: LobbyResult) {
           fy,
           ry: camera.rotation.y,
           recording: chargingLmb,
-          animBase: animState?.base ?? (grounded ? 'idle' : 'jumping'),
-          animOneShot: animState?.oneShot ?? null,
-          animEpoch: animState?.epoch ?? 0,
+          animBase: deriveLocalAnimBase(),
+          animOneShot: localAnimOneShot,
+          animEpoch: localAnimEpoch,
           speedN,
         })
       }
@@ -2295,23 +2304,6 @@ function initGame(lobby: LobbyResult) {
     )
     pixelPass.depthEdgeStrength = Math.max(0, gameConfig.retroEdgeStrength)
     pixelPass.normalEdgeStrength = Math.max(0, gameConfig.retroEdgeStrength * 0.65)
-
-    localAvatar?.update(delta, {
-      x: camera.position.x,
-      feetY: feetY(),
-      z: camera.position.z,
-      yaw: camera.rotation.y,
-      grounded,
-      moving:
-        keys.forward ||
-        keys.back ||
-        keys.left ||
-        keys.right ||
-        Math.abs(velocity.x) > 0.08 ||
-        Math.abs(velocity.z) > 0.08,
-      playerHurt,
-      slideActive: performance.now() < slideAnimUntilMs,
-    })
 
     /* Debug capsule visualization (red wireframe). Player capsule is centered on (camera.x, feetY+offset+H/2, camera.z). */
     {
@@ -2566,8 +2558,7 @@ function initGame(lobby: LobbyResult) {
   window.addEventListener(
     'beforeunload',
     () => {
-      localAvatar?.dispose()
-      localAvatar = null
+      /* no-op: local monkey mesh is intentionally disabled */
     },
     { once: true },
   )
