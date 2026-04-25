@@ -83,6 +83,11 @@ const gameRoot = document.getElementById('game-root') as HTMLDivElement
 
 const percentYouEl = document.getElementById('percent-you')
 const percentFoeEl = document.getElementById('percent-foe')
+const percentLabelYouEl = document.getElementById('percent-label-you')
+const percentLabelFoeEl = document.getElementById('percent-label-foe')
+const seriesScoreOverlay = document.getElementById('series-score-overlay') as HTMLDivElement | null
+const seriesScoreLineEl = document.getElementById('series-score-line') as HTMLParagraphElement | null
+const victimHitFlashEl = document.getElementById('victim-hit-flash') as HTMLDivElement | null
 
 const matchEndOverlay = document.getElementById('match-end-overlay') as HTMLDivElement | null
 const matchEndTitle = document.getElementById('match-end-title')
@@ -335,6 +340,13 @@ function initGame(lobby: LobbyResult) {
   let browserHost: ReturnType<typeof createBrowserHostAuthority> | null = null
   let mpPresenceCount = 0
   let mpOpponentName: string | null = null
+
+  function opponentHudName(): string {
+    if (lobby.mode === 'online' && mpOpponentName) return mpOpponentName
+    if (bot.mode === 'dummy' || bot.mode === 'smart') return 'Dummy'
+    return 'Opponent'
+  }
+
   let mpSeqStarted = false
   let mpBeginTimer: ReturnType<typeof setTimeout> | null = null
   let poseSendAcc = 0
@@ -593,6 +605,11 @@ function initGame(lobby: LobbyResult) {
   let playerPercent = 0
   let enemyPercent = 0
   let matchOutcome: null | 'win' | 'lose' = null
+  /** Best-of-3 rounds won (ring-out / elimination). */
+  let seriesWinsSelf = 0
+  let seriesWinsOpp = 0
+  let seriesTransitionActive = false
+  let victimWhiteFlashUntil = 0
 
   const playerKnock = new Vector3()
   const dashVel = new Vector3()
@@ -761,6 +778,7 @@ function initGame(lobby: LobbyResult) {
     botY: 0,
     botZ: 0,
     botMode: 'dummy' as BotMode,
+    pcCollisionView: 0,
   }
   /** Place player + dummy at the corner of the deck so they don't collide with regular spawn or fall off. */
   const DEBUG_ROOM_PLAYER_FEET = new Vector3(-18, 0, -18)
@@ -781,6 +799,8 @@ function initGame(lobby: LobbyResult) {
       debugRoomSaved.botY = bot.root.position.y
       debugRoomSaved.botZ = bot.root.position.z
       debugRoomSaved.botMode = bot.mode
+      debugRoomSaved.pcCollisionView = gameConfig.pcCollisionView
+      gameConfig.pcCollisionView = 1
 
       const botStart = new Vector3(
         DEBUG_ROOM_PLAYER_FEET.x + DEBUG_ROOM_BOT_OFFSET.x,
@@ -804,6 +824,7 @@ function initGame(lobby: LobbyResult) {
       vy = 0
       grounded = true
     } else {
+      gameConfig.pcCollisionView = debugRoomSaved.pcCollisionView
       camera.position.set(debugRoomSaved.playerX, debugRoomSaved.playerY, debugRoomSaved.playerZ)
       velocity.set(0, 0, 0)
       vy = 0
@@ -844,6 +865,8 @@ function initGame(lobby: LobbyResult) {
     matchOutcome = null
     winFinisher = null
     hideWinGameSplash()
+    seriesWinsSelf = 0
+    seriesWinsOpp = 0
     playerPercent = 0
     enemyPercent = 0
     playerHurt = 'none'
@@ -872,6 +895,7 @@ function initGame(lobby: LobbyResult) {
     }
     countdownOverlay.hidden = true
     countdownOverlay.classList.remove('countdown-overlay--pulse')
+    countdownOverlay.classList.remove('countdown-overlay--opaque')
     voiceResumeCountdownActive = false
   }
 
@@ -902,8 +926,66 @@ function initGame(lobby: LobbyResult) {
     }
   }
 
+  function triggerLocalVictimWhiteFlash(): void {
+    victimWhiteFlashUntil = performance.now() + gameConfig.hitVictimWhiteFlashMs
+  }
+
+  async function flashSeriesScoreLineThenHide(): Promise<void> {
+    if (!seriesScoreOverlay || !seriesScoreLineEl) return
+    const you = displayPlayerName()
+    const opp = opponentHudName()
+    seriesScoreLineEl.textContent = `${you} ${seriesWinsSelf} – ${opp} ${seriesWinsOpp}`
+    seriesScoreOverlay.hidden = false
+    seriesScoreOverlay.classList.remove('series-score-overlay--pulse')
+    void seriesScoreOverlay.offsetWidth
+    seriesScoreOverlay.classList.add('series-score-overlay--pulse')
+    await sleepMs(2400)
+    seriesScoreOverlay.classList.remove('series-score-overlay--pulse')
+    seriesScoreOverlay.hidden = true
+  }
+
+  async function beginNextSeriesRoundFromElimination(): Promise<void> {
+    browserHost?.reset()
+    if (lobby.mode === 'online' && lobby.role === 'host' && isAuthoritativeListenServer()) {
+      sendMp({ type: 'seriesHostBeginNext' })
+    }
+    winFinisher = null
+    hideWinGameSplash()
+    playerPercent = 0
+    enemyPercent = 0
+    matchOutcome = null
+    pendingOutgoingRematchId = null
+    pendingIncomingRematchId = null
+    hideMatchEndAndRematchUiFully()
+    if (matchEndOverlay) matchEndOverlay.hidden = true
+    spawnActors()
+    syncHud()
+    await runPvpCountdown321()
+    tryPointerLock()
+  }
+
+  async function concludeRoundElimination(iWonRound: boolean): Promise<void> {
+    if (seriesTransitionActive || matchOutcome) return
+    seriesTransitionActive = true
+    try {
+      if (iWonRound) seriesWinsSelf += 1
+      else seriesWinsOpp += 1
+      await flashSeriesScoreLineThenHide()
+      if (seriesWinsSelf >= 2 || seriesWinsOpp >= 2) {
+        endMatch(seriesWinsSelf >= 2 ? 'win' : 'lose', { seriesFinal: true })
+        return
+      }
+      await beginNextSeriesRoundFromElimination()
+    } finally {
+      seriesTransitionActive = false
+    }
+  }
+
   async function runPvpCountdown321(): Promise<void> {
     if (!countdownOverlay || !countdownNumEl) return
+    hideMatchEndAndRematchUiFully()
+    if (matchEndOverlay) matchEndOverlay.hidden = true
+    countdownOverlay.classList.add('countdown-overlay--opaque')
     if (countdownTitleEl) {
       countdownTitleEl.hidden = false
       countdownTitleEl.textContent = 'Match begins in'
@@ -922,6 +1004,7 @@ function initGame(lobby: LobbyResult) {
     if (countdownTitleEl) countdownTitleEl.hidden = true
     countdownOverlay.hidden = true
     countdownOverlay.classList.remove('countdown-overlay--pulse')
+    countdownOverlay.classList.remove('countdown-overlay--opaque')
   }
 
   async function runMatchBeginCountdown(): Promise<void> {
@@ -972,6 +1055,8 @@ function initGame(lobby: LobbyResult) {
     stopPublicHostAnnounce()
     lobbyDummyPractice = false
     mpSeqStarted = true
+    seriesWinsSelf = 0
+    seriesWinsOpp = 0
 
     if (isOnline && lobby.mode === 'online') {
       spawnActors()
@@ -1215,6 +1300,10 @@ function initGame(lobby: LobbyResult) {
           : undefined
       if (aggressorRole === lobby.role) {
         triggerAggressorHitConfirmFx()
+        const vr = data.victimRole === 'host' || data.victimRole === 'guest' ? data.victimRole : undefined
+        if (vr && vr !== lobby.role) {
+          bot.flashVictimInvuln(gameConfig.hitVictimWhiteFlashMs)
+        }
         const sid = typeof data.shotId === 'string' ? data.shotId : null
         if (sid) {
           const attackerClip = pendingAttackerShotAudioById.get(sid)
@@ -1248,9 +1337,10 @@ function initGame(lobby: LobbyResult) {
     }
 
     if (ty === 'authMatchEnd' && lobby.mode === 'online' && typeof data.winnerRole === 'string') {
-      if (!matchOutcome) {
-        if (data.winnerRole === lobby.role) endMatch('win')
-        else endMatch('lose')
+      if (!matchOutcome && !seriesTransitionActive) {
+        const wr =
+          data.winnerRole === 'host' || data.winnerRole === 'guest' ? data.winnerRole : undefined
+        if (wr) void concludeRoundElimination(wr === lobby.role)
       }
       return
     }
@@ -1372,12 +1462,12 @@ function initGame(lobby: LobbyResult) {
     }
 
     if (ty === 'youLose') {
-      if (!matchOutcome) endMatch('lose')
+      if (!matchOutcome && !seriesTransitionActive) void concludeRoundElimination(false)
       return
     }
 
     if (ty === 'youWin') {
-      if (!matchOutcome) endMatch('win')
+      if (!matchOutcome && !seriesTransitionActive) void concludeRoundElimination(true)
       return
     }
   }
@@ -1427,12 +1517,22 @@ function initGame(lobby: LobbyResult) {
     dashVel.set(0, 0, 0)
     const victimPct = Math.max(0, opts?.victimPercent ?? playerPercent)
     const launchMul = launchKnockMulFromPercent(victimPct)
+    const pctN = Math.max(0, Math.min(1, victimPct / 100))
+    const highGate = Math.max(0.05, Math.min(0.98, gameConfig.knockHighPctVictimThreshold))
+    const highMul =
+      pctN > highGate ? Math.max(0.05, Math.min(1.5, gameConfig.knockHighPctSpeedMul)) : 1
+    const impulseMul = Math.max(0.05, Math.min(1.5, gameConfig.knockLaunchImpulseMul)) * highMul
     playerKnock.addScaledVector(
       _knDir,
-      gameConfig.knockbackOnPlayer * gameConfig.playerHurtKnockMul * comboMul * launchMul,
+      gameConfig.knockbackOnPlayer *
+        gameConfig.playerHurtKnockMul *
+        comboMul *
+        launchMul *
+        impulseMul,
     )
     vy += gameConfig.playerHurtVyBoost * comboMul
     triggerHitImpactFx()
+    triggerLocalVictimWhiteFlash()
   }
 
   function triggerAggressorHitConfirmFx(): void {
@@ -1577,6 +1677,8 @@ function initGame(lobby: LobbyResult) {
   }
 
   function syncHud(): void {
+    if (percentLabelYouEl) percentLabelYouEl.textContent = `${displayPlayerName()} [you]`
+    if (percentLabelFoeEl) percentLabelFoeEl.textContent = opponentHudName()
     if (percentYouEl) percentYouEl.textContent = `${Math.round(Math.min(100, playerPercent))}%`
     if (percentFoeEl) percentFoeEl.textContent = `${Math.round(Math.min(100, enemyPercent))}%`
     if (chargeBarMinMark) {
@@ -1713,7 +1815,7 @@ function initGame(lobby: LobbyResult) {
     if (performance.now() - winFinisher.started > 1120) {
       winFinisher = null
       hideWinGameSplash()
-      endMatch('win')
+      void concludeRoundElimination(true)
     }
   }
 
@@ -1750,6 +1852,8 @@ function initGame(lobby: LobbyResult) {
     pendingOutgoingRematchId = null
     pendingIncomingRematchId = null
     matchOutcome = null
+    seriesWinsSelf = 0
+    seriesWinsOpp = 0
     hideMatchEndAndRematchUiFully()
     chargingLmb = false
     controls.unlock()
@@ -1803,7 +1907,7 @@ function initGame(lobby: LobbyResult) {
     tryPointerLock()
   }
 
-  function endMatch(outcome: 'win' | 'lose'): void {
+  function endMatch(outcome: 'win' | 'lose', opts?: { seriesFinal?: boolean }): void {
     if (matchOutcome) return
     clearMovementKeys()
     hideWinGameSplash()
@@ -1812,13 +1916,21 @@ function initGame(lobby: LobbyResult) {
     controls.unlock()
     if (matchEndOverlay) matchEndOverlay.hidden = false
     if (matchEndTitle) {
-      matchEndTitle.textContent = outcome === 'win' ? 'You win!' : 'You lose!'
+      if (opts?.seriesFinal) {
+        matchEndTitle.textContent = outcome === 'win' ? 'You win the set!' : 'You lose the set!'
+      } else {
+        matchEndTitle.textContent = outcome === 'win' ? 'You win!' : 'You lose!'
+      }
     }
     if (matchEndSub) {
-      matchEndSub.textContent =
-        outcome === 'win'
-          ? 'Opponent got launched out of bounds.'
-          : 'You were launched out of bounds.'
+      if (opts?.seriesFinal) {
+        matchEndSub.textContent = `Best of 3 · ${seriesWinsSelf} – ${seriesWinsOpp}`
+      } else {
+        matchEndSub.textContent =
+          outcome === 'win'
+            ? 'Opponent got launched out of bounds.'
+            : 'You were launched out of bounds.'
+      }
     }
     if (isOnline && lobby.mode === 'online') {
       showMatchEndRematchControlsDefault()
@@ -2016,7 +2128,8 @@ function initGame(lobby: LobbyResult) {
       matchOutcome ||
       rematchSequenceActive ||
       voiceResumeCountdownActive ||
-      multiplayerBlocksPlay()
+      multiplayerBlocksPlay() ||
+      seriesTransitionActive
     )
       return
 
@@ -2024,7 +2137,7 @@ function initGame(lobby: LobbyResult) {
       if (isBlastZone(camera.position)) {
         winFinisher = null
         hideWinGameSplash()
-        endMatch('lose')
+        void concludeRoundElimination(false)
         return
       }
       arms.update(delta)
@@ -2059,6 +2172,7 @@ function initGame(lobby: LobbyResult) {
           const launchMul = launchKnockMulFromPercent(enemyPercent)
           bot.applyKnockback(_knDir, gameConfig.knockbackOnBot * launchMul)
           triggerHitImpactFx()
+          bot.flashVictimInvuln(gameConfig.hitVictimWhiteFlashMs)
         }
       }
     }
@@ -2088,21 +2202,22 @@ function initGame(lobby: LobbyResult) {
     }
 
     if (!authPvp()) {
+      const listenAuth = isOnline && lobby.mode === 'online' && isAuthoritativeListenServer()
       if (isBlastZone(camera.position)) {
         if (lobbyDummyPractice) {
           applyRoundReset()
           return
         }
-        if (isPvp()) sendMp({ type: 'youWin' })
-        endMatch('lose')
+        if (isPvp() && !listenAuth) sendMp({ type: 'youWin' })
+        if (!listenAuth) void concludeRoundElimination(false)
       }
       if (isBlastZone(bot.root.position)) {
         if (lobbyDummyPractice) {
           applyRoundReset()
           return
         }
-        if (isPvp()) sendMp({ type: 'youLose' })
-        endMatch('win')
+        if (isPvp() && !listenAuth) sendMp({ type: 'youLose' })
+        if (!listenAuth) void concludeRoundElimination(true)
       }
     }
   }
@@ -2114,7 +2229,8 @@ function initGame(lobby: LobbyResult) {
       leaveMatchDialogOpen ||
       rematchSequenceActive ||
       winFinisher ||
-      multiplayerBlocksPlay()
+      multiplayerBlocksPlay() ||
+      seriesTransitionActive
     if (!shortcutBlock) {
       switch (e.code) {
         case 'Digit1':
@@ -2151,6 +2267,7 @@ function initGame(lobby: LobbyResult) {
       winFinisher ||
       rematchSequenceActive ||
       multiplayerBlocksPlay() ||
+      seriesTransitionActive ||
       playerHurt !== 'none'
     )
       return
@@ -2194,6 +2311,7 @@ function initGame(lobby: LobbyResult) {
       matchOutcome ||
       winFinisher ||
       rematchSequenceActive ||
+      seriesTransitionActive ||
       playerHurt !== 'none' ||
       arms.isProjectileActive()
     )
@@ -2256,6 +2374,24 @@ function initGame(lobby: LobbyResult) {
     } else {
       velocity.set(0, 0, 0)
       dashVel.set(0, 0, 0)
+      if (playerHurt === 'air') {
+        const p = Math.max(0, Math.min(100, playerPercent)) / 100
+        const fadeAt = Math.max(21, Math.min(100, gameConfig.knockAirControlFadePct)) / 100
+        const airControl = Math.max(0, 1 - p / fadeAt)
+        if (airControl > 1e-4) {
+          const iw = Number(keys.forward) - Number(keys.back)
+          const ir = Number(keys.right) - Number(keys.left)
+          if (Math.abs(iw) + Math.abs(ir) > 1e-6) {
+            direction.set(ir, 0, -iw)
+            direction.normalize()
+            direction.applyQuaternion(camera.quaternion)
+            direction.y = 0
+            if (direction.lengthSq() > 1e-8) direction.normalize()
+            const acc = Math.max(0, gameConfig.knockAirStrafeAccel) * airControl
+            playerKnock.addScaledVector(direction, acc * delta)
+          }
+        }
+      }
     }
 
     if (dashCdMs > 0) dashCdMs -= delta * 1000
@@ -2510,6 +2646,17 @@ function initGame(lobby: LobbyResult) {
       }
     }
 
+    if (victimHitFlashEl) {
+      const left = victimWhiteFlashUntil - performance.now()
+      if (left > 0) {
+        victimHitFlashEl.hidden = false
+        victimHitFlashEl.style.opacity = String(Math.min(0.62, (left / gameConfig.hitVictimWhiteFlashMs) * 0.58))
+      } else {
+        victimHitFlashEl.style.opacity = '0'
+        victimHitFlashEl.hidden = true
+      }
+    }
+
     composer.render()
   }
 
@@ -2524,7 +2671,8 @@ function initGame(lobby: LobbyResult) {
       rematchSequenceActive ||
       voiceInputBlocked ||
       voiceResumeCountdownActive ||
-      multiplayerBlocksPlay()
+      multiplayerBlocksPlay() ||
+      seriesTransitionActive
     )
       return
     void controls.lock()

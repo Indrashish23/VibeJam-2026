@@ -105,6 +105,12 @@
       <div id="dash-scanlines" class="dash-scanlines" aria-hidden="true"></div>
       <div id="hit-flash" class="hit-flash" aria-hidden="true"></div>
       <div id="invuln-shine" class="invuln-shine" hidden aria-hidden="true"></div>
+      <div id="victim-hit-flash" class="victim-hit-flash" hidden aria-hidden="true"></div>
+      <div id="series-score-overlay" class="series-score-overlay" hidden>
+        <div class="series-score-card">
+          <p id="series-score-line" class="series-score-line" aria-live="polite"></p>
+        </div>
+      </div>
       <div id="rematch-sequence" class="rematch-sequence" hidden>
         <div id="rematch-black-sheet" class="rematch-black-sheet"></div>
       </div>
@@ -114,11 +120,11 @@
       </div>
       <div id="percent-hud" class="percent-hud" aria-label="Launch percent">
         <div class="percent-hud__row percent-hud__row--you">
-          <span class="percent-hud__label">You</span>
+          <span id="percent-label-you" class="percent-hud__label">You</span>
           <span id="percent-you" class="percent-hud__value">0%</span>
         </div>
         <div class="percent-hud__row percent-hud__row--foe">
-          <span class="percent-hud__label">Foe</span>
+          <span id="percent-label-foe" class="percent-hud__label">Opponent</span>
           <span id="percent-foe" class="percent-hud__value">0%</span>
         </div>
       </div>

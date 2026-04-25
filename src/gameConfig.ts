@@ -51,7 +51,7 @@ export const defaultGameConfig = {
   /** Extra projectile size bonus at full charge `t=1` (0.2 = +20%, 1 = +100%). */
   projectileSizeChargeMaxBonus: 0.57,
   /** Horizontal knockback on player when bot lands a hit (non-parried). */
-  knockbackOnPlayer: 26,
+  knockbackOnPlayer: 20,
   /** Base knock on bot (multiplied by voice `t` lerp). */
   knockbackOnBot: 62,
   /** Legacy: unused; knock uses knockVoice Min/Max. */
@@ -90,7 +90,19 @@ export const defaultGameConfig = {
   /** Exponent on normalized percent for launch knock (higher = gentler at low %). */
   launchKnockExponent: 2.15,
   /** Horizontal knock decay while tumbling from a hit (lower = flies farther before sliding). */
-  knockHurtAirDrag: 2.35,
+  knockHurtAirDrag: 1.42,
+  /** Scales initial hurt-knock impulse (lower = gentler launch speed, tune with knockHurtAirDrag for distance). */
+  knockLaunchImpulseMul: 0.62,
+  /** Victim launch % above this (0–1) applies knockHighPctSpeedMul to incoming knock speed. */
+  knockHighPctVictimThreshold: 0.6,
+  /** Extra multiplier on knock speed when victim is above knockHighPctVictimThreshold (e.g. 0.6 = softer hits at high %). */
+  knockHighPctSpeedMul: 0.6,
+  /** Air strafe strength on hurt knock (world velocity push per second at full input, scaled by air control). */
+  knockAirStrafeAccel: 26,
+  /** Full air control of knock drift at 0% victim launch; linearly fades to 0 by knockAirControlFadePct (percent). */
+  knockAirControlFadePct: 80,
+  /** Full-screen white flash duration when you take a hit (ms). */
+  hitVictimWhiteFlashMs: 480,
   /** Ms grounded “down” phase before bot regains movement after a knockback. */
   botKnockRecoverMs: 420,
   /** Same for player after they land from bot knockback. */
@@ -222,7 +234,7 @@ export const defaultGameConfig = {
    * Shared character collision capsule (player + foe use the same radius/height/offset).
    * `pcCollisionView` toggles red wireframe capsules for both; underlying move physics still uses `playerRadius`.
    */
-  pcCollisionView: 1,
+  pcCollisionView: 0,
   pcCapsuleRadius: 0.75,
   pcCapsuleHeight: 0.95,
   pcCapsuleOffsetY: 0,

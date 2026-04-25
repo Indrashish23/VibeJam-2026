@@ -86,6 +86,8 @@ export class BotFighter {
   private monkeyShakeRollZ = 0
   private monkeyFinishedHandler: ((ev: { action?: AnimationAction }) => void) | null = null
   private readonly monkeyMaterials: { mat: MeshStandardMaterial; baseColor: Color }[] = []
+  private victimInvulnFlashEnd = 0
+  private readonly _flashWhite = new Color(0xffffff)
 
   /** Set by network mode (overrides locally-derived animation evaluation). */
   private remoteAnimBase: AvatarBaseClip | null = null
@@ -497,6 +499,21 @@ export class BotFighter {
     this.recordingTelegraph = active
   }
 
+  /** Brief white tint (invuln / got hit feedback) on the visible bot mesh. */
+  flashVictimInvuln(ms: number): void {
+    this.victimInvulnFlashEnd = performance.now() + Math.max(80, ms)
+  }
+
+  private applyVictimInvulnFlash(): void {
+    const left = this.victimInvulnFlashEnd - performance.now()
+    if (left <= 0) return
+    const peak = Math.min(0.92, left / Math.max(120, gameConfig.hitVictimWhiteFlashMs * 0.85))
+    this.bodyMat.color.copy(this.baseBodyColor).lerp(this._flashWhite, peak)
+    for (const { mat, baseColor } of this.monkeyMaterials) {
+      mat.color.copy(baseColor).lerp(this._flashWhite, peak)
+    }
+  }
+
   private updateRecordingTelegraph(delta: number): void {
     const target = this.recordingTelegraph ? 1 : 0
     const k = this.recordingTelegraph ? 2.8 : 4.2
@@ -715,6 +732,7 @@ export class BotFighter {
     _playerProjectileActive: boolean,
   ): void {
     this.updateRecordingTelegraph(delta)
+    this.applyVictimInvulnFlash()
     if (this.monkeyWrap) this.applyMonkeyTransform(this.monkeyWrap)
     /* Track normalized speed for replication / future blend tree usage. */
     this.speedN = Math.min(

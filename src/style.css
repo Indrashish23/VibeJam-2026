@@ -593,6 +593,10 @@ body {
   background: rgba(15, 23, 42, 0.42);
 }
 
+.countdown-overlay--opaque {
+  background: rgba(15, 23, 42, 0.94);
+}
+
 .countdown-title {
   margin: 0;
   font-size: clamp(1rem, 3.5vw, 1.35rem);
@@ -1143,6 +1147,73 @@ body {
 }
 
 .leave-match-overlay[hidden] {
+  display: none !important;
+}
+
+.series-score-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 95;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: rgba(15, 23, 42, 0.72);
+}
+
+.series-score-overlay[hidden] {
+  display: none !important;
+}
+
+.series-score-card {
+  padding: 1rem 1.5rem;
+  border-radius: 12px;
+  border: 1px solid rgba(250, 204, 21, 0.45);
+  background: rgba(15, 23, 42, 0.92);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.55);
+}
+
+.series-score-line {
+  margin: 0;
+  font-size: clamp(1.1rem, 3.2vw, 1.65rem);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #fefce8;
+  text-align: center;
+  text-shadow:
+    0 0 18px rgba(250, 204, 21, 0.75),
+    0 2px 0 rgba(15, 23, 42, 0.9);
+}
+
+.series-score-overlay--pulse .series-score-line {
+  animation: series-score-pulse 2.2s ease-in-out forwards;
+}
+
+@keyframes series-score-pulse {
+  0% {
+    transform: scale(0.92);
+    opacity: 0.65;
+  }
+  18% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.victim-hit-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 88;
+  pointer-events: none;
+  background: #fff;
+  mix-blend-mode: soft-light;
+}
+
+.victim-hit-flash[hidden] {
   display: none !important;
 }
 

@@ -240,6 +240,14 @@ wss.on('connection', (ws, req) => {
       validateRingOut(roomId, r)
     }
 
+    /* Best-of host: begin next round after a ring-out (clears ended gate + percents). */
+    if (t === 'seriesHostBeginNext' && ws._vjRole === 'host') {
+      r.ended = false
+      r.percent = { host: 0, guest: 0 }
+      r.shots.clear()
+      return
+    }
+
     relay(ws, raw)
 
     if (t === 'voiceShot') {
