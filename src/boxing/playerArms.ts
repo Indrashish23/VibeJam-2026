@@ -88,19 +88,33 @@ export class PlayerArms {
 
   /**
    * `speedFactor` is the lerped speed mul; `shotT` is 0..1 for damage and knock.
+   *
+   * If `originWorld` is provided, the projectile spawns there (e.g. the monkey's mouth);
+   * if `dirWorld` is provided, that vector is the launch direction. Both fall back to the
+   * legacy camera-local muzzle + camera forward.
    */
   tryFire(
     speedFactor: number,
     hitAudio: AudioBuffer | null,
     shotT: number,
     sizeMul = 1,
+    originWorld?: Vector3,
+    dirWorld?: Vector3,
   ): boolean {
     if (this.proj.active) return false
 
-    this.proj.shoulderLocal.set(0.32, -0.22, -0.48)
-    this.shoulderWorld(this._tmp)
+    if (originWorld) {
+      this._tmp.copy(originWorld)
+    } else {
+      this.proj.shoulderLocal.set(0.32, -0.22, -0.48)
+      this.shoulderWorld(this._tmp)
+    }
 
-    this.camera.getWorldDirection(this.proj.vel)
+    if (dirWorld && dirWorld.lengthSq() > 1e-8) {
+      this.proj.vel.copy(dirWorld)
+    } else {
+      this.camera.getWorldDirection(this.proj.vel)
+    }
     const base = gameConfig.punchProjectileSpeed
     const mul = Math.max(
       gameConfig.voiceShotSpeedMinMul,

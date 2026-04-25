@@ -9,6 +9,7 @@ import {
   Scene,
 } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { gameConfig } from '../gameConfig'
 
 type AvatarClipName =
   | 'idle'
@@ -40,9 +41,6 @@ const GLB_HITREACT = new URL('../../Assets/MonkeyModel/HitReact.glb', import.met
 const GLB_RECORDING = new URL('../../Assets/MonkeyModel/RecordingSound.glb', import.meta.url).href
 const GLB_SHOOTING = new URL('../../Assets/MonkeyModel/ShootingSound.glb', import.meta.url).href
 
-const AVATAR_BACK_OFFSET = 0.36
-const AVATAR_SCALE = 0.96
-
 function loadGltf(loader: GLTFLoader, url: string): Promise<{ scene: Group; animations: AnimationClip[] }> {
   return new Promise((resolve, reject) => {
     loader.load(
@@ -58,12 +56,15 @@ function firstClip(gltf: { animations: AnimationClip[] }): AnimationClip | null 
   return gltf.animations?.[0] ?? null
 }
 
-function hideHeadLikeBones(root: Object3D): void {
+/** Collect all bones whose name matches /head/i. We toggle visibility live based on `pcHideHead`. */
+function collectHeadLikeBones(root: Object3D): Object3D[] {
+  const out: Object3D[] = []
   root.traverse((o) => {
     if (!o.name) return
     if (!/head/i.test(o.name)) return
-    o.visible = false
+    out.push(o)
   })
+  return out
 }
 
 export class LocalPlayerAvatar {
@@ -85,13 +86,16 @@ export class LocalPlayerAvatar {
     slideActive: false,
   }
   private readonly finishedHandler: (ev: { action?: AnimationAction }) => void
+  private readonly headBones: Object3D[]
+  private lastHideHead = -1
 
   private constructor(scene: Scene, modelRoot: Object3D, mixer: AnimationMixer) {
     this.scene = scene
     this.mixer = mixer
     this.root.add(modelRoot)
-    this.root.scale.setScalar(AVATAR_SCALE)
+    this.root.scale.setScalar(Math.max(0.05, gameConfig.pcAvatarScale))
     this.scene.add(this.root)
+    this.headBones = collectHeadLikeBones(modelRoot)
 
     this.finishedHandler = (ev) => {
       const shot = this.activeOneShot
@@ -121,7 +125,6 @@ export class LocalPlayerAvatar {
       return null
     }
 
-    hideHeadLikeBones(idleGltf.scene)
     const mixer = new AnimationMixer(idleGltf.scene)
     const avatar = new LocalPlayerAvatar(scene, idleGltf.scene, mixer)
     avatar.bindClip('idle', idleClip)
@@ -220,10 +223,33 @@ export class LocalPlayerAvatar {
   update(delta: number, snapshot: LocalAvatarSnapshot): void {
     this.lastSnapshot = snapshot
 
-    this.root.position.set(snapshot.x, snapshot.feetY, snapshot.z)
+    /* Camera-yaw-relative offsets: positive forward pushes body in front of the camera; positive side pushes right. */
+    const sinY = Math.sin(snapshot.yaw)
+    const cosY = Math.cos(snapshot.yaw)
+    const fwdX = -sinY
+    const fwdZ = -cosY
+    const rightX = cosY
+    const rightZ = -sinY
+    const bodyFwd = gameConfig.pcAvatarForward
+    const bodySide = gameConfig.pcAvatarSide
+    this.root.position.set(
+      snapshot.x + fwdX * bodyFwd + rightX * bodySide,
+      snapshot.feetY + gameConfig.pcAvatarYOffset,
+      snapshot.z + fwdZ * bodyFwd + rightZ * bodySide,
+    )
     this.root.rotation.set(0, snapshot.yaw, 0)
-    this.root.position.x -= Math.sin(snapshot.yaw) * AVATAR_BACK_OFFSET
-    this.root.position.z += Math.cos(snapshot.yaw) * AVATAR_BACK_OFFSET
+    const desiredScale = Math.max(0.05, gameConfig.pcAvatarScale)
+    if (Math.abs(this.root.scale.x - desiredScale) > 1e-3) {
+      this.root.scale.setScalar(desiredScale)
+    }
+
+    /* Live head-bones visibility toggle (1 = hide for FPS, 0 = show). */
+    const hideHead = gameConfig.pcHideHead >= 0.5 ? 1 : 0
+    if (hideHead !== this.lastHideHead) {
+      const visible = hideHead === 0
+      for (const o of this.headBones) o.visible = visible
+      this.lastHideHead = hideHead
+    }
 
     const base = this.resolveBase(snapshot)
     if (this.activeOneShot && base === 'hitreact') {

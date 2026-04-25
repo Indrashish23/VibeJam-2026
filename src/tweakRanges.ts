@@ -97,6 +97,16 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   voiceHitMaxDistance: { min: 8, max: 240, step: 2 },
   voiceHitRolloff: { min: 0.2, max: 4, step: 0.05 },
 
+  pcAvatarYOffset: { min: -2, max: 2, step: 0.01 },
+  pcAvatarForward: { min: -1.5, max: 1.5, step: 0.01 },
+  pcAvatarSide: { min: -1, max: 1, step: 0.01 },
+  pcAvatarScale: { min: 0.3, max: 2, step: 0.01 },
+  pcHideHead: { min: 0, max: 1, step: 1 },
+  pcMouthForward: { min: -0.5, max: 1.6, step: 0.01 },
+  pcMouthHeight: { min: -1, max: 1.4, step: 0.01 },
+  pcMouthSide: { min: -1, max: 1, step: 0.01 },
+  pcCameraHeightBias: { min: -1, max: 1.5, step: 0.01 },
+
   cameraFov: { min: 20, max: 120, step: 1 },
   cameraNear: { min: 0.001, max: 50, step: 0.01 },
   cameraFar: { min: 100, max: CAP, step: 10 },
@@ -213,6 +223,15 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   retroEdgeStrength: 'Retro edge strength',
   ambientIntensity: 'Ambient light',
   sunIntensity: 'Sun strength',
+  pcAvatarYOffset: 'Body Y offset (lift / lower)',
+  pcAvatarForward: 'Body forward offset (negative = behind camera)',
+  pcAvatarSide: 'Body side offset',
+  pcAvatarScale: 'Body uniform scale',
+  pcHideHead: 'Hide head bones (0/1)',
+  pcMouthForward: 'Mouth muzzle forward offset',
+  pcMouthHeight: 'Mouth muzzle height offset',
+  pcMouthSide: 'Mouth muzzle side offset',
+  pcCameraHeightBias: 'Camera height bias (extra eye lift)',
 }
 
 /**
@@ -241,6 +260,24 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   cameraFar: 'Far clipping plane; how far the world is still drawn.',
   retroPixelScale: 'Chunk size of the pixel post-process pass (higher = more retro/chunkier).',
   retroEdgeStrength: 'Edge accent strength in the pixel pass (subtle contour lines).',
+  pcAvatarYOffset:
+    'Lift or lower the rendered monkey body relative to your feet. Use a small negative if your knees stick into the ground.',
+  pcAvatarForward:
+    'Move the body forward (positive) or behind (negative) the camera. Slight negative means you can see your own torso when you look down.',
+  pcAvatarSide:
+    'Shift the body left/right relative to the camera. Usually 0.',
+  pcAvatarScale:
+    'Uniform scale applied to the local monkey body. Default 0.96.',
+  pcHideHead:
+    '1 = hide head bones (default for first-person, prevents camera clipping). 0 = show head.',
+  pcMouthForward:
+    'How far in front of the camera the projectile/voice spawns (where the monkey mouth sits).',
+  pcMouthHeight:
+    'Vertical offset for the mouth spawn relative to the camera (negative = below the camera).',
+  pcMouthSide:
+    'Lateral offset for the mouth spawn (left/right of the camera).',
+  pcCameraHeightBias:
+    'Extra eye-height added to the player camera so you can fine-tune how far inside the head the camera sits.',
 
   ambientIntensity: 'Fill light strength from all directions (shadow softness).',
   sunIntensity: 'Main directional light strength (contrast and shadows).',
@@ -448,6 +485,21 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
     id: 'camera',
     title: 'Camera',
     keys: ['cameraFov', 'cameraNear', 'cameraFar', 'retroPixelScale', 'retroEdgeStrength'],
+  },
+  {
+    id: 'playerCamera',
+    title: 'PlayerCamera (FPS rig)',
+    keys: [
+      'pcCameraHeightBias',
+      'pcAvatarYOffset',
+      'pcAvatarForward',
+      'pcAvatarSide',
+      'pcAvatarScale',
+      'pcHideHead',
+      'pcMouthForward',
+      'pcMouthHeight',
+      'pcMouthSide',
+    ],
   },
   {
     id: 'lighting',

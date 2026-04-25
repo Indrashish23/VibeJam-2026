@@ -263,6 +263,8 @@ const _fp = new Vector3()
 const _camFwd = new Vector3()
 const _camRight = new Vector3()
 const _worldUp = new Vector3(0, 1, 0)
+const _muzzleWorld = new Vector3()
+const _aimDir = new Vector3()
 
 function sleepMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -1164,7 +1166,19 @@ function initGame(lobby: LobbyResult) {
       0.15,
       gameConfig.projectileSizeBase * (1 + gameConfig.projectileSizeChargeMaxBonus * t),
     )
-    const fired = arms.tryFire(speedMul, buf, t, sizeMul)
+
+    /* Build the monkey-mouth muzzle in world space (forward / up / right offsets from the camera) and fire from there. */
+    camera.getWorldDirection(_aimDir)
+    _camFwd.copy(_aimDir).normalize()
+    _camRight.crossVectors(_camFwd, _worldUp)
+    if (_camRight.lengthSq() < 1e-6) _camRight.set(1, 0, 0)
+    _camRight.normalize()
+    _muzzleWorld
+      .copy(camera.position)
+      .addScaledVector(_camFwd, gameConfig.pcMouthForward)
+      .addScaledVector(_worldUp, gameConfig.pcMouthHeight)
+      .addScaledVector(_camRight, gameConfig.pcMouthSide)
+    const fired = arms.tryFire(speedMul, buf, t, sizeMul, _muzzleWorld, _aimDir)
     if (fired) {
       voice.stopVoiceClipPlayback()
       voice.resetChargeMeter()
@@ -1257,6 +1271,11 @@ function initGame(lobby: LobbyResult) {
     return Math.min(6.8, arenaHalf * 0.38)
   }
 
+  /** Effective eye height = base + live bias from PlayerCamera tweaks (clamped to a sane min). */
+  function eyeH(): number {
+    return Math.max(0.2, gameConfig.eyeHeight + gameConfig.pcCameraHeightBias)
+  }
+
   /** Host at +Z, guest at −Z (mirrored) so both players are not stacked on the same spawn. */
   function pvpSpawnZs(spacing: number): { camZ: number; opponentBotZ: number } {
     if (lobby.mode === 'online' && lobby.role === 'guest') {
@@ -1272,7 +1291,7 @@ function initGame(lobby: LobbyResult) {
     const yaw =
       lobby.mode === 'online' && lobby.role === 'guest' ? Math.PI : 0
 
-    camera.position.set(0, gameConfig.eyeHeight, camZ)
+    camera.position.set(0, eyeH(), camZ)
     camera.rotation.reorder('YXZ')
     camera.rotation.set(0, yaw, 0)
 
@@ -1506,7 +1525,7 @@ function initGame(lobby: LobbyResult) {
   syncHud()
 
   function feetY(): number {
-    return camera.position.y - gameConfig.eyeHeight
+    return camera.position.y - eyeH()
   }
 
   /**
@@ -1543,7 +1562,7 @@ function initGame(lobby: LobbyResult) {
     if (bestFloorY > -1e8) {
       const deltaFeet = fy - bestFloorY
       if (deltaFeet <= skin && deltaFeet >= -2.5) {
-        camera.position.y = bestFloorY + gameConfig.eyeHeight
+        camera.position.y = bestFloorY + eyeH()
         if (vy <= 0.55) {
           vy = 0
           grounded = true
@@ -1564,7 +1583,7 @@ function initGame(lobby: LobbyResult) {
     const fy = feetY()
     const deckTop = 0
     if (fy <= deckTop + 0.35 && fy >= deckTop - 4 && vy <= 12) {
-      camera.position.y = deckTop + gameConfig.eyeHeight
+      camera.position.y = deckTop + eyeH()
       vy = Math.min(vy, 0)
       grounded = true
     }
@@ -2030,7 +2049,7 @@ function initGame(lobby: LobbyResult) {
     }
 
     if (isPvp()) {
-      const fy = camera.position.y - gameConfig.eyeHeight
+      const fy = camera.position.y - eyeH()
       if (lobby.mode === 'online' && lobby.role === 'host' && browserHost) {
         browserHost.setPose('host', {
           x: camera.position.x,

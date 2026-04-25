@@ -179,6 +179,31 @@ export const defaultGameConfig = {
   voiceHitRefDistance: 5,
   voiceHitMaxDistance: 96,
   voiceHitRolloff: 1.28,
+
+  /**
+   * PlayerCamera (FPS rig) — tunables for placing the camera inside the monkey
+   * head and where the projectile leaves the face. The camera position itself
+   * is `camera.position`; these add an extra offset from the player position so
+   * you can dial the head/mouth alignment without recompiling.
+   *
+   * pcAvatarFwd/Side: shift the rendered monkey body relative to the camera
+   * (positive forward pushes the body in front of the camera; usually you want
+   * a small negative value so when you look down you can see your own torso).
+   */
+  pcAvatarYOffset: 0,
+  pcAvatarForward: -0.18,
+  pcAvatarSide: 0,
+  /** Avatar uniform scale override (1 = use the default 0.96). */
+  pcAvatarScale: 0.96,
+  /** If 1, hide bones whose names match /head/i so the local model doesn't clip the camera. */
+  pcHideHead: 1,
+
+  /** Mouth muzzle offset relative to the camera position (forward / up / side, in world meters). */
+  pcMouthForward: 0.45,
+  pcMouthHeight: -0.05,
+  pcMouthSide: 0,
+  /** Camera height bias from the default eye height (negative lowers, positive raises). */
+  pcCameraHeightBias: 0,
 } as const
 
 export type GameConfigKey = keyof typeof defaultGameConfig
