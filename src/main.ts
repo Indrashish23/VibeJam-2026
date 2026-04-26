@@ -2254,7 +2254,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     return Math.max(r * 2 + 0.08, eyeH())
   }
 
-  function resolvePlayerCollision(start: Vector3): void {
+  function resolvePlayerCollision(start: Vector3, deltaSeconds: number): void {
     _moveDesired.subVectors(camera.position, start)
     camera.position.copy(start)
 
@@ -2264,6 +2264,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       _moveDesired,
       playerCapsuleRadius(),
       playerCapsuleHeight(),
+      deltaSeconds,
     )
 
     camera.position.add(result.movement)
@@ -2656,7 +2657,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
     dashVel.multiplyScalar(Math.exp(-gameConfig.dashDecay * delta))
 
-    resolvePlayerCollision(_moveStart)
+    resolvePlayerCollision(_moveStart, delta)
 
     if (!groundedBeforeResolve && grounded) {
       voiceDownBoostReady = true

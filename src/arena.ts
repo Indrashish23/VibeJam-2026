@@ -52,49 +52,53 @@ export function getArenaCollisionCuboids(): ArenaCuboid[] {
   ]
 }
 
-/** Ground + thin rim so the playable surface reads as a bounded ring. */
-export function addArena(parent: Object3D): Mesh {
+/**
+ * Default stage: one root group, deck + rim boxes. Layout matches `getArenaCollisionCuboids` 1:1
+ * (same sizes/positions) so Rapier cuboids align with what you see.
+ */
+export function addArena(parent: Object3D): Group {
   const w = gameConfig.groundWidth
   const d = gameConfig.groundDepth
   const h = DECK_THICK
-
-  const ground = new Mesh(
-    new BoxGeometry(w, h, d),
-    new MeshStandardMaterial({
-      color: new Color(0x252528),
-      roughness: 0.97,
-      metalness: 0.03,
-    }),
-  )
-  ground.receiveShadow = true
-  ground.position.set(0, -h / 2, 0)
-  parent.add(ground)
-
   const rimH = RIM_H
   const rimT = RIM_T
+
+  const stage = new Group()
+  stage.name = 'arenaStage'
+  parent.add(stage)
+
+  const deckMat = new MeshStandardMaterial({
+    color: new Color(0x252528),
+    roughness: 0.97,
+    metalness: 0.03,
+  })
+  const deck = new Mesh(new BoxGeometry(w, h, d), deckMat)
+  deck.name = 'arenaDeck'
+  deck.receiveShadow = true
+  deck.position.set(0, -h / 2, 0)
+  stage.add(deck)
+
   const rimMat = new MeshStandardMaterial({
     color: new Color(0x3d3d42),
     roughness: 0.88,
     metalness: 0.08,
   })
 
-  const rimGroup = new Group()
-  parent.add(rimGroup)
-
-  const mkRim = (bw: number, bd: number, px: number, pz: number) => {
+  const mkRim = (name: string, bw: number, bd: number, px: number, pz: number) => {
     const m = new Mesh(new BoxGeometry(bw, rimH, bd), rimMat)
+    m.name = name
     m.receiveShadow = true
     m.castShadow = true
     m.position.set(px, rimH / 2 + 0.001, pz)
-    rimGroup.add(m)
+    stage.add(m)
   }
 
-  mkRim(w + rimT * 2, rimT, 0, d / 2 + rimT / 2)
-  mkRim(w + rimT * 2, rimT, 0, -d / 2 - rimT / 2)
-  mkRim(rimT, d + rimT * 2, w / 2 + rimT / 2, 0)
-  mkRim(rimT, d + rimT * 2, -w / 2 - rimT / 2, 0)
+  mkRim('arenaRimN', w + rimT * 2, rimT, 0, d / 2 + rimT / 2)
+  mkRim('arenaRimS', w + rimT * 2, rimT, 0, -d / 2 - rimT / 2)
+  mkRim('arenaRimE', rimT, d + rimT * 2, w / 2 + rimT / 2, 0)
+  mkRim('arenaRimW', rimT, d + rimT * 2, -w / 2 - rimT / 2, 0)
 
-  return ground
+  return stage
 }
 
 export function isBlastZone(pos: Vector3): boolean {

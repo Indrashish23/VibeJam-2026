@@ -140,6 +140,9 @@ export class TerrainPhysics {
       this.terrainColliders.push(collider)
       this.terrainHandles.add(collider.handle)
     }
+    /* Broadphase/narrowphase need at least one step before character queries see terrain. */
+    this.world.timestep = 1 / 60
+    this.world.step()
   }
 
   private ensureActor(id: string, radius: number, totalHeight: number): CharacterActor {
@@ -177,10 +180,15 @@ export class TerrainPhysics {
     desiredMovement: Vector3,
     radius: number,
     totalHeight: number,
+    deltaSeconds: number,
   ): CharacterMoveResult {
     const actor = this.ensureActor(id, radius, totalHeight)
     const centerY = feet.y + colliderCenterY(actor.totalHeight)
-    actor.body.setTranslation({ x: feet.x, y: centerY, z: feet.z }, false)
+    actor.body.setTranslation({ x: feet.x, y: centerY, z: feet.z }, true)
+
+    const dt = Math.min(1 / 30, Math.max(1 / 360, deltaSeconds))
+    this.world.timestep = dt
+    this.world.step()
 
     actor.controller.computeColliderMovement(
       actor.collider,

@@ -556,7 +556,7 @@ export class BotFighter {
     this.faceToward(worldPos)
   }
 
-  private resolveTerrainCollision(terrain: TerrainPhysics, start: Vector3): void {
+  private resolveTerrainCollision(terrain: TerrainPhysics, start: Vector3, deltaSeconds: number): void {
     _moveDesired.subVectors(this.root.position, start)
     this.root.position.copy(start)
     const radius = Math.max(0.05, gameConfig.botBodyRadius)
@@ -567,6 +567,7 @@ export class BotFighter {
       _moveDesired,
       radius,
       totalHeight,
+      deltaSeconds,
     )
     this.root.position.add(result.movement)
     this.grounded = result.grounded
@@ -892,7 +893,7 @@ export class BotFighter {
     this.root.position.x += (this.velocity.x + this.knockXZ.x) * delta
     this.root.position.z += (this.velocity.z + this.knockXZ.z) * delta
 
-    this.resolveTerrainCollision(terrain, _moveStart)
+    this.resolveTerrainCollision(terrain, _moveStart, delta)
 
     if (this.hurtPhase === 'air' && !this.hurtFinisher) {
       const elapsed = performance.now() - this.hurtAirSince
