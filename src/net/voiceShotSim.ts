@@ -23,7 +23,6 @@ export function simulateVoiceShotHit(
   const maxR = gameConfig.punchMaxRange
   const size = Math.max(0.15, shotScale)
   const reach = gameConfig.punchHitRadius * size + gameConfig.botBodyRadius * 0.88
-  const minTravel = maxR * 0.06
   const g = gameConfig.fistGravity
   const drag = gameConfig.fistAirDrag
 
@@ -64,7 +63,7 @@ export function simulateVoiceShotHit(
       const dy = py - oppCenter.y
       const dz = pz - oppCenter.z
       const dist = Math.hypot(dx, dy * 0.75, dz)
-      if (dist < reach && s > minTravel) {
+      if (dist < reach) {
         const h = Math.hypot(dx, dz)
         const kx = h > 1e-6 ? dx / h : 0
         const kz = h > 1e-6 ? dz / h : 1
@@ -88,7 +87,7 @@ export function simulateVoiceShotHit(
     const dz = pos.z - oppCenter.z
     const dist = Math.hypot(dx, dy * 0.75, dz)
 
-    if (dist < reach && traveled > minTravel) {
+    if (dist < reach) {
       const h = Math.hypot(dx, dz)
       const kx = h > 1e-6 ? dx / h : 0
       const kz = h > 1e-6 ? dz / h : 1

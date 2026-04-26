@@ -61,7 +61,7 @@ export function postProcessVoiceDecodeBuffer(
     i = b + 1
   }
 
-  const pad = Math.max(0, Math.floor(sr * 0.004))
+  const pad = Math.max(0, Math.floor(sr * 0.03))
   const segs: { s0: number; s1: number }[] = []
   for (const r of runs) {
     let s0 = r.a * hop
@@ -73,7 +73,8 @@ export function postProcessVoiceDecodeBuffer(
   if (segs.length === 0) return simpleEdgeAbsTrim(ctx, buf, chN)
 
   if (segs.length === 1) {
-    return copyTimeRange(ctx, buf, segs[0]!.s0, segs[0]!.s1)
+    const out = copyTimeRange(ctx, buf, segs[0]!.s0, segs[0]!.s1)
+    return out.duration >= 0.08 ? out : buf
   }
 
   const out = concatTimeRanges(ctx, buf, segs, chN)

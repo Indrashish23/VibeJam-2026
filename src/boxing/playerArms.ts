@@ -21,6 +21,7 @@ type ProjectileState = {
   /** Muzzle offset in camera space at fire time. */
   shoulderLocal: Vector3
   spawnPos: Vector3
+  prevPos: Vector3
   /** Decoded clip to play on hit (optional). */
   hitAudio: AudioBuffer | null
   /** 0..1 at fire time: damage / knock lerp. */
@@ -69,7 +70,6 @@ export class PlayerArms {
   private readonly lastShotOrigin = new Vector3()
   private readonly lastShotVel = new Vector3()
 
-  private readonly _shoulderW = new Vector3()
   private readonly _tmp = new Vector3()
   private readonly _meshQuat = new Quaternion()
 
@@ -96,6 +96,7 @@ export class PlayerArms {
       vel: new Vector3(),
       shoulderLocal: new Vector3(),
       spawnPos: new Vector3(),
+      prevPos: new Vector3(),
       hitAudio: null,
       shotT: 0,
       sizeMul: 1,
@@ -154,6 +155,7 @@ export class PlayerArms {
 
     this.proj.pos.copy(this._tmp)
     this.proj.spawnPos.copy(this.proj.pos)
+    this.proj.prevPos.copy(this.proj.pos)
     this.proj.hitAudio = hitAudio
     this.proj.shotT = Math.max(0, Math.min(1, shotT))
     this.proj.sizeMul = Math.max(0.15, Math.min(6, sizeMul))
@@ -200,6 +202,7 @@ export class PlayerArms {
 
     this.proj.pos.copy(this.hitscanOrigin)
     this.proj.spawnPos.copy(this.hitscanOrigin)
+    this.proj.prevPos.copy(this.hitscanOrigin)
     this.proj.vel.copy(this.hitscanDir).multiplyScalar(speed)
     this.proj.hitAudio = hitAudio
     this.proj.shotT = Math.max(0, Math.min(1, shotT))
@@ -269,6 +272,7 @@ export class PlayerArms {
 
   private integrate(delta: number): void {
     if (!this.proj.flying) return
+    this.proj.prevPos.copy(this.proj.pos)
 
     const maxR = gameConfig.punchMaxRange
     const g = gameConfig.fistGravity
@@ -366,13 +370,35 @@ export class PlayerArms {
     out.copy(this.proj.pos)
   }
 
+  /**
+   * Continuous hit point against a target sphere/ellipsoid: closest point on the
+   * projectile segment this frame. This keeps close-range shots from tunneling
+   * through the opponent between frame updates.
+   */
+  getProjectileContactPoint(target: Vector3, out: Vector3): void {
+    if (!this.proj.active) {
+      out.copy(this.camera.position)
+      return
+    }
+    if (this.hitscanMode) {
+      this.getHeadscanContactPoint(target, out)
+      return
+    }
+    this._tmp.subVectors(this.proj.pos, this.proj.prevPos)
+    const lenSq = this._tmp.lengthSq()
+    if (lenSq < 1e-8) {
+      out.copy(this.proj.pos)
+      return
+    }
+    const t = Math.max(0, Math.min(1, target.clone().sub(this.proj.prevPos).dot(this._tmp) / lenSq))
+    out.copy(this.proj.prevPos).addScaledVector(this._tmp, t)
+  }
+
   canDealHit(): boolean {
     if (this.dealt || !this.proj.active) return false
     if (this.hitscanMode) return true
     if (!this.proj.flying) return false
-    this.shoulderWorld(this._shoulderW)
-    const travel = this._tmp.subVectors(this.proj.pos, this._shoulderW).length()
-    return travel > gameConfig.punchMaxRange * 0.08
+    return true
   }
 
   markDealt(): void {

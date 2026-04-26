@@ -287,7 +287,7 @@ export const defaultGameConfig = {
    */
   voiceClipExtractToActiveSound: 1,
   /** When extraction is on, keep 12ms windows with RMS &gt; peak × this (0.04–0.55). */
-  voiceClipExtractRmsRatio: 0.2,
+  voiceClipExtractRmsRatio: 0.12,
 
   /**
    * Online: WebRTC full-duplex live voice (0/1), spatialized to opponent position.

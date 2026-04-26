@@ -108,7 +108,7 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   proximityVoipEnabled: { min: 0, max: 1, step: 1 },
   proximityVoipOutputMul: { min: 0, max: 2, step: 0.02 },
   proximityVoipRefDistance: { min: 1, max: 50, step: 0.5 },
-  proximityVoipMaxDistance: { min: 8, max: 220, step: 2 },
+  proximityVoipMaxDistance: { min: 8, max: 240, step: 2 },
   proximityVoipRolloff: { min: 0.2, max: 3, step: 0.05 },
   voiceRecordMaxSec: { min: 2, max: 60, step: 0.5 },
   voiceLookdownPitchMin: { min: 0.08, max: 1.35, step: 0.02 },
@@ -291,7 +291,7 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   voiceSilenceBeforeDecaySec: 'Quiet mic seconds before charge decays',
   voiceChargeDecayPerSec: 'Charge units lost per sec while decaying',
   voiceChargeRisePerSec: 'Max charge rise per sec at full loudness (LMB)',
-  winRingoutPresentDelayMs: 'Win: ms after ring-out before GAME',
+  winRingoutPresentDelayMs: 'GAME splash min hold before rematch UI (ms)',
   voiceOverloadThreshold: 'Overload UI shake',
   voiceShooterReplayFadeSec: 'Hit replay fade (s)',
   voiceDeliveryPlaybackRate: 'Hit voice delivery pitch (×)',
@@ -688,7 +688,7 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   voiceHitRolloff: 'How sharp the falloff is between ref and max distance.',
 
   winRingoutPresentDelayMs:
-    'After the opponent is eliminated (ring-out), wait this long before the GAME flash and win card.',
+    'Minimum time the GAME splash stays up before the match-end / rematch UI appears.',
   botBodyRadius: 'Enemy capsule radius (bigger = easier to hit, harder to ring-out).',
   botPunchRange: 'Distance at which the smart bot tries to throw a fist.',
   botHitRadius: 'Hit detection radius on the bot’s projectile.',
@@ -868,7 +868,6 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'voiceRecordSfxVolumeMul',
       'voiceReleaseSfxEnabled',
       'voiceReleaseSfxVolumeMul',
-      'proximityVoipEnabled',
       'proximityVoipOutputMul',
       'proximityVoipRefDistance',
       'proximityVoipMaxDistance',
@@ -884,7 +883,6 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'blastMargin',
       'showBlastBounds',
       'blastY',
-      'winRingoutPresentDelayMs',
     ],
   },
   {
@@ -1005,7 +1003,12 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
   },
   {
     id: 'uiVfx',
-    title: 'UI and Vfx',
-    keys: ['stunnedStarSpreadMul', 'stunnedStarSpinMul', 'stunnedStarScaleMul'],
+    title: 'Animation / UI VFX',
+    keys: [
+      'winRingoutPresentDelayMs',
+      'stunnedStarSpreadMul',
+      'stunnedStarSpinMul',
+      'stunnedStarScaleMul',
+    ],
   },
 ]

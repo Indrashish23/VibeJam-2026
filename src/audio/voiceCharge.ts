@@ -276,7 +276,9 @@ export class VoiceChargeManager {
       const ab = await blob.arrayBuffer()
       const copy = ab.slice(0)
       const raw = await this.ctx.decodeAudioData(copy)
-      return postProcessVoiceDecodeBuffer(this.ctx, raw)
+      const processed = postProcessVoiceDecodeBuffer(this.ctx, raw)
+      if (processed.duration < 0.08 && raw.duration >= 0.08) return raw
+      return processed
     } catch {
       return null
     }

@@ -381,7 +381,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   function tryAttachProximityVoip(): void {
     if (proxVoipLocalAttached) return
     if (!isOnline || lobby.mode !== 'online' || !rtcGame) return
-    if (gameConfig.proximityVoipEnabled < 0.5) return
     if (rtcGame.channel?.readyState !== 'open') return
     if (voiceInputBlocked) return
     const t = voice.cloneAudioTrackForVoip()
@@ -389,6 +388,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     rtcGame.attachLocalProximityVoipTrack(t)
     if (voice.isChargeRecordingNow()) rtcGame.setLocalVoipGameRecordingBlock(true)
     proxVoipLocalAttached = true
+  }
+
+  function setLocalVoipRecordingBlocked(blocked: boolean): void {
+    tryAttachProximityVoip()
+    rtcGame?.setLocalVoipGameRecordingBlock(blocked)
   }
 
   function disposeProxVoip3dPlayer(): void {
@@ -401,10 +405,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   function onRemoteProximityVoipStream(stream: MediaStream): void {
-    if (gameConfig.proximityVoipEnabled < 0.5) {
-      for (const tr of stream.getTracks()) tr.stop()
-      return
-    }
     disposeProxVoip3dPlayer()
     proxVoip3d = createProximityVoip3d(
       stream,
@@ -936,7 +936,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     rtcGame = createWebRtcGameChannel({
       role: lobby.role,
       signalSend: (o) => sendMp(o),
-      includeProximityVoip: gameConfig.proximityVoipEnabled >= 0.5,
+      includeProximityVoip: true,
       onRemoteVoipStream: onRemoteProximityVoipStream,
       onGameJsonString: (raw) => {
         let data: Record<string, unknown>
@@ -2270,15 +2270,26 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         if (hitPos) voice.playBufferSpatialAt(buf, hitPos, camera, { victimHitReceive: true })
         else voice.playBuffer(buf)
         pendingVictimHitPosByShotId.delete(data.shotId)
+      } else if (!buf && pendingVictimVoiceShotIds.has(data.shotId)) {
+        pendingVictimVoiceShotIds.delete(data.shotId)
+        pendingVictimHitPosByShotId.delete(data.shotId)
+        voice.resumeAudio()
+        voice.playFallbackHitSound()
       }
     } catch {
+      if (pendingVictimVoiceShotIds.has(data.shotId)) {
+        pendingVictimVoiceShotIds.delete(data.shotId)
+        pendingVictimHitPosByShotId.delete(data.shotId)
+        voice.resumeAudio()
+        voice.playFallbackHitSound()
+      }
       debugMpLog('peer voiceShot decode/inject failed')
     }
   }
 
   async function releaseVoiceShot(): Promise<void> {
     const blob = await voice.finishChargeRecording()
-    rtcGame?.setLocalVoipGameRecordingBlock(false)
+    setLocalVoipRecordingBlocked(false)
     queueLocalAnimOneShot('shooting')
     const buf = await voice.decodeRecording(blob)
     const raw = voiceInputBlocked
@@ -2408,7 +2419,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   /** Pistol mode: RMB released — decode recording, slice equally into round(charge × magSize) snippets. */
   async function finishPistolReload(): Promise<void> {
     const blob = await voice.finishChargeRecording()
-    rtcGame?.setLocalVoipGameRecordingBlock(false)
+    setLocalVoipRecordingBlocked(false)
     /* Visual telegraph: keep charge frozen for the HUD to show ammo/cap fill from now on. */
     const cap = pistolMagSize()
     const liveCharge = voiceInputBlocked
@@ -2802,6 +2813,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   async function playWinGameSplashSequence(): Promise<void> {
     if (!winGameSplashEl) return
     showWinGameSplash()
+    const minHoldMs = Math.max(250, gameConfig.winRingoutPresentDelayMs)
+    const started = performance.now()
     await new Promise<void>((resolve) => {
       let done = false
       const finish = () => {
@@ -2817,8 +2830,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       window.setTimeout(() => {
         winGameSplashTxtEl?.removeEventListener('animationend', onEnd)
         finish()
-      }, 1300)
+      }, minHoldMs)
     })
+    const remaining = minHoldMs - (performance.now() - started)
+    if (remaining > 0) await sleepMs(remaining)
     hideWinGameSplash()
   }
 
@@ -2916,6 +2931,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       enemyPercent = 0
       syncHud()
       browserHost?.reset()
+      if (lobby.mode === 'online' && lobby.role === 'host') {
+        sendGameTraffic({ type: 'seriesHostBeginNext' })
+      }
       hideMatchEndAndRematchUiFully()
 
       if (rematchSeqLayer && rematchBlackSheet) {
@@ -3184,10 +3202,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       if (arms.isHeadscan()) {
         arms.getHeadscanContactPoint(bot.bodyCenter, _fp)
       } else {
-        arms.getProjectileWorld(_fp)
+        arms.getProjectileContactPoint(bot.bodyCenter, _fp)
       }
       const reach = arms.projectileRadius() + gameConfig.botBodyRadius * 0.88
-      if (_fp.distanceTo(bot.bodyCenter) < reach) {
+      const dxHit = _fp.x - bot.bodyCenter.x
+      const dyHit = _fp.y - bot.bodyCenter.y
+      const dzHit = _fp.z - bot.bodyCenter.z
+      if (Math.hypot(dxHit, dyHit * 0.75, dzHit) < reach) {
         const shotT = arms.peekShotT()
         const isPistolShot = arms.peekIsPistolShot()
         const hitAudio = arms.takeHitAudio()
@@ -3523,7 +3544,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         voice.startChargeRecording()
         if (voice.isChargeRecordingNow()) {
           playLocalVoiceRecordStartSfx()
-          rtcGame?.setLocalVoipGameRecordingBlock(true)
+          setLocalVoipRecordingBlocked(true)
         }
         if (!voiceInputBlocked) queueLocalAnimOneShot('recording')
         chargingRmb = true
@@ -3540,7 +3561,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     voice.startChargeRecording()
     if (voice.isChargeRecordingNow()) {
       playLocalVoiceRecordStartSfx()
-      rtcGame?.setLocalVoipGameRecordingBlock(true)
+      setLocalVoipRecordingBlocked(true)
     }
     if (!voiceInputBlocked) queueLocalAnimOneShot('recording')
     chargingLmb = true
@@ -3740,6 +3761,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let debugMpHb = 0
   function animate() {
     const delta = Math.min(clock.getDelta(), gameConfig.movementMaxDelta)
+    if (isOnline && lobby.mode === 'online' && !proxVoipLocalAttached) {
+      tryAttachProximityVoip()
+    }
     proxVoip3d?.tick()
     const wantsUnlit = gameConfig.lightingUnlitMode >= 0.5
     if (wantsUnlit !== lastUnlitMode) {
@@ -3822,6 +3846,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       voice.resetChargeMeter()
       voiceChargeSmoothed = 0
       void voice.finishChargeRecording()
+      setLocalVoipRecordingBlocked(false)
       if (chargeBarFill) chargeBarFill.style.width = '0%'
       bot.setRecordingTelegraph(false)
     }
