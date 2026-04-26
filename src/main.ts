@@ -61,7 +61,11 @@ import {
 /** Stunned FX SVGs live in `public/ui/` so Vercel/production resolves them without bundling `../Assets/`. */
 const stunnedEffectBgUrl = `${import.meta.env.BASE_URL}ui/StunnedEffectBg.svg`
 const stunnedStarUrl = `${import.meta.env.BASE_URL}ui/StunnedStar.svg`
-const skyboxEquirectUrl = `${import.meta.env.BASE_URL}skyboxes/vz_clear_ocean_back.png`
+/** Same resolution as monkey GLBs: bundled from `Assets/` so dev/prod always load this file, not a stale `public/` copy. */
+const skyboxEquirectUrl = new URL(
+  '../Assets/Skyboxes/vz_clear_ocean_back.png',
+  import.meta.url,
+).href
 
 /** Production without baked host: open once with `?pk=your-deployment.partykit.dev` (stored in session). */
 try {
