@@ -38,7 +38,7 @@ export const defaultGameConfig = {
   /** Key directional sun strength (shadow caster). */
   sunIntensity: 1.85,
   /** 1 = force unlit materials (ignores scene lighting) for flat readability/debugging. */
-  lightingUnlitMode: 0,
+  lightingUnlitMode: 1,
   movementMaxDelta: 0.1,
 
   gravity: 38,
