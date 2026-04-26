@@ -293,6 +293,12 @@ export class VoiceChargeManager {
     src.playbackRate.value = Math.max(0.5, Math.min(2.6, r))
   }
 
+  private voiceClipOutGain(c: AudioContext): GainNode {
+    const g = c.createGain()
+    g.gain.value = Math.max(0, Math.min(4, gameConfig.voiceClipPlaybackGainMul))
+    return g
+  }
+
   /** Short fallback when decode fails — simple blip. */
   playFallbackHitSound(): void {
     this.stopVoiceClipPlayback()
@@ -336,7 +342,9 @@ export class VoiceChargeManager {
       const src = c.createBufferSource()
       src.buffer = buf
       this.applyVoiceDeliveryRate(src)
-      src.connect(c.destination)
+      const out = this.voiceClipOutGain(c)
+      src.connect(out)
+      out.connect(c.destination)
       this.trackPlayback(() => {
         try {
           src.stop(0)
@@ -345,6 +353,7 @@ export class VoiceChargeManager {
         }
         try {
           src.disconnect()
+          out.disconnect()
         } catch {
           /* ignore */
         }
@@ -367,7 +376,9 @@ export class VoiceChargeManager {
       const src = c.createBufferSource()
       src.buffer = buf
       this.applyVoiceDeliveryRate(src)
-      src.connect(c.destination)
+      const out = this.voiceClipOutGain(c)
+      src.connect(out)
+      out.connect(c.destination)
       this.trackPlayback(() => {
         try {
           src.stop(0)
@@ -376,6 +387,7 @@ export class VoiceChargeManager {
         }
         try {
           src.disconnect()
+          out.disconnect()
         } catch {
           /* ignore */
         }
@@ -432,7 +444,9 @@ export class VoiceChargeManager {
       src.buffer = buf
       this.applyVoiceDeliveryRate(src)
       src.connect(panner)
-      panner.connect(c.destination)
+      const out = this.voiceClipOutGain(c)
+      panner.connect(out)
+      out.connect(c.destination)
       this.trackPlayback(() => {
         try {
           src.stop(0)
@@ -442,6 +456,7 @@ export class VoiceChargeManager {
         try {
           src.disconnect()
           panner.disconnect()
+          out.disconnect()
         } catch {
           /* ignore */
         }
@@ -450,6 +465,7 @@ export class VoiceChargeManager {
         try {
           src.disconnect()
           panner.disconnect()
+          out.disconnect()
         } catch {
           /* ignore */
         }
@@ -479,7 +495,8 @@ export class VoiceChargeManager {
       const gain = c.createGain()
       src.buffer = buf
       const t0 = c.currentTime
-      gain.gain.setValueAtTime(0.85, t0)
+      const mul = Math.max(0, Math.min(4, gameConfig.voiceClipPlaybackGainMul))
+      gain.gain.setValueAtTime(0.85 * mul, t0)
       gain.gain.linearRampToValueAtTime(0, t0 + fadeDur)
       src.connect(gain)
       gain.connect(c.destination)
@@ -555,7 +572,9 @@ export class VoiceChargeManager {
       src.buffer = buf
       this.applyVoiceDeliveryRate(src)
       src.connect(panner)
-      panner.connect(c.destination)
+      const out = this.voiceClipOutGain(c)
+      panner.connect(out)
+      out.connect(c.destination)
       this.trackPlayback(() => {
         try {
           src.stop(0)
@@ -565,6 +584,7 @@ export class VoiceChargeManager {
         try {
           src.disconnect()
           panner.disconnect()
+          out.disconnect()
         } catch {
           /* ignore */
         }
@@ -573,6 +593,7 @@ export class VoiceChargeManager {
         try {
           src.disconnect()
           panner.disconnect()
+          out.disconnect()
         } catch {
           /* ignore */
         }

@@ -117,6 +117,7 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   voiceOverloadThreshold: { min: 0.8, max: 2.5, step: 0.02 },
   voiceShooterReplayFadeSec: { min: 0.2, max: 6, step: 0.05 },
   voiceDeliveryPlaybackRate: { min: 0.7, max: 2.4, step: 0.02 },
+  voiceClipPlaybackGainMul: { min: 0.5, max: 3, step: 0.05 },
   voiceRecordMaxSec: { min: 2, max: 60, step: 0.5 },
   voiceLookdownPitchMin: { min: 0.08, max: 1.35, step: 0.02 },
   voiceLookdownBoostVy: { min: 0, max: 24, step: 0.2 },
@@ -319,6 +320,7 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   voiceOverloadThreshold: 'Overload UI shake',
   voiceShooterReplayFadeSec: 'Hit replay fade (s)',
   voiceDeliveryPlaybackRate: 'Hit voice delivery pitch (×)',
+  voiceClipPlaybackGainMul: 'Hit voice playback volume (×)',
   voiceRecordMaxSec: 'Voice record max (s)',
   voiceLookdownPitchMin: 'Look-down boost min |pitch| (rad)',
   voiceLookdownBoostVy: 'Look-down shot vy boost',
@@ -675,6 +677,8 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   voiceShooterReplayFadeSec: 'How long the victim-side replay of your voice fades out after a hit.',
   voiceDeliveryPlaybackRate:
     'Web Audio playback rate on hit/replay: 1 = normal, higher = faster + higher pitch (chipmunk). Live mic monitoring is unchanged.',
+  voiceClipPlaybackGainMul:
+    'Linear gain on decoded voice clips when they play on hit / spatial / replay. 1 = previous default loudness; raise so voice cuts through SFX (may clip if very high).',
   voiceRecordMaxSec:
     'Hard cap on how many seconds of microphone audio are kept per charge (smaller = less data over the network).',
   voiceLookdownPitchMin:
@@ -853,7 +857,7 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
   {
     id: 'voiceType',
     title: 'Voice type',
-    keys: ['voiceDeliveryPlaybackRate'],
+    keys: ['voiceDeliveryPlaybackRate', 'voiceClipPlaybackGainMul'],
   },
   {
     id: 'sound',

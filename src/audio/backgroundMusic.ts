@@ -15,6 +15,8 @@ const TRACKS = [
 let audio: HTMLAudioElement | null = null
 let currentIndex = 0
 let started = false
+/** When true (during an active match), BGM is silent and paused. */
+let gameplaySuppressed = false
 
 function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n))
@@ -22,7 +24,22 @@ function clamp01(n: number): number {
 
 function applyVolumeFromConfig(): void {
   if (!audio) return
-  audio.volume = clamp01(gameConfig.bgmVolume * getBgmMul())
+  const vol = gameplaySuppressed ? 0 : clamp01(gameConfig.bgmVolume * getBgmMul())
+  audio.volume = vol
+}
+
+/** Call when entering/leaving the 3D match so menu/lobby can keep BGM if desired. */
+export function setBackgroundMusicGameplaySuppressed(suppressed: boolean): void {
+  gameplaySuppressed = suppressed
+  if (!audio) return
+  applyVolumeFromConfig()
+  if (suppressed) {
+    void audio.pause()
+  } else if (started) {
+    void audio.play().catch(() => {
+      /* autoplay / tab policy */
+    })
+  }
 }
 
 function pickNextIndex(): void {

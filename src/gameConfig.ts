@@ -252,6 +252,11 @@ export const defaultGameConfig = {
    * higher = faster + higher “chipmunk” pitch). Does not affect live monitoring.
    */
   voiceDeliveryPlaybackRate: 1.64,
+  /**
+   * Linear gain on Web Audio playback of voice clips on hit / spatial / replay (1 = unity;
+   * raise to hear shots over SFX; very high may clip).
+   */
+  voiceClipPlaybackGainMul: 1.45,
 
   /** Max seconds of mic captured per charge (MediaRecorder cap). */
   voiceRecordMaxSec: 10,

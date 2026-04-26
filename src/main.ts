@@ -57,7 +57,11 @@ import {
   loadUserSettings,
   getCameraShakeMul,
 } from './userSettingsStorage'
-import { initBackgroundMusic, wireBackgroundMusicToFirstGesture } from './audio/backgroundMusic'
+import {
+  initBackgroundMusic,
+  setBackgroundMusicGameplaySuppressed,
+  wireBackgroundMusicToFirstGesture,
+} from './audio/backgroundMusic'
 import { playFootstepOneShot } from './audio/footstepsSfx'
 import { playJumpOneShot, playLandOneShot } from './audio/playerMoveSfx'
 import { mountUserSettingsPanel, setUserSettingsPointerControls } from './userSettingsUI'
@@ -350,6 +354,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     debugMpLog(
       `initGame role=${lobby.mode === 'online' ? lobby.role : 'offline'} mp=${lobby.mode} map=${lobby.mapId}`,
     )
+
+  setBackgroundMusicGameplaySuppressed(true)
 
   let tweaksPanelOpen = false
   let leaveMatchDialogOpen = false
