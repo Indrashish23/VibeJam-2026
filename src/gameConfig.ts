@@ -18,6 +18,20 @@ export const defaultGameConfig = {
   retroPixelScale: 2.35,
   /** Pixel pass edge hint strength (subtle retro contour). */
   retroEdgeStrength: 0.12,
+  /** Skybox base color channels (0–1) for the procedural sky dome. */
+  skyboxColorR: 0.102,
+  skyboxColorG: 0.137,
+  skyboxColorB: 0.188,
+  /** Clouds: threshold where noise starts showing clouds (higher = fewer clouds). */
+  skyCloudCoverage: 0.5,
+  /** Clouds: softness of cloud edges in the procedural mask. */
+  skyCloudSoftness: 0.16,
+  /** Clouds: noise frequency scale (higher = smaller/more clouds). */
+  skyCloudScale: 1.35,
+  /** Clouds: advection speed across the dome. */
+  skyCloudSpeed: 0.022,
+  /** Clouds: blend strength over the base sky color. */
+  skyCloudOpacity: 0.4,
 
   /** Fill light; keep low so the directional sun reads harsh against the skybox. */
   ambientIntensity: 0.22,
@@ -80,7 +94,7 @@ export const defaultGameConfig = {
   /** If the mic is still blocked, LMB uses this charge (0–1) for a test shot; should be ≥ voiceMinChargeToFire to fire. */
   voiceDryFireT: 0.82,
   /** Minimum charge bar (0–1) before a release spawns a fist. */
-  voiceMinChargeToFire: 0.55,
+  voiceMinChargeToFire: 0.36,
   /** Percent added to victim at minimum valid charge (at voiceMinChargeToFire). */
   percentGainMin: 4,
   /** Percent added at full charge (1). */
@@ -116,9 +130,9 @@ export const defaultGameConfig = {
   /** Invulnerability after player stand-up recover (ms) — golden screen shine. */
   playerPostKnockInvulnMs: 1500,
   /** Peak camera shake amplitude when your fist connects (world units). */
-  hitScreenShake: 0.22,
+  hitScreenShake: 0.54,
   /** Peak opacity for white hit flash overlay (0–1). */
-  hitFlashOpacity: 0.82,
+  hitFlashOpacity: 0.92,
   /** PvP: camera shake when your authoritative shot connects (host applies locally; guest via message). */
   pvpAggressorHitShake: 0.12,
   /** PvP: flash opacity when your authoritative shot connects. */
@@ -143,7 +157,7 @@ export const defaultGameConfig = {
   /** When 1, draw a green ring-out boundary loop on the deck (Tweaks → Arena). */
   showBlastBounds: 0,
   /** Fall below this Y on blast zone (death plane). */
-  blastY: -12,
+  blastY: -38,
   botBodyRadius: 0.72,
   botPunchRange: 3.8,
   botHitRadius: 0.95,

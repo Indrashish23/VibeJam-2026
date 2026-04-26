@@ -22,6 +22,7 @@ export type TweaksPanelHooks = {
   camera: PerspectiveCamera
   ambient: import('three').AmbientLight
   sun: import('three').DirectionalLight
+  syncVisualsFromConfig?: () => void
   onToggle: (open: boolean) => void
   /** Called after any slider / reset / debug-toggle edit (debounce in main). */
   onConfigChanged?: () => void
@@ -137,6 +138,7 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
     hooks.controls.pointerSpeed = gameConfig.mouseSensitivity
     hooks.ambient.intensity = gameConfig.ambientIntensity
     hooks.sun.intensity = gameConfig.sunIntensity
+    hooks.syncVisualsFromConfig?.()
   }
 
   const body = document.createElement('div')

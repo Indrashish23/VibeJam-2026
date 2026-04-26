@@ -50,6 +50,7 @@ import {
 import { LowEndDitherShader } from './post/lowEndDitherShader'
 import { readStoredPlayerName, savePlayerName } from './playerName'
 import { setPartyKitHostSession, getPartyKitHost } from './net/partyKitHost'
+import { createProceduralSky } from './skyDome'
 import {
   bootstrapMpDebugUrl,
   isMpDebugMode,
@@ -282,9 +283,6 @@ if (DEBUG_MP && debugMpPanel) {
   debugMpCopyBtn?.addEventListener('click', () => void copyMpDiagnosticReport())
 }
 
-/** Fallback clear color if the equirect sky texture fails to load. */
-const HUB_SKY = 0x1a2330
-
 const _knDir = new Vector3()
 const _fp = new Vector3()
 const _camFwd = new Vector3()
@@ -381,7 +379,11 @@ function initGame(lobby: LobbyResult) {
   const pendingVictimVoiceShotIds = new Set<string>()
 
   const scene = new Scene()
-  scene.background = new Color(HUB_SKY)
+  scene.background = new Color(
+    gameConfig.skyboxColorR,
+    gameConfig.skyboxColorG,
+    gameConfig.skyboxColorB,
+  )
 
   const camera = new PerspectiveCamera(
     gameConfig.cameraFov,
@@ -442,6 +444,7 @@ function initGame(lobby: LobbyResult) {
 
   const hubRoot = new Group()
   scene.add(hubRoot)
+  const skyDome = createProceduralSky(scene)
 
   const ground = addArena(hubRoot)
   const colliders: Mesh[] = [ground]
@@ -2767,6 +2770,7 @@ function initGame(lobby: LobbyResult) {
     )
     pixelPass.depthEdgeStrength = Math.max(0, gameConfig.retroEdgeStrength)
     pixelPass.normalEdgeStrength = Math.max(0, gameConfig.retroEdgeStrength * 0.65)
+    skyDome.update(delta, camera.position)
 
     /* Debug capsule visualization (red wireframe). Same radius/height/offset for player and foe. */
     {
@@ -3049,6 +3053,9 @@ function initGame(lobby: LobbyResult) {
       camera,
       ambient,
       sun,
+      syncVisualsFromConfig: () => {
+        skyDome.syncFromConfig()
+      },
       onToggle(open) {
         tweaksPanelOpen = open
         if (open) clearMovementKeys()
