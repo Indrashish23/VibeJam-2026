@@ -54,9 +54,58 @@ function normalizeSceneName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
 }
 
+/**
+ * GLB / Blender object naming for static Rapier trimesh: include `col_` (preferred),
+ * `coll_…`, or `collision…` in the name. Parents count — meshes can be children of a
+ * `col_…` group. Avoid naming visuals `color…` / `colum…` (those are ignored by the
+ * `col` prefix path below).
+ */
 function isCollisionNodeName(name: string): boolean {
   const n = normalizeSceneName(name)
-  return n.startsWith('col_') || n.startsWith('coll_') || n.startsWith('collision_')
+  if (n.startsWith('col_') || n.startsWith('coll_') || n.startsWith('collision_')) return true
+  if (n === 'collision' || n.startsWith('collision')) return true
+  if (
+    n.length >= 4 &&
+    n.startsWith('col') &&
+    !n.startsWith('color') &&
+    !n.startsWith('colum')
+  ) {
+    return true
+  }
+  return false
+}
+
+/**
+ * Empties or any node with a world position; case-insensitive after normalize.
+ * Player A: spawn_player, spawn_a, spawn_p1, player_spawn, …
+ * Player B: spawn_player_2, spawn_b, spawn_p2, …
+ */
+function spawnSlotFromName(normalized: string): SpawnSlot | null {
+  if (
+    normalized === 'spawn_player' ||
+    normalized === 'spawn_a' ||
+    normalized === 'spawn_p1' ||
+    normalized === 'player_spawn' ||
+    normalized === 'player_spawn_1' ||
+    normalized === 'spawn_1' ||
+    normalized === 'p1' ||
+    normalized === 'spawna'
+  ) {
+    return 'a'
+  }
+  if (
+    normalized === 'spawn_player_2' ||
+    normalized === 'spawn_player2' ||
+    normalized === 'spawn_b' ||
+    normalized === 'spawn_p2' ||
+    normalized === 'player_spawn_2' ||
+    normalized === 'spawn_2' ||
+    normalized === 'p2' ||
+    normalized === 'spawnb'
+  ) {
+    return 'b'
+  }
+  return null
 }
 
 function hasCollisionMarker(node: Object3D): boolean {
@@ -141,9 +190,10 @@ async function loadIslandMap(_scene: Scene, hubRoot: Group): Promise<MapHandle> 
   gltf.scene.updateMatrixWorld(true)
   gltf.scene.traverse((node) => {
     const normalizedName = normalizeSceneName(node.name)
-    if (normalizedName === 'spawn_player') {
+    const slot = spawnSlotFromName(normalizedName)
+    if (slot === 'a') {
       spawnA = node.getWorldPosition(new Vector3())
-    } else if (normalizedName === 'spawn_player_2' || normalizedName === 'spawn_player2') {
+    } else if (slot === 'b') {
       spawnB = node.getWorldPosition(new Vector3())
     }
 
@@ -154,6 +204,19 @@ async function loadIslandMap(_scene: Scene, hubRoot: Group): Promise<MapHandle> 
       if (hasCollisionMarker(mesh)) collisionMeshes.push(mesh)
     }
   })
+
+  if (collisionMeshes.length === 0) {
+    console.warn(
+      '[map:island] No collision meshes. Name objects (or a parent) with col_*, coll_*, or collision* so Rapier can build trimesh colliders.',
+    )
+  } else {
+    console.info(`[map:island] ${collisionMeshes.length} collision mesh(es), trimesh → Rapier.`)
+  }
+  if (!spawnA || !spawnB) {
+    console.warn(
+      '[map:island] Missing player spawn(s); using bbox fallbacks. Add empties named spawn_player (A) and spawn_player_2 (B) (or spawn_a / spawn_b, etc.).',
+    )
+  }
 
   /* Fallback keeps broken test exports playable, but named spawn markers win. */
   const bbox = new Box3().setFromObject(gltf.scene)

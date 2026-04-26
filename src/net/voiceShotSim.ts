@@ -19,7 +19,7 @@ export function simulateVoiceShotHit(
   vel: { x: number; y: number; z: number },
   oppCenter: { x: number; y: number; z: number },
   shotScale = 1,
-): { hit: false } | { hit: true; dx: number; dz: number } {
+): { hit: false } | { hit: true; dx: number; dz: number; hx: number; hy: number; hz: number } {
   const maxR = gameConfig.punchMaxRange
   const size = Math.max(0.15, shotScale)
   const reach = gameConfig.punchHitRadius * size + gameConfig.botBodyRadius * 0.88
@@ -49,7 +49,7 @@ export function simulateVoiceShotHit(
     const h = Math.hypot(dx, dz)
     const kx = h > 1e-6 ? dx / h : 0
     const kz = h > 1e-6 ? dz / h : 1
-    return { hit: true, dx: kx, dz: kz }
+    return { hit: true, dx: kx, dz: kz, hx: px, hy: py, hz: pz }
   }
 
   if (g < 1e-6 && drag < 1e-6) {
@@ -68,7 +68,7 @@ export function simulateVoiceShotHit(
         const h = Math.hypot(dx, dz)
         const kx = h > 1e-6 ? dx / h : 0
         const kz = h > 1e-6 ? dz / h : 1
-        return { hit: true, dx: kx, dz: kz }
+        return { hit: true, dx: kx, dz: kz, hx: px, hy: py, hz: pz }
       }
     }
     return { hit: false }
@@ -92,7 +92,7 @@ export function simulateVoiceShotHit(
       const h = Math.hypot(dx, dz)
       const kx = h > 1e-6 ? dx / h : 0
       const kz = h > 1e-6 ? dz / h : 1
-      return { hit: true, dx: kx, dz: kz }
+      return { hit: true, dx: kx, dz: kz, hx: pos.x, hy: pos.y, hz: pos.z }
     }
 
     if (drag > 1e-6) {

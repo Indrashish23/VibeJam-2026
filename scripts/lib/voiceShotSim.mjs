@@ -47,7 +47,7 @@ export function simulateVoiceShotHit(origin, vel, oppCenter, shotScale = 1) {
     const h = Math.hypot(dx, dz)
     const kx = h > 1e-6 ? dx / h : 0
     const kz = h > 1e-6 ? dz / h : 1
-    return { hit: true, dx: kx, dz: kz }
+    return { hit: true, dx: kx, dz: kz, hx: px, hy: py, hz: pz }
   }
 
   if (g < 1e-6 && drag < 1e-6) {
@@ -66,7 +66,7 @@ export function simulateVoiceShotHit(origin, vel, oppCenter, shotScale = 1) {
         const h = Math.hypot(dx, dz)
         const kx = h > 1e-6 ? dx / h : 0
         const kz = h > 1e-6 ? dz / h : 1
-        return { hit: true, dx: kx, dz: kz }
+        return { hit: true, dx: kx, dz: kz, hx: px, hy: py, hz: pz }
       }
     }
     return { hit: false }
@@ -90,7 +90,7 @@ export function simulateVoiceShotHit(origin, vel, oppCenter, shotScale = 1) {
       const h = Math.hypot(dx, dz)
       const kx = h > 1e-6 ? dx / h : 0
       const kz = h > 1e-6 ? dz / h : 1
-      return { hit: true, dx: kx, dz: kz }
+      return { hit: true, dx: kx, dz: kz, hx: pos.x, hy: pos.y, hz: pos.z }
     }
 
     if (drag > 1e-6) {

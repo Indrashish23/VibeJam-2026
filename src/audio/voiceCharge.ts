@@ -282,6 +282,12 @@ export class VoiceChargeManager {
     this.voicePlaybackCleanup.push(cleanup)
   }
 
+  /** Hit / spatial / replay delivery: Web Audio playback rate (pitch + speed; chipmunk when &gt;1). */
+  private applyVoiceDeliveryRate(src: AudioBufferSourceNode): void {
+    const r = gameConfig.voiceDeliveryPlaybackRate
+    src.playbackRate.value = Math.max(0.5, Math.min(2.6, r))
+  }
+
   /** Short fallback when decode fails — simple blip. */
   playFallbackHitSound(): void {
     this.stopVoiceClipPlayback()
@@ -324,6 +330,7 @@ export class VoiceChargeManager {
     try {
       const src = c.createBufferSource()
       src.buffer = buf
+      this.applyVoiceDeliveryRate(src)
       src.connect(c.destination)
       this.trackPlayback(() => {
         try {
@@ -353,8 +360,10 @@ export class VoiceChargeManager {
     }
     try {
       const fadeSec = Math.max(0.12, gameConfig.voiceShooterReplayFadeSec)
-      const fadeDur = Math.min(fadeSec, Math.max(0.18, buf.duration * 0.95))
       const src = c.createBufferSource()
+      this.applyVoiceDeliveryRate(src)
+      const maxWall = buf.duration / Math.max(0.2, src.playbackRate.value)
+      const fadeDur = Math.min(fadeSec, Math.max(0.18, maxWall * 0.95))
       const gain = c.createGain()
       src.buffer = buf
       const t0 = c.currentTime
@@ -432,6 +441,7 @@ export class VoiceChargeManager {
 
       const src = c.createBufferSource()
       src.buffer = buf
+      this.applyVoiceDeliveryRate(src)
       src.connect(panner)
       panner.connect(c.destination)
       this.trackPlayback(() => {

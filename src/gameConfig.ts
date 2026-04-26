@@ -214,6 +214,11 @@ export const defaultGameConfig = {
   voiceOverloadThreshold: 0.85,
   /** Shooter hit replay: fade gain to zero over this many seconds (capped vs clip length). */
   voiceShooterReplayFadeSec: 1.35,
+  /**
+   * Web Audio `playbackRate` for mic clips on **hit / replay delivery** (1 = original speed & pitch;
+   * higher = faster + higher “chipmunk” pitch). Does not affect live monitoring.
+   */
+  voiceDeliveryPlaybackRate: 1.64,
 
   /** Max seconds of mic captured per charge (MediaRecorder cap). */
   voiceRecordMaxSec: 10,

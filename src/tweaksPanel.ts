@@ -116,7 +116,7 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
   const sub = document.createElement('span')
   sub.className = 'tweaks-panel-sub'
   sub.textContent =
-    'T or − opens · Category menu (Gameplay + Projectile + others) · hover any row for a tip · Esc closes'
+    'T or − opens · Category menu (Gameplay + Projectile + Voice type + others) · hover any row for a tip · Esc closes'
   header.appendChild(title)
   header.appendChild(sub)
   panel.appendChild(header)

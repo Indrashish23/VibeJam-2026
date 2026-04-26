@@ -91,8 +91,6 @@ const percentYouEl = document.getElementById('percent-you')
 const percentFoeEl = document.getElementById('percent-foe')
 const percentLabelYouEl = document.getElementById('percent-label-you')
 const percentLabelFoeEl = document.getElementById('percent-label-foe')
-const seriesScoreOverlay = document.getElementById('series-score-overlay') as HTMLDivElement | null
-const seriesScoreLineEl = document.getElementById('series-score-line') as HTMLParagraphElement | null
 const victimHitFlashEl = document.getElementById('victim-hit-flash') as HTMLDivElement | null
 const stunnedOverlayEl = document.getElementById('stunned-overlay') as HTMLDivElement | null
 const stunnedBgEl = document.getElementById('stunned-bg') as HTMLImageElement | null
@@ -712,7 +710,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let playerPercent = 0
   let enemyPercent = 0
   let matchOutcome: null | 'win' | 'lose' = null
-  /** Best-of-3 rounds won (ring-out / elimination). */
+  /** Match stats for HUD/debug; PvP now ends on first ring-out. */
   let seriesWinsSelf = 0
   let seriesWinsOpp = 0
   let seriesTransitionActive = false
@@ -1109,52 +1107,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     triggerStunnedHitOverlay()
   }
 
-  async function flashSeriesScoreLineThenHide(): Promise<void> {
-    if (!seriesScoreOverlay || !seriesScoreLineEl) return
-    const you = displayPlayerName()
-    const opp = opponentHudName()
-    seriesScoreLineEl.textContent = `${you} ${seriesWinsSelf} – ${opp} ${seriesWinsOpp}`
-    seriesScoreOverlay.hidden = false
-    seriesScoreOverlay.classList.remove('series-score-overlay--pulse')
-    void seriesScoreOverlay.offsetWidth
-    seriesScoreOverlay.classList.add('series-score-overlay--pulse')
-    await sleepMs(2400)
-    seriesScoreOverlay.classList.remove('series-score-overlay--pulse')
-    seriesScoreOverlay.hidden = true
-  }
-
-  async function beginNextSeriesRoundFromElimination(): Promise<void> {
-    browserHost?.reset()
-    if (lobby.mode === 'online' && lobby.role === 'host' && isAuthoritativeListenServer()) {
-      sendMp({ type: 'seriesHostBeginNext' })
-    }
-    winFinisher = null
-    hideWinGameSplash()
-    playerPercent = 0
-    enemyPercent = 0
-    matchOutcome = null
-    pendingOutgoingRematchId = null
-    pendingIncomingRematchId = null
-    hideMatchEndAndRematchUiFully()
-    if (matchEndOverlay) matchEndOverlay.hidden = true
-    spawnActors()
-    syncHud()
-    await runPvpCountdown321()
-    tryPointerLock()
-  }
-
   async function concludeRoundElimination(iWonRound: boolean): Promise<void> {
     if (seriesTransitionActive || matchOutcome) return
     seriesTransitionActive = true
     try {
       if (iWonRound) seriesWinsSelf += 1
       else seriesWinsOpp += 1
-      await flashSeriesScoreLineThenHide()
-      if (seriesWinsSelf >= 2 || seriesWinsOpp >= 2) {
-        endMatch(seriesWinsSelf >= 2 ? 'win' : 'lose', { seriesFinal: true })
-        return
-      }
-      await beginNextSeriesRoundFromElimination()
+      endMatch(iWonRound ? 'win' : 'lose')
     } finally {
       seriesTransitionActive = false
     }
@@ -1524,11 +1483,21 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         typeof data.dx === 'number' &&
         typeof data.dz === 'number'
       ) {
+        let knockFromWorld: Vector3 | undefined
+        if (
+          typeof data.hx === 'number' &&
+          typeof data.hy === 'number' &&
+          typeof data.hz === 'number'
+        ) {
+          _fp.set(data.hx, data.hy, data.hz)
+          knockFromWorld = _fp
+        }
         /* `playerPercent` was just set from auth payload — that is always the local player's launch %. */
         applyPeerMeleeHit(data.dx, data.dz, {
           authoritative: true,
           victimPercent: playerPercent,
           overkill150: crossedLaunch150,
+          knockFromWorld,
         })
         const sid = data.shotId
         if (typeof sid === 'string') {
@@ -2267,30 +2236,25 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     tryPointerLock()
   }
 
-  function endMatch(outcome: 'win' | 'lose', opts?: { seriesFinal?: boolean }): void {
+  function endMatch(outcome: 'win' | 'lose'): void {
     if (matchOutcome) return
     clearMovementKeys()
     hideWinGameSplash()
     winFinisher = null
     matchOutcome = outcome
+    triggerHitImpactFx()
+    voice.resumeAudio()
+    voice.playFallbackHitSound()
     controls.unlock()
     if (matchEndOverlay) matchEndOverlay.hidden = false
     if (matchEndTitle) {
-      if (opts?.seriesFinal) {
-        matchEndTitle.textContent = outcome === 'win' ? 'You win the set!' : 'You lose the set!'
-      } else {
-        matchEndTitle.textContent = outcome === 'win' ? 'You win!' : 'You lose!'
-      }
+      matchEndTitle.textContent = outcome === 'win' ? 'You win!' : 'You lose!'
     }
     if (matchEndSub) {
-      if (opts?.seriesFinal) {
-        matchEndSub.textContent = `Best of 3 · ${seriesWinsSelf} – ${seriesWinsOpp}`
-      } else {
-        matchEndSub.textContent =
-          outcome === 'win'
-            ? 'Opponent got launched out of bounds.'
-            : 'You were launched out of bounds.'
-      }
+      matchEndSub.textContent =
+        outcome === 'win'
+          ? 'Opponent got launched out of bounds. Rematch to play again.'
+          : 'You were launched out of bounds. Rematch to play again.'
     }
     if (isOnline && lobby.mode === 'online') {
       showMatchEndRematchControlsDefault()

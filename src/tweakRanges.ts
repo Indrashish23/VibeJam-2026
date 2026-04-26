@@ -99,6 +99,7 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   winRingoutPresentDelayMs: { min: 0, max: 8000, step: 100 },
   voiceOverloadThreshold: { min: 0.8, max: 2.5, step: 0.02 },
   voiceShooterReplayFadeSec: { min: 0.2, max: 6, step: 0.05 },
+  voiceDeliveryPlaybackRate: { min: 0.7, max: 2.4, step: 0.02 },
   voiceRecordMaxSec: { min: 2, max: 60, step: 0.5 },
   voiceLookdownPitchMin: { min: 0.08, max: 1.35, step: 0.02 },
   voiceLookdownBoostVy: { min: 0, max: 24, step: 0.2 },
@@ -265,6 +266,7 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   winRingoutPresentDelayMs: 'Win: ms after ring-out before GAME',
   voiceOverloadThreshold: 'Overload UI shake',
   voiceShooterReplayFadeSec: 'Hit replay fade (s)',
+  voiceDeliveryPlaybackRate: 'Hit voice delivery pitch (×)',
   voiceRecordMaxSec: 'Voice record max (s)',
   voiceLookdownPitchMin: 'Look-down boost min |pitch| (rad)',
   voiceLookdownBoostVy: 'Look-down shot vy boost',
@@ -536,6 +538,8 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   voiceChargePeakHoldSec: 'Unused legacy field.',
   voiceOverloadThreshold: 'Charge level where the UI bar starts shaking (overload warning).',
   voiceShooterReplayFadeSec: 'How long the victim-side replay of your voice fades out after a hit.',
+  voiceDeliveryPlaybackRate:
+    'Web Audio playback rate on hit/replay: 1 = normal, higher = faster + higher pitch (chipmunk). Live mic monitoring is unchanged.',
   voiceRecordMaxSec:
     'Hard cap on how many seconds of microphone audio are kept per charge (smaller = less data over the network).',
   voiceLookdownPitchMin:
@@ -650,6 +654,11 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'voiceShotSpeedMaxMul',
       'voiceMinChargeToFire',
     ],
+  },
+  {
+    id: 'voiceType',
+    title: 'Voice type',
+    keys: ['voiceDeliveryPlaybackRate'],
   },
   {
     id: 'arena',
