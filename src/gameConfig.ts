@@ -47,9 +47,9 @@ export const defaultGameConfig = {
   /** How many extra mid-air jumps you get per landing cycle (1 = double jump). */
   airJumpsMax: 1,
   /** Camera shake peak when you jump (world units; stacks with hit shake via max). */
-  jumpFxShake: 0.3,
+  jumpFxShake: 0,
   /** Brief white overlay strength on jump (0–1); separate from punch hit-flash. */
-  jumpFxWhiteFlash: 0.26,
+  jumpFxWhiteFlash: 0,
   /** Cyan radial burst opacity peak on jump (screen blend; 0–1). */
   jumpFxBurstOpacity: 0.58,
   playerRadius: 0.38,
