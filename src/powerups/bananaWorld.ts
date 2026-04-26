@@ -4,6 +4,7 @@ import {
   Group,
   Mesh,
   MeshStandardMaterial,
+  PointLight,
   Vector3,
   type PerspectiveCamera,
   type Scene,
@@ -12,6 +13,14 @@ import { gameConfig } from '../gameConfig'
 import type { MapHandle, MapId } from '../maps'
 import type { TerrainPhysics } from '../physics/terrainPhysics'
 const _aim = new Vector3()
+
+function disposeMeshWithLights(m: Mesh): void {
+  m.traverse((o) => {
+    if (o instanceof PointLight) o.dispose()
+  })
+  m.geometry.dispose()
+  ;(m.material as MeshStandardMaterial).dispose()
+}
 
 export type BananaPeelRecord = {
   id: string
@@ -33,14 +42,17 @@ export type BananaPickupRecord = {
 function makePickupMesh(): Mesh {
   const geo = new BoxGeometry(0.55, 0.55, 0.55)
   const mat = new MeshStandardMaterial({
-    color: new Color(0x2a6aa8),
-    emissive: new Color(0x33aaff),
-    emissiveIntensity: 0.85,
-    metalness: 0.2,
-    roughness: 0.35,
+    color: new Color(0xffd12a),
+    emissive: new Color(0xffa800),
+    emissiveIntensity: 1.2,
+    metalness: 0.1,
+    roughness: 0.36,
   })
   const m = new Mesh(geo, mat)
   m.name = 'bananaPickupCrate'
+  const glow = new PointLight(0xffe588, 0.85, 5.2, 1.35)
+  glow.name = 'bananaPickupGlow'
+  m.add(glow)
   m.castShadow = true
   m.receiveShadow = true
   return m
@@ -49,11 +61,11 @@ function makePickupMesh(): Mesh {
 function makePeelMesh(): Mesh {
   const geo = new BoxGeometry(0.9, 0.05, 0.55)
   const mat = new MeshStandardMaterial({
-    color: new Color(0xffd84a),
-    emissive: new Color(0xffb020),
-    emissiveIntensity: 0.5,
-    metalness: 0.15,
-    roughness: 0.45,
+    color: new Color(0xffe14a),
+    emissive: new Color(0xffc820),
+    emissiveIntensity: 0.72,
+    metalness: 0.1,
+    roughness: 0.44,
   })
   const m = new Mesh(geo, mat)
   m.name = 'bananaPeel'
@@ -65,9 +77,11 @@ function makePeelMesh(): Mesh {
 function makeFlyingMesh(): Mesh {
   const geo = new BoxGeometry(0.32, 0.12, 0.4)
   const mat = new MeshStandardMaterial({
-    color: new Color(0xf5e6a0),
-    emissive: new Color(0xeecc55),
-    emissiveIntensity: 0.4,
+    color: new Color(0xffe22a),
+    emissive: new Color(0xffb800),
+    emissiveIntensity: 0.6,
+    metalness: 0.08,
+    roughness: 0.45,
   })
   const m = new Mesh(geo, mat)
   m.castShadow = true
@@ -168,13 +182,11 @@ export class BananaWorld {
   clear(): void {
     for (const p of this.pickups) {
       this.scene.remove(p.mesh)
-      p.mesh.geometry.dispose()
-      ;(p.mesh.material as MeshStandardMaterial).dispose()
+      disposeMeshWithLights(p.mesh)
     }
     for (const p of this.peels) {
       this.scene.remove(p.mesh)
-      p.mesh.geometry.dispose()
-      ;(p.mesh.material as MeshStandardMaterial).dispose()
+      disposeMeshWithLights(p.mesh)
     }
     this.pickups = []
     this.peels = []
@@ -184,8 +196,7 @@ export class BananaWorld {
   clearFlying(): void {
     if (!this.flying) return
     this.scene.remove(this.flying.mesh)
-    this.flying.mesh.geometry.dispose()
-    ;(this.flying.mesh.material as MeshStandardMaterial).dispose()
+    disposeMeshWithLights(this.flying.mesh)
     this.flying = null
   }
 
@@ -255,8 +266,7 @@ export class BananaWorld {
     if (i < 0) return
     const p = this.pickups[i]!
     this.scene.remove(p.mesh)
-    p.mesh.geometry.dispose()
-    ;(p.mesh.material as MeshStandardMaterial).dispose()
+    disposeMeshWithLights(p.mesh)
     this.pickups.splice(i, 1)
   }
 
@@ -283,8 +293,7 @@ export class BananaWorld {
     if (i < 0) return
     const p = this.peels[i]!
     this.scene.remove(p.mesh)
-    p.mesh.geometry.dispose()
-    ;(p.mesh.material as MeshStandardMaterial).dispose()
+    disposeMeshWithLights(p.mesh)
     this.peels.splice(i, 1)
   }
 

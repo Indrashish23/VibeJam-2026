@@ -445,7 +445,7 @@ export const defaultGameConfig = {
   /**
    * Dev relative level for one-shot footstep clips (0–1); × Settings SFX × `sfxTweakVolumeMul`.
    */
-  footstepVolumeMul: 1,
+  footstepVolumeMul: 0.3,
   /**
    * Tweaks “SFX” (0–1) applied on top of Settings → Sound effects. Chained in `src/audio/sfxChain.ts`.
    */
@@ -466,11 +466,11 @@ export const defaultGameConfig = {
    */
   voiceRecordSfxBaseMul: 0.2,
   /** Dev level × (0–1) for `RecordingSound.mp3` on top of `voiceRecordSfxBaseMul`. */
-  voiceRecordSfxVolumeMul: 0.85,
+  voiceRecordSfxVolumeMul: 0.22,
   /** 0 = off. Local only: one-shot when a voice **projectile** is launched (not dry-fire). */
   voiceReleaseSfxEnabled: 1,
   /** Dev level × (0–1) for `ReleaseSound.ogg`; × master SFX in Settings. */
-  voiceReleaseSfxVolumeMul: 0.9,
+  voiceReleaseSfxVolumeMul: 0.26,
 } as const
 
 export type GameConfigKey = keyof typeof defaultGameConfig

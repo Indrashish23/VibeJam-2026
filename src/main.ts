@@ -810,6 +810,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   ): void {
     if (victimRole === myPvpRole()) {
       playerBananaSlipUntil = performance.now() + Math.max(0, durationMs)
+      triggerStunnedHitOverlay()
     } else {
       bot.applyBananaSlipMs(durationMs)
     }
@@ -1146,7 +1147,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   function syncStunnedFxOverlay(): void {
     if (!stunnedFxActive || !stunnedOverlayEl) return
     const now = performance.now()
-    const done = playerHurt === 'none' && now >= playerInvulnUntil
+    const done =
+      playerHurt === 'none' && now >= playerInvulnUntil && !isPlayerBananaSlipNow()
     if (done) hideStunnedFxOverlay()
   }
 
@@ -3286,6 +3288,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
               )
             ) {
               playerBananaSlipUntil = performance.now() + gameConfig.bananaSlipMs
+              triggerStunnedHitOverlay()
               bananaWorld.removePeelById(pl.id)
             } else if (
               !bot.isBananaSlipNow() &&
