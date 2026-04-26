@@ -2231,6 +2231,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           ? arms.tryHeadscanFire(speedMul, buf, t, sizeMul, camera.position, _aimDir)
           : arms.tryFire(speedMul, buf, t, sizeMul, _muzzleWorld, _aimDir)
     if (fired) {
+      playLocalVoiceRecordReleaseSfx()
       voice.stopVoiceClipPlayback()
       voice.resetChargeMeter()
       voiceChargeSmoothed = 0
@@ -2421,6 +2422,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           ? arms.tryHeadscanFire(speedMul, snippetBuf, t, sizeMul, camera.position, _aimDir, fireOpts)
           : arms.tryFire(speedMul, snippetBuf, t, sizeMul, _muzzleWorld, _aimDir, fireOpts)
     if (!fired) return
+
+    playLocalVoiceRecordReleaseSfx()
 
     /* Consume one round; clear the magazine when emptied so the HUD prompt swaps to "Hold RMB". */
     pistolNextSlot += 1
@@ -3444,14 +3447,12 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   function onMouseUp(e: MouseEvent): void {
     if (e.button === 2 && chargingRmb) {
       chargingRmb = false
-      playLocalVoiceRecordReleaseSfx()
       void finishPistolReload()
       return
     }
     if (e.button !== 0) return
     if (!chargingLmb) return
     chargingLmb = false
-    playLocalVoiceRecordReleaseSfx()
     void releaseVoiceShot()
   }
 

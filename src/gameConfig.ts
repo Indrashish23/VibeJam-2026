@@ -303,6 +303,14 @@ export const defaultGameConfig = {
   /** Pistol mode: ms between each +1 round revealed during the reload animation. */
   pistolReloadStepMs: 80,
 
+  /**
+   * Decoded voice clip: keep only high-energy "sound wave" windows (0 = raw decode, 1 = on).
+   * Cuts most idle room/ambient; see `voiceClipExtractRmsRatio`.
+   */
+  voiceClipExtractToActiveSound: 1,
+  /** When extraction is on, keep 12ms windows with RMS &gt; peak × this (0.04–0.55). */
+  voiceClipExtractRmsRatio: 0.2,
+
   /** Proximity-style hit audio: distance at which rolloff starts (world units). */
   voiceHitRefDistance: 5,
   voiceHitMaxDistance: 96,
@@ -440,9 +448,9 @@ export const defaultGameConfig = {
   landSfxVolumeMul: 1,
   /** 0 = off. Local only: one-shot when mic charge recording actually starts. */
   voiceRecordSfxEnabled: 1,
-  /** Dev level × (0–1) for `RecordingSound.ogg`; × master SFX in Settings. */
+  /** Dev level × (0–1) for `RecordingSound.mp3` (one-shot is then × 0.2); × SFX in Settings. */
   voiceRecordSfxVolumeMul: 0.85,
-  /** 0 = off. Local only: one-shot on release of charge (LMB or pistol RMB). */
+  /** 0 = off. Local only: one-shot when a voice **projectile** is launched (not dry-fire). */
   voiceReleaseSfxEnabled: 1,
   /** Dev level × (0–1) for `ReleaseSound.ogg`; × master SFX in Settings. */
   voiceReleaseSfxVolumeMul: 0.9,

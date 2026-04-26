@@ -1,7 +1,8 @@
 import { gameConfig } from '../gameConfig'
 import { getSfxChainMul } from './sfxChain'
 
-const URL_RECORD = new URL('../../Assets/SFX/Footsteps/RecordingSound.ogg', import.meta.url).href
+const URL_RECORD = new URL('../../Assets/SFX/Footsteps/RecordingSound.mp3', import.meta.url).href
+const RECORD_SFX_OUT_MUL = 0.2
 const URL_RELEASE = new URL('../../Assets/SFX/Footsteps/ReleaseSound.ogg', import.meta.url).href
 
 let currentRecording: HTMLAudioElement | null = null
@@ -30,7 +31,7 @@ export function playLocalVoiceRecordStartSfx(): void {
   stopLocalVoiceRecordUiSfx()
   const a = new Audio(URL_RECORD)
   currentRecording = a
-  a.volume = g
+  a.volume = Math.max(0, Math.min(1, g * RECORD_SFX_OUT_MUL))
   a.loop = false
   const clear = () => {
     if (currentRecording === a) currentRecording = null

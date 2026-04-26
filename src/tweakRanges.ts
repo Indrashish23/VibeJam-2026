@@ -118,6 +118,8 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   voiceShooterReplayFadeSec: { min: 0.2, max: 6, step: 0.05 },
   voiceDeliveryPlaybackRate: { min: 0.7, max: 2.4, step: 0.02 },
   voiceClipPlaybackGainMul: { min: 0.5, max: 3, step: 0.05 },
+  voiceClipExtractToActiveSound: { min: 0, max: 1, step: 1 },
+  voiceClipExtractRmsRatio: { min: 0.04, max: 0.55, step: 0.02 },
   voiceRecordMaxSec: { min: 2, max: 60, step: 0.5 },
   voiceLookdownPitchMin: { min: 0.08, max: 1.35, step: 0.02 },
   voiceLookdownBoostVy: { min: 0, max: 24, step: 0.2 },
@@ -321,6 +323,8 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   voiceShooterReplayFadeSec: 'Hit replay fade (s)',
   voiceDeliveryPlaybackRate: 'Hit voice delivery pitch (×)',
   voiceClipPlaybackGainMul: 'Hit voice playback volume (×)',
+  voiceClipExtractToActiveSound: 'Decode: clip to active sound (0/1)',
+  voiceClipExtractRmsRatio: 'Decode: RMS / peak to keep a window',
   voiceRecordMaxSec: 'Voice record max (s)',
   voiceLookdownPitchMin: 'Look-down boost min |pitch| (rad)',
   voiceLookdownBoostVy: 'Look-down shot vy boost',
@@ -435,9 +439,9 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   landSfxEnabled: 'Land one-shot (0/1, local)',
   landSfxVolumeMul: 'Land: dev gain (× SFX chain)',
   voiceRecordSfxEnabled: 'Voice: record start SFX (0/1, local)',
-  voiceRecordSfxVolumeMul: 'Voice: record start level × (0–1)',
-  voiceReleaseSfxEnabled: 'Voice: release SFX (0/1, local)',
-  voiceReleaseSfxVolumeMul: 'Voice: release level × (0–1)',
+  voiceRecordSfxVolumeMul: 'Voice: record start level × (0–1) ×0.2 base',
+  voiceReleaseSfxEnabled: 'Voice: “release” SFX on shot (0/1, local)',
+  voiceReleaseSfxVolumeMul: 'Voice: release level × (0–1) for shot launch',
 }
 
 /**
@@ -568,10 +572,11 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   landSfxVolumeMul: 'Dev gain for landing; multiplied by the SFX chain (Settings × Tweaks SFX).',
   voiceRecordSfxEnabled:
     '0 = no sound when you start holding to charge a voice shot. 1 = play RecordingSound.ogg (local only, not sent over network).',
-  voiceRecordSfxVolumeMul: 'Gain for the record-start one-shot; multiplied by the SFX chain (Settings × Tweaks SFX).',
+  voiceRecordSfxVolumeMul:
+    'Gain for the record-start one-shot; multiplied by the SFX chain, then a fixed 0.2 (RecordingSound.mp3 is loud).',
   voiceReleaseSfxEnabled:
-    '0 = no sound on release. 1 = play ReleaseSound.ogg when you let go of charge (local only).',
-  voiceReleaseSfxVolumeMul: 'Gain for the release one-shot; multiplied by the SFX chain (Settings × Tweaks SFX).',
+    '0 = no one-shot. 1 = play ReleaseSound.ogg when a voice **projectile** is actually created (not dry-fires).',
+  voiceReleaseSfxVolumeMul: 'Gain for that launch one-shot; multiplied by the SFX chain (Settings × Tweaks SFX).',
 
   ambientIntensity: 'Fill light strength from all directions (shadow softness).',
   sunIntensity: 'Main directional light strength (contrast and shadows).',
@@ -679,6 +684,10 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
     'Web Audio playback rate on hit/replay: 1 = normal, higher = faster + higher pitch (chipmunk). Live mic monitoring is unchanged.',
   voiceClipPlaybackGainMul:
     'Linear gain on decoded voice clips when they play on hit / spatial / replay. 1 = previous default loudness; raise so voice cuts through SFX (may clip if very high).',
+  voiceClipExtractToActiveSound:
+    '1 = after decode, drop low-RMS windows and trim idle room/ambient, keeping the voiced “peaks” only. 0 = use the raw recording (full clip).',
+  voiceClipExtractRmsRatio:
+    'For each 12ms hop window, keep if RMS is above (peak window RMS) × this. Higher = stricter, less background; too high can clip words.',
   voiceRecordMaxSec:
     'Hard cap on how many seconds of microphone audio are kept per charge (smaller = less data over the network).',
   voiceLookdownPitchMin:
@@ -857,7 +866,12 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
   {
     id: 'voiceType',
     title: 'Voice type',
-    keys: ['voiceDeliveryPlaybackRate', 'voiceClipPlaybackGainMul'],
+    keys: [
+      'voiceDeliveryPlaybackRate',
+      'voiceClipPlaybackGainMul',
+      'voiceClipExtractToActiveSound',
+      'voiceClipExtractRmsRatio',
+    ],
   },
   {
     id: 'sound',

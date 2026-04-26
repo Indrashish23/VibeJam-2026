@@ -1,5 +1,6 @@
 import type { PerspectiveCamera } from 'three'
 import { Vector3 } from 'three'
+import { postProcessVoiceDecodeBuffer } from './voiceBufferPostProcess'
 import { gameConfig } from '../gameConfig'
 
 const _listenerPos = new Vector3()
@@ -265,7 +266,8 @@ export class VoiceChargeManager {
     try {
       const ab = await blob.arrayBuffer()
       const copy = ab.slice(0)
-      return await this.ctx.decodeAudioData(copy)
+      const raw = await this.ctx.decodeAudioData(copy)
+      return postProcessVoiceDecodeBuffer(this.ctx, raw)
     } catch {
       return null
     }
