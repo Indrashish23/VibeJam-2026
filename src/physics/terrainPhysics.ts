@@ -1,6 +1,7 @@
 import RAPIER, {
   type Collider,
   type KinematicCharacterController,
+  type QueryFilterFlags,
   type RigidBody,
 } from '@dimforge/rapier3d-compat'
 import {
@@ -27,6 +28,11 @@ export type CharacterMoveResult = {
 
 const _v = new Vector3()
 const _m = new Matrix4()
+/** No query exclusions — some bundlers/runtime left `undefined` filter flags misinterpreted. */
+const QUERY_NO_EXCLUDE = 0 as QueryFilterFlags
+const MAX_CHARACTER_TRANSLATION_PER_SOLVE = 0.42
+/** Avoid huge single-frame impulses (knockback) exploding substep count. */
+const MAX_DESIRED_MOVEMENT_PER_FRAME = 7.5
 
 function attrAsPosition(geometry: BufferGeometry): BufferAttribute | null {
   const pos = geometry.getAttribute('position')
@@ -140,6 +146,15 @@ export class TerrainPhysics {
       this.terrainColliders.push(collider)
       this.terrainHandles.add(collider.handle)
     }
+    if (this.terrainHandles.size === 0) {
+      console.warn(
+        '[terrain] No mesh/cuboid colliders — adding emergency floor so the player does not fall forever.',
+      )
+      const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.5, 0))
+      const collider = this.world.createCollider(RAPIER.ColliderDesc.cuboid(400, 0.5, 400).setFriction(1), body)
+      this.terrainFixedBodies.push(body)
+      this.terrainHandles.add(collider.handle)
+    }
     /* Broadphase/narrowphase need at least one step before character queries see terrain. */
     this.world.timestep = 1 / 60
     this.world.step()
@@ -183,54 +198,69 @@ export class TerrainPhysics {
     deltaSeconds: number,
   ): CharacterMoveResult {
     const actor = this.ensureActor(id, radius, totalHeight)
-    const centerY = feet.y + colliderCenterY(actor.totalHeight)
-    actor.body.setTranslation({ x: feet.x, y: centerY, z: feet.z }, true)
-
     const dt = Math.min(1 / 30, Math.max(1 / 360, deltaSeconds))
     this.world.timestep = dt
-    this.world.step()
 
-    actor.controller.computeColliderMovement(
-      actor.collider,
-      desiredMovement,
-      undefined,
-      undefined,
-      (collider) => this.terrainHandles.has(collider.handle),
-    )
+    const dm = desiredMovement.clone()
+    const dmLen = dm.length()
+    if (dmLen > MAX_DESIRED_MOVEMENT_PER_FRAME) dm.multiplyScalar(MAX_DESIRED_MOVEMENT_PER_FRAME / dmLen)
 
-    const rawMove = actor.controller.computedMovement()
-    const movement = new Vector3(rawMove.x, rawMove.y, rawMove.z)
-    actor.body.setTranslation(
-      {
-        x: feet.x + movement.x,
-        y: centerY + movement.y,
-        z: feet.z + movement.z,
-      },
-      false,
-    )
+    const mag = dm.length()
+    const n = Math.max(1, Math.ceil(mag / MAX_CHARACTER_TRANSLATION_PER_SOLVE))
+    const slice = dm.multiplyScalar(1 / n)
 
-    const floor = this.raycastDown(
-      feet.x + movement.x,
-      feet.y + movement.y + 0.65,
-      feet.z + movement.z,
-      1.25,
-    )
-    let grounded = actor.controller.computedGrounded()
-    /* Skip snap-down while intentionally moving up (jump / knock-up); otherwise ray assist sticks feet to deck. */
-    const upwardIntent = desiredMovement.y > 0.02
-    if (!upwardIntent && floor && floor.normal.y >= 0.35) {
-      const movedFeetY = feet.y + movement.y
-      const floorGap = movedFeetY - floor.point.y
-      if (floorGap <= 0.18 && floorGap >= -0.3) {
-        movement.y += floor.point.y - movedFeetY
-        grounded = true
+    const totalMovement = new Vector3(0, 0, 0)
+    const workFeet = feet.clone()
+    let grounded = false
+    let floorY: number | null = null
+
+    for (let i = 0; i < n; i++) {
+      const centerY = workFeet.y + colliderCenterY(actor.totalHeight)
+      actor.body.setTranslation({ x: workFeet.x, y: centerY, z: workFeet.z }, true)
+      this.world.propagateModifiedBodyPositionsToColliders()
+      this.world.step()
+
+      actor.controller.computeColliderMovement(
+        actor.collider,
+        slice,
+        QUERY_NO_EXCLUDE,
+        undefined,
+        (collider) => this.terrainHandles.has(collider.handle),
+      )
+
+      const rawMove = actor.controller.computedMovement()
+      const stepMove = new Vector3(rawMove.x, rawMove.y, rawMove.z)
+      totalMovement.add(stepMove)
+      workFeet.add(stepMove)
+
+      const floor = this.raycastDown(workFeet.x, workFeet.y + 0.65, workFeet.z, 1.25)
+      grounded = actor.controller.computedGrounded()
+      const upwardIntent = desiredMovement.y > 0.02
+      if (!upwardIntent && floor && floor.normal.y >= 0.35) {
+        const floorGap = workFeet.y - floor.point.y
+        if (floorGap <= 0.18 && floorGap >= -0.3) {
+          totalMovement.y += floor.point.y - workFeet.y
+          workFeet.y = floor.point.y
+          grounded = true
+        }
       }
+      floorY = floor?.point.y ?? floorY
     }
 
+    const finalCenterY = feet.y + colliderCenterY(actor.totalHeight) + totalMovement.y
+    actor.body.setTranslation(
+      {
+        x: feet.x + totalMovement.x,
+        y: finalCenterY,
+        z: feet.z + totalMovement.z,
+      },
+      true,
+    )
+
     return {
-      movement,
+      movement: totalMovement,
       grounded,
-      floorY: floor?.point.y ?? null,
+      floorY,
     }
   }
 
@@ -242,7 +272,7 @@ export class TerrainPhysics {
       new RAPIER.Ray({ x, y, z }, { x: 0, y: -1, z: 0 }),
       maxDistance,
       false,
-      undefined,
+      QUERY_NO_EXCLUDE,
       undefined,
       undefined,
       undefined,
