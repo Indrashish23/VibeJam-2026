@@ -20,7 +20,10 @@ import {
 } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { gameConfig } from '../gameConfig'
-import { applyMonkeyFlatVertexPixelatedStyle } from './monkeyVisualStyle'
+import {
+  applyMonkeyExternalBaseColorTexture,
+  applyMonkeyFlatVertexPixelatedStyle,
+} from './monkeyVisualStyle'
 import { PROJECTILE_R } from './playerArms'
 import {
   pickClipForSlot,
@@ -200,6 +203,11 @@ export class BotFighter {
       this.root.add(wrap)
       this.monkeyWrap = wrap
       this.monkeyRoot = sceneRoot
+      try {
+        await applyMonkeyExternalBaseColorTexture(sceneRoot)
+      } catch (err) {
+        console.warn('[bot] Failed to load monkey base-color texture; GLB maps kept', err)
+      }
       applyMonkeyFlatVertexPixelatedStyle(sceneRoot)
       sceneRoot.traverse((o) => {
         const mo = o as Mesh

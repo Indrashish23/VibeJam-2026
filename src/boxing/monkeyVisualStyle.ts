@@ -7,8 +7,62 @@ import {
   MeshStandardMaterial,
   NearestFilter,
   Object3D,
+  SRGBColorSpace,
   Texture,
+  TextureLoader,
 } from 'three'
+
+/** Hand-painted atlas; replaces embedded GLB base color on all monkey PBR materials. */
+const MONKEY_BASECOLOR_URL = new URL(
+  '../../Assets/MonkeyModel/low-poly+monkey+3d+model.glb_basecolor.JPEG',
+  import.meta.url,
+).href
+
+function isPbrMat(m: unknown): m is MeshStandardMaterial | MeshPhysicalMaterial {
+  return m instanceof MeshStandardMaterial || m instanceof MeshPhysicalMaterial
+}
+
+function loadTextureFromUrl(url: string): Promise<Texture> {
+  const loader = new TextureLoader()
+  return new Promise((resolve, reject) => {
+    loader.load(
+      url,
+      (tex) => {
+        tex.colorSpace = SRGBColorSpace
+        /* Match GLTF sampler convention so UV layout matches the GLB. */
+        tex.flipY = false
+        resolve(tex)
+      },
+      undefined,
+      reject,
+    )
+  })
+}
+
+/**
+ * Swap every PBR material's `map` to `tex` (shared instance). Disposes distinct previous `map` textures once.
+ */
+export function applyMonkeyBaseColorMap(root: Object3D, tex: Texture): void {
+  const oldMaps = new Set<Texture>()
+  root.traverse((o) => {
+    const mesh = o as Mesh
+    if (!mesh.isMesh || !mesh.material) return
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+    for (const raw of mats) {
+      if (!isPbrMat(raw)) continue
+      if (raw.map && raw.map !== tex) oldMaps.add(raw.map)
+      raw.map = tex
+      raw.needsUpdate = true
+    }
+  })
+  for (const t of oldMaps) t.dispose()
+}
+
+/** Load the external base-color atlas and assign it to the skinned monkey root. */
+export async function applyMonkeyExternalBaseColorTexture(root: Object3D): Promise<void> {
+  const tex = await loadTextureFromUrl(MONKEY_BASECOLOR_URL)
+  applyMonkeyBaseColorMap(root, tex)
+}
 
 /** Texture slots we aggressively nearest-filter for chunky in-game pixels. */
 const TEX_PROPS = [
@@ -74,10 +128,6 @@ function downscaleTextureImage(tex: Texture): void {
   }
   tex.image = c
   processedDownscale.add(tex)
-}
-
-function isPbrMat(m: unknown): m is MeshStandardMaterial | MeshPhysicalMaterial {
-  return m instanceof MeshStandardMaterial || m instanceof MeshPhysicalMaterial
 }
 
 /**

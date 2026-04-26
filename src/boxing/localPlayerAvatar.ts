@@ -12,7 +12,10 @@ import {
 } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { gameConfig } from '../gameConfig'
-import { applyMonkeyFlatVertexPixelatedStyle } from './monkeyVisualStyle'
+import {
+  applyMonkeyExternalBaseColorTexture,
+  applyMonkeyFlatVertexPixelatedStyle,
+} from './monkeyVisualStyle'
 
 /** The capsule we want the monkey to fit into: feet on the floor, head ~ a tad above the camera. */
 function targetMonkeyHeight(): number {
@@ -129,7 +132,6 @@ export class LocalPlayerAvatar {
     this.mixer = mixer
     this.root.rotation.order = 'YXZ'
     this.root.add(modelRoot)
-    applyMonkeyFlatVertexPixelatedStyle(modelRoot)
     /* Capture bbox at native scale before any auto-fit, so we can cleanly anchor feet later. */
     modelRoot.updateMatrixWorld(true)
     const bbox = new Box3().setFromObject(modelRoot)
@@ -166,6 +168,13 @@ export class LocalPlayerAvatar {
       console.warn('[avatar] Idle.glb has no animation clip')
       return null
     }
+
+    try {
+      await applyMonkeyExternalBaseColorTexture(idleGltf.scene)
+    } catch (err) {
+      console.warn('[avatar] Failed to load monkey base-color texture; GLB maps kept', err)
+    }
+    applyMonkeyFlatVertexPixelatedStyle(idleGltf.scene)
 
     const mixer = new AnimationMixer(idleGltf.scene)
     const avatar = new LocalPlayerAvatar(scene, idleGltf.scene, mixer)
