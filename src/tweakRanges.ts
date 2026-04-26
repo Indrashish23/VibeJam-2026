@@ -197,6 +197,25 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   jumpFxWhiteFlash: { min: 0, max: 1, step: 0.02 },
   jumpFxBurstOpacity: { min: 0, max: 1, step: 0.02 },
   playerRadius: { min: 0.01, max: CAP, step: 0.02 },
+
+  bananaPickupCount: { min: 0, max: 12, step: 1 },
+  bananaPickupRadius: { min: 0.2, max: 6, step: 0.05 },
+  bananaPeelRadius: { min: 0.2, max: 6, step: 0.05 },
+  bananaPeelYTolerance: { min: 0.2, max: 4, step: 0.05 },
+  bananaSlipMs: { min: 200, max: 8000, step: 50 },
+  bananaThrowSpeed: { min: 4, max: 120, step: 1 },
+  bananaThrowMaxRange: { min: 5, max: 120, step: 1 },
+  bananaThrowUpMul: { min: 0.1, max: 3, step: 0.02 },
+  bananaHoverAmp: { min: 0, max: 0.5, step: 0.01 },
+  bananaHandLocalX: { min: -2, max: 2, step: 0.02 },
+  bananaHandLocalY: { min: -2, max: 1, step: 0.02 },
+  bananaHandLocalZ: { min: -3, max: 1, step: 0.02 },
+
+  bgmVolume: { min: 0, max: 1, step: 0.02 },
+  footstepMinHoldSec: { min: 0, max: 0.2, step: 0.005 },
+  footstepIntervalSec: { min: 0.1, max: 2, step: 0.05 },
+  footstepSfxEnabled: { min: 0, max: 1, step: 1 },
+  footstepVolumeMul: { min: 0, max: 1, step: 0.02 },
 }
 
 /** Human-readable labels for the tweaks panel (fallback: raw config key). */
@@ -382,6 +401,23 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   stunnedStarSpinMul: 'Stunned stars — spin × (higher = slower)',
   stunnedStarSpreadMul: 'Stunned stars — spread × (distance from center)',
   debugRoomActive: 'Debug room active (0/1)',
+  bananaPickupCount: 'Banana: pickups per round',
+  bananaPickupRadius: 'Banana: pickup collection radius',
+  bananaPeelRadius: 'Banana: peel trigger radius (feet)',
+  bananaPeelYTolerance: 'Banana: peel Y tolerance (slopes)',
+  bananaSlipMs: 'Banana: slip stun (ms, still hittable)',
+  bananaThrowSpeed: 'Banana: throw speed',
+  bananaThrowMaxRange: 'Banana: max throw XZ range',
+  bananaThrowUpMul: 'Banana: throw arc (up) ×',
+  bananaHoverAmp: 'Banana: crate hover amp',
+  bananaHandLocalX: 'Banana: hand X (cam local)',
+  bananaHandLocalY: 'Banana: hand Y (cam local)',
+  bananaHandLocalZ: 'Banana: hand Z (cam local)',
+  bgmVolume: 'Background music volume (dev)',
+  footstepMinHoldSec: 'Footstep: min forward hold (s)',
+  footstepIntervalSec: 'Footstep: step interval (s)',
+  footstepSfxEnabled: 'Footstep SFX (0/1)',
+  footstepVolumeMul: 'Footstep: dev level × (0–1)',
 }
 
 /**
@@ -483,6 +519,24 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
     'Uniform size multiplier on each star graphic (width); random per star still applies within the base band.',
   debugRoomActive:
     'When 1, the game enters an in-place debug arena: the player + dummy are teleported to a side area and round-resets are suppressed while you tweak.',
+  bananaPickupCount: 'Glowing crate pickups per map reset. 0 disables all banana power-ups.',
+  bananaPickupRadius: 'Radius to collect a glowing crate (feet vs spawn).',
+  bananaSlipMs: 'Movement stun on peel; you are still vulnerable to other hits.',
+  bananaPeelRadius: 'Horizontal distance from feet to a peel to trigger a slip.',
+  bananaPeelYTolerance: 'Vertical tolerance on peel contact (sloped stages / island).',
+  bananaThrowSpeed: 'Initial speed of the thrown banana arc.',
+  bananaThrowMaxRange: 'Max horizontal travel from throw start before the shot is forced to land.',
+  bananaThrowUpMul: 'Arc “up” component before normalizing the throw direction.',
+  bananaHoverAmp: 'Vertical bob amplitude on pickup crates.',
+  bananaHandLocalX: 'In-hand banana: camera-local left (negative) / right.',
+  bananaHandLocalY: 'In-hand banana: camera-local down (negative) / up.',
+  bananaHandLocalZ: 'In-hand banana: forward from camera in local space (negative = in front).',
+
+  bgmVolume: 'Shuffles BGM from Assets/Music; 0 mutes, 1 full. (Player Settings does not change this — dev Tweaks only.)',
+  footstepMinHoldSec: 'How long you must hold forward (seconds) before the first footstep plays while grounded.',
+  footstepIntervalSec: 'Seconds between footstep one-shots while you keep holding forward (measured from each trigger).',
+  footstepSfxEnabled: '0 = no footstep sounds; 1 = play cat footstep one-shots from Assets/SFX/Footsteps.',
+  footstepVolumeMul: 'Per-shot gain before the player “Sound effects” master in Settings. × master SFX in Settings.',
 
   ambientIntensity: 'Fill light strength from all directions (shadow softness).',
   sunIntensity: 'Main directional light strength (contrast and shadows).',
@@ -769,6 +823,17 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
     keys: ['voiceDeliveryPlaybackRate'],
   },
   {
+    id: 'sound',
+    title: 'Sound',
+    keys: [
+      'bgmVolume',
+      'footstepSfxEnabled',
+      'footstepVolumeMul',
+      'footstepMinHoldSec',
+      'footstepIntervalSec',
+    ],
+  },
+  {
     id: 'arena',
     title: 'Arena',
     keys: [
@@ -867,6 +932,24 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'ecAvatarSide',
       'ecAvatarScale',
       'ecAvatarYawOffset',
+    ],
+  },
+  {
+    id: 'banana',
+    title: 'Banana',
+    keys: [
+      'bananaPickupCount',
+      'bananaPickupRadius',
+      'bananaPeelRadius',
+      'bananaPeelYTolerance',
+      'bananaSlipMs',
+      'bananaThrowSpeed',
+      'bananaThrowMaxRange',
+      'bananaThrowUpMul',
+      'bananaHoverAmp',
+      'bananaHandLocalX',
+      'bananaHandLocalY',
+      'bananaHandLocalZ',
     ],
   },
   {

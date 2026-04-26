@@ -7,6 +7,94 @@
     <title>Vibe Jam — Voice FPS Arena</title>
   </head>
   <body>
+    <div id="user-settings-wrap" class="user-settings-wrap">
+      <div
+        id="user-settings-backdrop"
+        class="user-settings-backdrop"
+        hidden
+        aria-hidden="true"
+      ></div>
+      <button
+        type="button"
+        id="user-settings-btn"
+        class="user-settings-fab"
+        aria-label="Open settings"
+        title="Settings"
+      >
+        ⚙
+      </button>
+      <div
+        id="user-settings-panel"
+        class="user-settings-panel"
+        role="dialog"
+        aria-label="Settings"
+        aria-hidden="true"
+        hidden
+      >
+        <div class="user-settings-panel__head">
+          <h2 class="user-settings-panel__title">Settings</h2>
+          <button
+            type="button"
+            id="user-settings-close"
+            class="user-settings-panel__close"
+            aria-label="Close settings"
+          >
+            ×
+          </button>
+        </div>
+        <h3 class="user-settings-h3">Gameplay</h3>
+        <label class="user-settings-row">
+          <span>Mouse sensitivity</span>
+          <input
+            type="number"
+            id="user-s-mouse"
+            class="user-settings-input"
+            min="0.01"
+            max="8"
+            step="0.05"
+          />
+        </label>
+        <label class="user-settings-row">
+          <span>Mic sensitivity (charge)</span>
+          <input
+            type="number"
+            id="user-s-mic"
+            class="user-settings-input"
+            min="0.2"
+            max="4"
+            step="0.05"
+          />
+        </label>
+        <label class="user-settings-row">
+          <span>Camera shake</span>
+          <input
+            type="number"
+            id="user-s-shake"
+            class="user-settings-input"
+            min="0"
+            max="1.5"
+            step="0.05"
+          />
+        </label>
+        <h3 class="user-settings-h3">Audio</h3>
+        <label class="user-settings-row">
+          <span>Sound effects (master)</span>
+          <input
+            type="number"
+            id="user-s-sfx"
+            class="user-settings-input"
+            min="0"
+            max="1"
+            step="0.05"
+            title="Master volume for in-game SFX (footsteps, more later). BGM is in Tweaks → Sound."
+          />
+        </label>
+        <p class="user-settings-hint">
+          BGM and footstep tuning: open dev panel (<kbd class="user-settings-kbd">T</kbd> or
+          <kbd class="user-settings-kbd">−</kbd>) → <strong>Sound</strong>.
+        </p>
+      </div>
+    </div>
     <div id="username-overlay" class="username-overlay">
       <form id="username-form" class="username-card">
         <label for="username-input">Display name</label>

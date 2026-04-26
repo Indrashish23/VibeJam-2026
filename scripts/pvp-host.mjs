@@ -22,6 +22,8 @@ import {
 
 const PORT = Number(process.env.PVP_LISTEN_PORT || 8765)
 
+let bananaRelaxedTrustWarned = false
+
 /** @typedef {{ peers: Set<import('ws').WebSocket>, poses: { host: object | null, guest: object | null }, percent: { host: number, guest: number }, shots: Set<string>, ended: boolean }} Room */
 
 /** @type {Map<string, Room>} */
@@ -252,6 +254,13 @@ wss.on('connection', (ws, req) => {
     }
 
     relay(ws, raw)
+
+    if (typeof t === 'string' && t.startsWith('banana') && !bananaRelaxedTrustWarned) {
+      bananaRelaxedTrustWarned = true
+      console.warn(
+        '[pvp-host] Banana PvP messages are relayed without dedicated validation (v1). Browser-as-host P2P validates locally.',
+      )
+    }
 
     if (t === 'voiceShot') {
       validateVoiceShot(roomId, ws, raw, parsed)

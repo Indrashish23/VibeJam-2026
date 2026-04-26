@@ -379,8 +379,47 @@ export const defaultGameConfig = {
   /** Multiplies randomized star graphic width (base ~72–220px). */
   stunnedStarScaleMul: 1.02,
 
+  /** Glowing crate pickups per map reset (0 = none). */
+  bananaPickupCount: 5,
+  /** Horizontal + vertical tolerance to collect a crate (world units). */
+  bananaPickupRadius: 1.35,
+  /** Peels: feet must be within this radius to slip. */
+  bananaPeelRadius: 1.1,
+  /** Y tolerance feet vs baked peel Y (island / slopes). */
+  bananaPeelYTolerance: 1.25,
+  /** How long a slip stuns movement (ms). Vulnerable to hits. */
+  bananaSlipMs: 2000,
+  /** Initial throw speed (world; × physics frame feel). */
+  bananaThrowSpeed: 32,
+  /** Max throw distance on XZ from throw start. */
+  bananaThrowMaxRange: 48,
+  /** Arc bias on aim vector before normalize. */
+  bananaThrowUpMul: 1,
+  /** Hover bob amplitude (m) on pickups. */
+  bananaHoverAmp: 0.12,
+  /** Local-space offset for the in-hand banana (camera parent). */
+  bananaHandLocalX: -0.38,
+  bananaHandLocalY: -0.2,
+  bananaHandLocalZ: -0.52,
+
   /** Debug Room: when 1, slider edits do NOT trigger a round reset; teleports you + dummy to a side arena. */
   debugRoomActive: 0,
+
+  /**
+   * Sound (Tweaks dev panel) — BGM and footstep; player Settings uses master SFX (see user settings storage).
+   * Background music `HTMLAudioElement` volume; also mirrored by `src/audio/backgroundMusic.ts` each frame.
+   */
+  bgmVolume: 0.6,
+  /** Min seconds holding forward before the first footstep. */
+  footstepMinHoldSec: 0.01,
+  /** Seconds between one-shot footstep triggers while forward is held. */
+  footstepIntervalSec: 0.5,
+  /** 0 = off, 1 = on. */
+  footstepSfxEnabled: 1,
+  /**
+   * Dev relative level for one-shot footstep clips (0–1); multiplied with player `masterSfxMul` in Settings.
+   */
+  footstepVolumeMul: 0.75,
 } as const
 
 export type GameConfigKey = keyof typeof defaultGameConfig

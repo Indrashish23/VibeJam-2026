@@ -44,12 +44,21 @@ import {
 import { createBrowserHostAuthority } from './net/browserHostAuthority'
 import { PublicLobbyDirectoryClient } from './net/publicLobbyDirectory'
 import { isAuthoritativeListenServer } from './net/transportConfig'
+import { simBananaThrowToLanding, feetOnPeel, isFeetInPickUpRange } from './net/bananaSim'
+import { BananaWorld } from './powerups/bananaWorld'
 import {
   createWebRtcGameChannel,
   type WebRtcGameApi,
 } from './net/webrtcGame'
 import { LowEndDitherShader } from './post/lowEndDitherShader'
 import { readStoredPlayerName, savePlayerName } from './playerName'
+import {
+  loadUserSettings,
+  getCameraShakeMul,
+} from './userSettingsStorage'
+import { initBackgroundMusic, wireBackgroundMusicToFirstGesture } from './audio/backgroundMusic'
+import { playFootstepOneShot } from './audio/footstepsSfx'
+import { mountUserSettingsPanel, setUserSettingsPointerControls } from './userSettingsUI'
 import { setPartyKitHostSession, getPartyKitHost } from './net/partyKitHost'
 import { createProceduralSky } from './skyDome'
 import { TerrainPhysics } from './physics/terrainPhysics'
@@ -324,6 +333,7 @@ function runUsernameGate(): Promise<void> {
         const raw = usernameInput.value.trim()
         const name = raw || 'Angler'
         savePlayerName(name)
+        loadUserSettings()
         usernameOverlay.hidden = true
         gameRoot.hidden = true
         resolve()
@@ -429,6 +439,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   composer.setSize(window.innerWidth, Math.max(window.innerHeight, 1))
 
   const controls = new PointerLockControls(camera, renderer.domElement)
+  setUserSettingsPointerControls(controls)
   controls.pointerSpeed = gameConfig.mouseSensitivity
 
   const ambient = new AmbientLight(0xffffff, gameConfig.ambientIntensity)
@@ -670,6 +681,180 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     return isOnline && mpPhase === 'live' && bot.mode === 'network'
   }
 
+  const bananaWorld = new BananaWorld(scene)
+  bananaWorld.attachHandToCamera(camera)
+  const _bLand = new Vector3()
+  const _bFeet = new Vector3()
+  let localHasBanana = false
+  let pvpBananaInventory: { host: 0 | 1; guest: 0 | 1 } = { host: 0, guest: 0 }
+  let playerBananaSlipUntil = 0
+  let nextBananaPeelId = 1
+  function pvpHostBroadcastAndApply(msg: Record<string, unknown>): void {
+    if (rtcGame) rtcGame.sendGameJson(msg)
+    else sendMp(msg)
+    dispatchPeerGamePayload(msg)
+  }
+
+  function myPvpRole(): 'host' | 'guest' {
+    if (lobby.mode === 'online') return lobby.role
+    return 'host'
+  }
+
+  function isPlayerBananaSlipNow(t = performance.now()): boolean {
+    return playerHurt === 'none' && t < playerBananaSlipUntil
+  }
+
+  function getMyBananaHeld(): boolean {
+    if (!isPvp()) return localHasBanana
+    return pvpBananaInventory[myPvpRole()] > 0
+  }
+
+  function syncBananaHandVis(): void {
+    bananaWorld.handGroup.visible = getMyBananaHeld() && !isPlayerBananaSlipNow()
+  }
+
+  function initBananaRound(): void {
+    const n = Math.max(0, Math.round(gameConfig.bananaPickupCount))
+    playerBananaSlipUntil = 0
+    localHasBanana = false
+    pvpBananaInventory = { host: 0, guest: 0 }
+    nextBananaPeelId = 1
+    bananaWorld.clear()
+    bananaWorld.handGroup.visible = false
+    if (n <= 0) return
+    if (!isPvp()) {
+      bananaWorld.respawnLocal(map, terrainPhysics, n)
+      return
+    }
+    if (lobby.mode === 'online' && lobby.role === 'host') {
+      const list = bananaWorld.respawnLocal(map, terrainPhysics, n)
+      pvpHostBroadcastAndApply({ type: 'bananaInit', pickups: list })
+    }
+  }
+
+  function applyBananaInit(pickups: { id: string; x: number; y: number; z: number }[]): void {
+    bananaWorld.applyInitPickups(pickups)
+  }
+
+  function applyBananaAuthPickup(
+    who: 'host' | 'guest',
+    pickupId: string,
+  ): void {
+    pvpBananaInventory[who] = 1
+    bananaWorld.removePickupById(pickupId)
+    syncBananaHandVis()
+  }
+
+  function applyBananaAuthPeel(peelId: string, x: number, y: number, z: number): void {
+    if (bananaWorld.peels.some((p) => p.id === peelId)) return
+    bananaWorld.addPeelFromId(peelId, x, y, z)
+  }
+
+  function applyBananaAuthSlip(
+    victimRole: 'host' | 'guest',
+    durationMs: number,
+    peelId: string,
+  ): void {
+    if (victimRole === myPvpRole()) {
+      playerBananaSlipUntil = performance.now() + Math.max(0, durationMs)
+    } else {
+      bot.applyBananaSlipMs(durationMs)
+    }
+    bananaWorld.removePeelById(peelId)
+  }
+
+  function processHostBananaPickup(
+    fromRole: 'host' | 'guest',
+    pickupId: string,
+    feet: Vector3,
+  ): void {
+    const pi = bananaWorld.pickups.find((p) => p.id === pickupId)
+    if (!pi) return
+    if (pvpBananaInventory[fromRole] > 0) return
+    if (!isFeetInPickUpRange(feet, { x: pi.x, y: pi.y, z: pi.z }, gameConfig.bananaPickupRadius))
+      return
+    pvpHostBroadcastAndApply({ type: 'bananaAuthPickup', role: fromRole, pickupId })
+  }
+
+  function processHostBananaThrow(
+    fromRole: 'host' | 'guest',
+    ox: number,
+    oy: number,
+    oz: number,
+    dirx: number,
+    diry: number,
+    dirz: number,
+  ): void {
+    if (pvpBananaInventory[fromRole] < 1) return
+    _muzzleWorld.set(ox, oy, oz)
+    const dir = new Vector3(dirx, diry, dirz)
+    if (dir.lengthSq() < 1e-6) return
+    const ok = simBananaThrowToLanding(
+      _muzzleWorld,
+      dir,
+      gameConfig.bananaThrowSpeed,
+      gameConfig.bananaThrowUpMul,
+      gameConfig.gravity,
+      gameConfig.bananaThrowMaxRange,
+      (x, y, z) => terrainPhysics.raycastDown(x, y, z, 200),
+      _bLand,
+    )
+    if (!ok) return
+    if (map.isBlastZone(_bLand)) return
+    const id = `b${nextBananaPeelId++}`
+    pvpHostBroadcastAndApply({
+      type: 'bananaAuthThrowResult',
+      fromRole,
+      peelId: id,
+      x: _bLand.x,
+      y: _bLand.y,
+      z: _bLand.z,
+    })
+  }
+
+  function applyBananaAuthThrowResult(
+    fromRole: 'host' | 'guest',
+    peelId: string,
+    x: number,
+    y: number,
+    z: number,
+  ): void {
+    pvpBananaInventory[fromRole] = 0
+    applyBananaAuthPeel(peelId, x, y, z)
+    syncBananaHandVis()
+  }
+
+  function hostCheckBananaSlips(): void {
+    if (!isPvp() || lobby.mode !== 'online' || lobby.role !== 'host' || mpPhase !== 'live') return
+    if (bananaWorld.peels.length === 0) return
+    const d = gameConfig.bananaSlipMs
+    const pr = gameConfig.bananaPeelRadius
+    const yt = gameConfig.bananaPeelYTolerance
+    nextPeel: for (let i = bananaWorld.peels.length - 1; i >= 0; i--) {
+      const peel = bananaWorld.peels[i]!
+      for (const role of ['host', 'guest'] as const) {
+        if (role === 'host') {
+          if (browserHost) {
+            const p = browserHost.getLastPose('host')
+            if (p) {
+              _bFeet.set(p.x, p.fy, p.z)
+            } else {
+              _bFeet.set(camera.position.x, feetY(), camera.position.z)
+            }
+          } else {
+            _bFeet.set(camera.position.x, feetY(), camera.position.z)
+          }
+        } else {
+          const fo = bot.getFootOffset()
+          _bFeet.set(bot.root.position.x, bot.root.position.y - fo, bot.root.position.z)
+        }
+        if (!feetOnPeel(_bFeet, { x: peel.x, y: peel.y, z: peel.z, id: peel.id }, pr, yt)) continue
+        pvpHostBroadcastAndApply({ type: 'bananaAuthSlip', victimRole: role, ms: d, peelId: peel.id })
+        continue nextPeel
+      }
+    }
+  }
+
   /** Dedicated listen server or browser host + open WebRTC game channel. */
   function authPvp(): boolean {
     if (!isPvp()) return false
@@ -756,6 +941,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     right: false,
   }
 
+  /** Footstep: forward-hold and cadence (Tweaks → Sound). */
+  let footstepHoldSec = 0
+  let footstepLastMs = 0
+
   function isGameTextInputTarget(t: EventTarget | null): boolean {
     if (!(t instanceof Element)) return false
     return Boolean(t.closest('input, textarea, select, [contenteditable="true"]'))
@@ -770,6 +959,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     keys.back = false
     keys.left = false
     keys.right = false
+    footstepHoldSec = 0
+    footstepLastMs = 0
   }
 
   function onMovementKeyDown(e: KeyboardEvent): void {
@@ -905,6 +1096,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   function deriveLocalAnimBase(): NetAnimBase {
     if (playerHurt !== 'none') return 'hitreact'
+    if (isPlayerBananaSlipNow()) return 'hitreact'
     if (!grounded || performance.now() < slideAnimUntilMs) return 'jumping'
     const moving =
       keys.forward ||
@@ -1281,6 +1473,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     await runMatchBeginCountdown()
     mpPhase = 'live'
     updateMicBlockedUi()
+    initBananaRound()
     tryPointerLock()
     window.setTimeout(() => {
       if (mpToast) mpToast.hidden = true
@@ -1663,6 +1856,86 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       return
     }
 
+    if (ty === 'bananaInit' && Array.isArray(data.pickups) && isPvp() && mpPhase === 'live') {
+      applyBananaInit(
+        data.pickups as { id: string; x: number; y: number; z: number }[],
+      )
+      return
+    }
+    if (
+      ty === 'bananaAuthPickup' &&
+      (data.role === 'host' || data.role === 'guest') &&
+      typeof data.pickupId === 'string' &&
+      isPvp() &&
+      mpPhase === 'live'
+    ) {
+      applyBananaAuthPickup(data.role, data.pickupId)
+      return
+    }
+    if (
+      ty === 'bananaAuthThrowResult' &&
+      (data.fromRole === 'host' || data.fromRole === 'guest') &&
+      typeof data.peelId === 'string' &&
+      typeof data.x === 'number' &&
+      typeof data.y === 'number' &&
+      typeof data.z === 'number' &&
+      isPvp() &&
+      mpPhase === 'live'
+    ) {
+      applyBananaAuthThrowResult(data.fromRole, data.peelId, data.x, data.y, data.z)
+      return
+    }
+    if (
+      ty === 'bananaAuthSlip' &&
+      (data.victimRole === 'host' || data.victimRole === 'guest') &&
+      typeof data.ms === 'number' &&
+      typeof data.peelId === 'string' &&
+      isPvp() &&
+      mpPhase === 'live'
+    ) {
+      applyBananaAuthSlip(data.victimRole, data.ms, data.peelId)
+      return
+    }
+    if (
+      ty === 'bananaRequestPickup' &&
+      lobby.role === 'host' &&
+      (data.fromRole === 'host' || data.fromRole === 'guest') &&
+      typeof data.pickupId === 'string' &&
+      typeof data.fx === 'number' &&
+      typeof data.fy === 'number' &&
+      typeof data.fz === 'number' &&
+      isPvp() &&
+      mpPhase === 'live'
+    ) {
+      _bFeet.set(data.fx, data.fy, data.fz)
+      processHostBananaPickup(data.fromRole, data.pickupId, _bFeet)
+      return
+    }
+    if (
+      ty === 'bananaRequestThrow' &&
+      lobby.role === 'host' &&
+      (data.fromRole === 'host' || data.fromRole === 'guest') &&
+      typeof data.ox === 'number' &&
+      typeof data.oy === 'number' &&
+      typeof data.oz === 'number' &&
+      typeof data.dirx === 'number' &&
+      typeof data.diry === 'number' &&
+      typeof data.dirz === 'number' &&
+      isPvp() &&
+      mpPhase === 'live'
+    ) {
+      processHostBananaThrow(
+        data.fromRole,
+        data.ox,
+        data.oy,
+        data.oz,
+        data.dirx,
+        data.diry,
+        data.dirz,
+      )
+      return
+    }
+
     if (bot.mode !== 'network') return
 
     if (
@@ -1789,6 +2062,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       knockFromWorld?: Vector3
     },
   ): void {
+    playerBananaSlipUntil = 0
     let belowAim = 0
     if (opts?.knockFromWorld) {
       _knFromShot.subVectors(camera.position, opts.knockFromWorld)
@@ -1862,7 +2136,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   function triggerAggressorHitConfirmFx(): void {
-    shakeIntensity = Math.max(shakeIntensity, gameConfig.pvpAggressorHitShake)
+    const sm = getCameraShakeMul()
+    shakeIntensity = Math.max(shakeIntensity, gameConfig.pvpAggressorHitShake * sm)
     flashIntensity = Math.max(flashIntensity, gameConfig.pvpAggressorHitFlash)
   }
 
@@ -2403,6 +2678,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     flushPvpSpawnPose()
     applySunShadowFrustum()
     syncBlastBoundsLine()
+    initBananaRound()
   }
 
   type WinFinisherState =
@@ -2513,7 +2789,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   /** When a victim crosses 150% launch — heavy shake + main hit-flash on this client (host and guest). */
   function triggerLaunchPercent150Spectacle(): void {
-    shakeIntensity = Math.max(shakeIntensity, 5.4)
+    const sm = getCameraShakeMul()
+    shakeIntensity = Math.max(shakeIntensity, 5.4 * sm)
     flashIntensity = Math.max(flashIntensity, 1)
   }
 
@@ -2695,7 +2972,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       winFinisher ||
       rematchSequenceActive ||
       multiplayerBlocksPlay() ||
-      playerHurt !== 'none'
+      playerHurt !== 'none' ||
+      isPlayerBananaSlipNow()
     )
       return
     const now = performance.now()
@@ -2742,7 +3020,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       dashCdMs > 0 ||
       tweaksPanelOpen ||
       leaveMatchDialogOpen ||
-      playerHurt !== 'none'
+      playerHurt !== 'none' ||
+      isPlayerBananaSlipNow()
     )
       return
     const onDeck = grounded
@@ -2875,6 +3154,85 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       }
     }
 
+    {
+      const bc = Math.round(gameConfig.bananaPickupCount)
+      if (bc > 0) {
+        bananaWorld.tickPickupsHover(performance.now() * 0.001)
+        const pr = gameConfig.bananaPickupRadius
+        if (!matchOutcome && isPvp() && mpPhase === 'live' && !seriesTransitionActive) {
+          _bFeet.set(camera.position.x, feetY(), camera.position.z)
+          for (const pick of bananaWorld.pickups) {
+            if (!isFeetInPickUpRange(_bFeet, pick, pr)) continue
+            const r = myPvpRole()
+            if (r === 'host' && pvpBananaInventory.host < 1) {
+              processHostBananaPickup('host', pick.id, _bFeet)
+            } else if (r === 'guest' && pvpBananaInventory.guest < 1) {
+              sendGameTraffic({
+                type: 'bananaRequestPickup',
+                fromRole: 'guest',
+                pickupId: pick.id,
+                fx: _bFeet.x,
+                fy: _bFeet.y,
+                fz: _bFeet.z,
+              })
+            }
+            break
+          }
+        } else if (!isPvp() && !matchOutcome) {
+          _bFeet.set(camera.position.x, feetY(), camera.position.z)
+          for (let j = bananaWorld.pickups.length - 1; j >= 0; j--) {
+            const pick = bananaWorld.pickups[j]!
+            if (isFeetInPickUpRange(_bFeet, pick, pr)) {
+              if (!localHasBanana) {
+                localHasBanana = true
+                bananaWorld.removePickupById(pick.id)
+                syncBananaHandVis()
+              }
+              break
+            }
+          }
+          for (let j = bananaWorld.peels.length - 1; j >= 0; j--) {
+            const pl = bananaWorld.peels[j]!
+            _bFeet.set(camera.position.x, feetY(), camera.position.z)
+            const fo = bot.getFootOffset()
+            const bf3 = new Vector3(
+              bot.root.position.x,
+              bot.root.position.y - fo,
+              bot.root.position.z,
+            )
+            const prad = gameConfig.bananaPeelRadius
+            const yt = gameConfig.bananaPeelYTolerance
+            if (
+              !isPlayerBananaSlipNow() &&
+              feetOnPeel(
+                _bFeet,
+                { x: pl.x, y: pl.y, z: pl.z, id: pl.id },
+                prad,
+                yt,
+              )
+            ) {
+              playerBananaSlipUntil = performance.now() + gameConfig.bananaSlipMs
+              bananaWorld.removePeelById(pl.id)
+            } else if (
+              !bot.isBananaSlipNow() &&
+              feetOnPeel(bf3, { x: pl.x, y: pl.y, z: pl.z, id: pl.id }, prad, yt)
+            ) {
+              bot.applyBananaSlipMs(gameConfig.bananaSlipMs)
+              bananaWorld.removePeelById(pl.id)
+            }
+          }
+          bananaWorld.tickFlying(
+            delta,
+            (x, y, z) => {
+              const id = `b${nextBananaPeelId++}`
+              bananaWorld.addPeel(x, y, z, id)
+            },
+            (x, y, z) => terrainPhysics.raycastDown(x, y, z, 200),
+          )
+        }
+      }
+    }
+
     if (!authPvp()) {
       const listenAuth = isOnline && lobby.mode === 'online' && isAuthoritativeListenServer()
       if (map.isBlastZone(camera.position)) {
@@ -2983,12 +3341,56 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       winFinisher !== null ||
       rematchSequenceActive ||
       seriesTransitionActive ||
-      playerHurt !== 'none'
+      playerHurt !== 'none' ||
+      isPlayerBananaSlipNow()
     )
+  }
+
+  function tryBananaRmb(): boolean {
+    if (!getMyBananaHeld() || isPlayerBananaSlipNow()) return false
+    if (matchOutcome || rematchSequenceActive || winFinisher) return false
+    if (multiplayerBlocksPlay() && !lobbyDummyPractice) return false
+    if (tweaksPanelOpen || leaveMatchDialogOpen) return false
+    if (Math.round(gameConfig.bananaPickupCount) <= 0) return false
+    camera.getWorldDirection(_aimDir)
+    _muzzleWorld.copy(camera.position).addScaledVector(_aimDir, 0.52)
+    if (!isPvp()) {
+      localHasBanana = false
+      syncBananaHandVis()
+      bananaWorld.beginLocalThrow(_muzzleWorld, camera)
+      return true
+    }
+    if (pvpBananaInventory[myPvpRole()] < 1) return false
+    if (lobby.mode === 'online' && lobby.role === 'host') {
+      processHostBananaThrow(
+        'host',
+        _muzzleWorld.x,
+        _muzzleWorld.y,
+        _muzzleWorld.z,
+        _aimDir.x,
+        _aimDir.y,
+        _aimDir.z,
+      )
+    } else {
+      sendGameTraffic({
+        type: 'bananaRequestThrow',
+        fromRole: 'guest',
+        ox: _muzzleWorld.x,
+        oy: _muzzleWorld.y,
+        oz: _muzzleWorld.z,
+        dirx: _aimDir.x,
+        diry: _aimDir.y,
+        dirz: _aimDir.z,
+      })
+    }
+    return true
   }
 
   function onMouseDown(e: MouseEvent): void {
     if (e.button !== 0 && e.button !== 2) return
+    if (e.button === 2) {
+      if (tryBananaRmb()) return
+    }
     if (gameplayInputBlocked()) return
 
     if (pistolModeOn()) {
@@ -3053,6 +3455,32 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
   window.addEventListener('resize', onResize)
 
+  function tickForwardFootstep(delta: number): void {
+    if (multiplayerBlocksPlay()) return
+    if (tweaksPanelOpen || leaveMatchDialogOpen || matchOutcome) return
+    if (!keys.forward) {
+      footstepHoldSec = 0
+      footstepLastMs = 0
+      return
+    }
+    const slip = isPlayerBananaSlipNow()
+    if (playerHurt !== 'none' || slip) return
+    if (!grounded) return
+    footstepHoldSec += delta
+    if (footstepHoldSec < gameConfig.footstepMinHoldSec) return
+    const intervalSec = gameConfig.footstepIntervalSec
+    const now = performance.now()
+    if (footstepLastMs <= 0) {
+      playFootstepOneShot()
+      footstepLastMs = now
+      return
+    }
+    if (now - footstepLastMs >= intervalSec * 1000) {
+      playFootstepOneShot()
+      footstepLastMs = now
+    }
+  }
+
   function updateMovement(delta: number) {
     /* Online lobby / pre-live: freeze local player. Voice resume countdown still runs physics so grounded / jump stay consistent. */
     if (multiplayerBlocksPlay()) return
@@ -3063,7 +3491,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     vy -= gameConfig.gravity * delta
     camera.position.y += vy * delta
 
-    const canWalk = playerHurt === 'none'
+    const slip = isPlayerBananaSlipNow()
+    const canWalk = playerHurt === 'none' && !slip
 
     if (canWalk) {
       velocity.x -= velocity.x * gameConfig.damping * delta
@@ -3107,6 +3536,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
     if (dashCdMs > 0) dashCdMs -= delta * 1000
 
+    if (slip) {
+      playerKnock.set(0, 0, 0)
+      dashVel.set(0, 0, 0)
+    }
+
     camera.position.x += (playerKnock.x + dashVel.x) * delta
     camera.position.z += (playerKnock.z + dashVel.z) * delta
 
@@ -3147,10 +3581,12 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
 
     controls.pointerSpeed = gameConfig.mouseSensitivity
+    tickForwardFootstep(delta)
   }
 
   function triggerHitImpactFx(): void {
-    shakeIntensity = Math.max(shakeIntensity, gameConfig.hitScreenShake)
+    const sm = getCameraShakeMul()
+    shakeIntensity = Math.max(shakeIntensity, gameConfig.hitScreenShake * sm)
     flashIntensity = Math.max(flashIntensity, gameConfig.hitFlashOpacity)
   }
 
@@ -3326,6 +3762,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       ) {
         updateMovement(delta)
         resolveCombat(delta)
+        if (isPvp() && lobby.mode === 'online' && lobby.role === 'host') {
+          hostCheckBananaSlips()
+        }
+        syncBananaHandVis()
       } else if (matchOutcome) {
         arms.update(delta)
       }
@@ -3668,6 +4108,14 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   if (isOnline && lobby.mode === 'online' && lobby.role === 'host' && lobby.startWithDummyPractice) {
     void beginLobbyDummyPractice()
   }
+}
+
+loadUserSettings()
+initBackgroundMusic()
+wireBackgroundMusicToFirstGesture()
+{
+  const wrap = document.getElementById('user-settings-wrap')
+  if (wrap) mountUserSettingsPanel({ root: wrap })
 }
 
 runUsernameGate()

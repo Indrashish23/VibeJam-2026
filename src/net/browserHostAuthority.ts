@@ -64,6 +64,10 @@ export function createBrowserHostAuthority(broadcast: AuthBroadcast) {
       ringCheck()
     },
 
+    getLastPose(role: 'host' | 'guest'): PoseLite | null {
+      return poses[role]
+    },
+
     /** @returns whether a new hit was scored (caller may show aggressor FX; host does not echo authDamage back). */
     processVoiceShot(fromRole: 'host' | 'guest', data: Record<string, unknown>): boolean {
       if (ended) return false

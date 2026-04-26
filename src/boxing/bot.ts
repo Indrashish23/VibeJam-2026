@@ -96,6 +96,8 @@ export class BotFighter {
   private readonly monkeyMaterials: { mat: MeshStandardMaterial | MeshPhysicalMaterial; baseColor: Color }[] = []
   private victimInvulnFlashEnd = 0
   private readonly _flashWhite = new Color(0xffffff)
+  /** Banana slip: no locomotion/attack until this time. */
+  bananaSlipUntil = 0
 
   /** Set by network mode (overrides locally-derived animation evaluation). */
   private remoteAnimBase: AvatarBaseClip | null = null
@@ -372,8 +374,21 @@ export class BotFighter {
     }
   }
 
+  isBananaSlipNow(now = performance.now()): boolean {
+    return now < this.bananaSlipUntil
+  }
+
+  applyBananaSlipMs(durationMs: number): void {
+    this.bananaSlipUntil = performance.now() + Math.max(0, durationMs)
+  }
+
+  private clearBananaSlipOnHit(): void {
+    this.bananaSlipUntil = 0
+  }
+
   /** Resolve the monkey's locomotor base from this bot's own physics (used by dummy/smart modes). */
   private resolveLocalBase(): AvatarBaseClip {
+    if (this.isBananaSlipNow()) return 'hitreact'
     if (this.hurtPhase !== 'none') return 'hitreact'
     if (!this.grounded) return 'jumping'
     return this.speedN > gameConfig.botSmartRunAnimThreshold ? 'running' : 'idle'
@@ -392,7 +407,9 @@ export class BotFighter {
     }
 
     let base: AvatarBaseClip
-    if (this.mode === 'network' && this.remoteAnimBase) {
+    if (this.mode === 'network' && this.isBananaSlipNow()) {
+      base = 'hitreact'
+    } else if (this.mode === 'network' && this.remoteAnimBase) {
       base = this.remoteAnimBase
       if (this.remoteAnimOneShot) {
         const shot = this.remoteAnimOneShot
@@ -495,6 +512,7 @@ export class BotFighter {
     this.hurtPhase = 'none'
     this.hurtRecoverLeft = 0
     this.hurtFinisher = false
+    this.bananaSlipUntil = 0
     this.recordingTelegraph = false
     this.recordingTelegraphMix = 0
     this.recordingShakeT = 0
@@ -719,6 +737,7 @@ export class BotFighter {
     /** Normalized fist→body Y (from full impact vector before XZ flattening). */
     aimUpN = 0,
   ): void {
+    this.clearBananaSlipOnHit()
     if (dirXZ.lengthSq() < 1e-8) return
     dirXZ.normalize()
     this.hurtPhase = 'air'
@@ -741,6 +760,7 @@ export class BotFighter {
 
   /** Cataclysm knock when victim crosses 150% launch — huge send-off. */
   applyLaunchPercentCataclysm(dirXZ: Vector3): void {
+    this.clearBananaSlipOnHit()
     if (dirXZ.lengthSq() < 1e-8) dirXZ.set(0, 0, 1)
     dirXZ.normalize()
     this.hurtPhase = 'air'
@@ -753,6 +773,7 @@ export class BotFighter {
   }
 
   applyFinisherKnockback(dirXZ: Vector3, xzImpulse: number, yImpulse: number): void {
+    this.clearBananaSlipOnHit()
     if (dirXZ.lengthSq() < 1e-8) dirXZ.set(0, 0, 1)
     dirXZ.normalize()
     this.hurtPhase = 'air'
@@ -962,7 +983,7 @@ export class BotFighter {
 
     if (this.dashCd > 0) this.dashCd -= delta * 1000
 
-    const canThink = this.hurtPhase === 'none'
+    const canThink = this.hurtPhase === 'none' && !this.isBananaSlipNow()
 
     const toPx = playerPos.x - this.root.position.x
     const toPz = playerPos.z - this.root.position.z
@@ -1033,6 +1054,7 @@ export class BotFighter {
   }
 
   canDealHit(playerPos: Vector3): boolean {
+    if (this.isBananaSlipNow()) return false
     if (this.inHitstun) return false
     if (this.projDealt || !this.projActive || !this.projFlying) return false
     const eyeY = gameConfig.eyeHeight

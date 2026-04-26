@@ -1,4 +1,5 @@
 import { readStoredPlayerName, savePlayerName } from './playerName'
+import { loadUserSettings } from './userSettingsStorage'
 import { isMultiplayerTransportConfigured } from './net/transportConfig'
 import { PublicLobbyDirectoryClient, type PublicLobbyListing } from './net/publicLobbyDirectory'
 import { isMapId, MAP_DEFS, type MapId } from './maps'
@@ -226,6 +227,7 @@ export function runLobbyGate(initialDisplayName: string): Promise<LobbyResult> {
         e.preventDefault()
         const name = input.value.trim() || 'Angler'
         savePlayerName(name)
+        loadUserSettings()
         displayName = name
         userOv.hidden = true
         ui.overlay.hidden = false
