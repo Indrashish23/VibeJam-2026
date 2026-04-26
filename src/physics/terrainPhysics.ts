@@ -216,7 +216,9 @@ export class TerrainPhysics {
       1.25,
     )
     let grounded = actor.controller.computedGrounded()
-    if (floor && floor.normal.y >= 0.35) {
+    /* Skip snap-down while intentionally moving up (jump / knock-up); otherwise ray assist sticks feet to deck. */
+    const upwardIntent = desiredMovement.y > 0.02
+    if (!upwardIntent && floor && floor.normal.y >= 0.35) {
       const movedFeetY = feet.y + movement.y
       const floorGap = movedFeetY - floor.point.y
       if (floorGap <= 0.18 && floorGap >= -0.3) {

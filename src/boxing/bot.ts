@@ -573,7 +573,11 @@ export class BotFighter {
     this.grounded = result.grounded
     if (this.grounded && this.vy <= 0.6) {
       this.vy = 0
-    } else if (_moveDesired.y > 0 && result.movement.y < _moveDesired.y - 0.01) {
+    } else if (
+      _moveDesired.y > 0 &&
+      result.movement.y < _moveDesired.y - 0.01 &&
+      this.vy <= 0.6
+    ) {
       this.vy = 0
     }
   }

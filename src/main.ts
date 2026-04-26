@@ -2272,7 +2272,12 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
     if (grounded && vy <= 0.55) {
       vy = 0
-    } else if (_moveDesired.y > 0 && result.movement.y < _moveDesired.y - 0.01) {
+    } else if (
+      _moveDesired.y > 0 &&
+      result.movement.y < _moveDesired.y - 0.01 &&
+      vy <= 0.55
+    ) {
+      /* Don't zero vy during jump ascent — controller often clips desired Δy while still overlapping floor. */
       vy = 0
     }
   }
