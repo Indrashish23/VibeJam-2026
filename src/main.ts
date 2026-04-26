@@ -9,7 +9,6 @@ import {
   Clock,
   Color,
   DirectionalLight,
-  EquirectangularReflectionMapping,
   EdgesGeometry,
   Group,
   BufferGeometry,
@@ -21,8 +20,6 @@ import {
   PerspectiveCamera,
   Raycaster,
   Scene,
-  SRGBColorSpace,
-  TextureLoader,
   Vector3,
   WebGLRenderer,
 } from 'three'
@@ -61,11 +58,6 @@ import {
 /** Stunned FX SVGs live in `public/ui/` so Vercel/production resolves them without bundling `../Assets/`. */
 const stunnedEffectBgUrl = `${import.meta.env.BASE_URL}ui/StunnedEffectBg.svg`
 const stunnedStarUrl = `${import.meta.env.BASE_URL}ui/StunnedStar.svg`
-/** Same resolution as monkey GLBs: bundled from `Assets/` so dev/prod always load this file, not a stale `public/` copy. */
-const skyboxEquirectUrl = new URL(
-  '../Assets/Skyboxes/vz_clear_ocean_back.png',
-  import.meta.url,
-).href
 
 /** Production without baked host: open once with `?pk=your-deployment.partykit.dev` (stored in session). */
 try {
@@ -407,21 +399,6 @@ function initGame(lobby: LobbyResult) {
   /** Canvas first in DOM so HUD / hit-flash overlays stack above it. */
   gameRoot.prepend(renderer.domElement)
 
-  const skyLoader = new TextureLoader()
-  skyLoader.load(
-    skyboxEquirectUrl,
-    (tex) => {
-      tex.colorSpace = SRGBColorSpace
-      tex.mapping = EquirectangularReflectionMapping
-      tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy())
-      scene.background = tex
-    },
-    undefined,
-    () => {
-      scene.background = new Color(HUB_SKY)
-    },
-  )
-
   const composer = new EffectComposer(renderer)
   composer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
   const pixelPass = new RenderPixelatedPass(Math.max(1, gameConfig.retroPixelScale), scene, camera, {
@@ -441,7 +418,7 @@ function initGame(lobby: LobbyResult) {
   scene.add(ambient)
 
   const sun = new DirectionalLight(0xffffff, gameConfig.sunIntensity)
-  /* Low sun angle → longer, harsher shadows on the deck (reads against moody skybox). */
+  /* Low sun angle → longer, harsher shadows on the deck. */
   sun.position.set(58, 34, 42)
   sun.castShadow = true
   sun.shadow.mapSize.set(4096, 4096)
