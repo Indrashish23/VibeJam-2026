@@ -143,7 +143,7 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
   const sub = document.createElement('span')
   sub.className = 'tweaks-panel-sub'
   sub.textContent =
-    'T or − opens · Category menu (Gameplay + Projectile + Voice type + others) · hover any row for a tip · Esc closes'
+    'T or − opens · Category: Gameplay, Knockback, Projectile, Voice, Sound, … · hover for tips · Esc closes'
   header.appendChild(title)
   header.appendChild(sub)
   panel.appendChild(header)
@@ -341,8 +341,8 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
   }
 
   if (hooks.onTriggerKnockbackDev) {
-    const gameplayPanel = sectionPanels.get('thePlayer')
-    if (gameplayPanel) {
+    const knockPanel = sectionPanels.get('knockback') ?? sectionPanels.get('thePlayer')
+    if (knockPanel) {
       const wrap = document.createElement('div')
       wrap.className = 'tweaks-section-dev-row'
       const btn = document.createElement('button')
@@ -354,7 +354,7 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
         hooks.onTriggerKnockbackDev?.()
       })
       wrap.appendChild(btn)
-      gameplayPanel.appendChild(wrap)
+      knockPanel.appendChild(wrap)
     }
   }
 

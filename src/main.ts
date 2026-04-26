@@ -1070,6 +1070,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   /** Blocks gameplay during KO rematch cinematic (black → swipe → countdown). */
   let rematchSequenceActive = false
+  /**
+   * Bumps when a PvP rematch/reset runs so a slower async `concludeRoundElimination`
+   * (awaiting win splash) cannot call `endMatch` after a new round has already started.
+   */
+  let pvpMatchEpoch = 0
 
   type PlayerHurtPhase = 'none' | 'air' | 'recover'
   let playerHurt: PlayerHurtPhase = 'none'
@@ -1415,10 +1420,12 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   async function concludeRoundElimination(iWonRound: boolean): Promise<void> {
     if (seriesTransitionActive || matchOutcome) return
     seriesTransitionActive = true
+    const epochAtStart = pvpMatchEpoch
     try {
       if (iWonRound) seriesWinsSelf += 1
       else seriesWinsOpp += 1
       if (iWonRound) await playWinGameSplashSequence()
+      if (epochAtStart !== pvpMatchEpoch) return
       endMatch(iWonRound ? 'win' : 'lose')
     } finally {
       seriesTransitionActive = false
@@ -1857,11 +1864,14 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           knockFromWorld = _fp
         }
         /* `playerPercent` was just set from auth payload — that is always the local player's launch %. */
+        const tHit =
+          typeof data.chargeT === 'number' && Number.isFinite(data.chargeT) ? data.chargeT : 0.5
         applyPeerMeleeHit(data.dx, data.dz, {
           authoritative: true,
           victimPercent: playerPercent,
           overkill150: crossedLaunch150,
           knockFromWorld,
+          aggressorChargeT: tHit,
         })
         const sid = data.shotId
         if (typeof sid === 'string') {
@@ -1869,7 +1879,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           if (clip) {
             voice.resumeAudio()
             const hitPos = pendingVictimHitPosByShotId.get(sid) ?? knockFromWorld
-            if (hitPos) voice.playBufferSpatialAt(clip, hitPos, camera)
+            if (hitPos) voice.playBufferSpatialAt(clip, hitPos, camera, { victimHitReceive: true })
             else voice.playBuffer(clip)
             pendingPeerShotAudioById.delete(sid)
             pendingVictimVoiceShotIds.delete(sid)
@@ -1884,7 +1894,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
 
     if (ty === 'authMatchEnd' && lobby.mode === 'online' && typeof data.winnerRole === 'string') {
-      if (!matchOutcome && !seriesTransitionActive) {
+      if (!matchOutcome && !seriesTransitionActive && !rematchSequenceActive) {
         const wr =
           data.winnerRole === 'host' || data.winnerRole === 'guest' ? data.winnerRole : undefined
         if (wr) void concludeRoundElimination(wr === lobby.role)
@@ -2129,6 +2139,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       overkill150?: boolean
       /** When set, knock direction and lift use camera − shot (3D), then flatten for XZ slide. */
       knockFromWorld?: Vector3
+      /**
+       * Authoritative PvP: charge tick from the aggressor (0–1) scales base knock
+       * between `knockVoiceMinMul` and `knockVoiceMaxMul` (like local shots vs bot).
+       */
+      aggressorChargeT?: number
     },
   ): void {
     playerBananaSlipUntil = 0
@@ -2188,12 +2203,21 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     const highMul =
       pctN > highGate ? Math.max(0.05, Math.min(1.5, gameConfig.knockHighPctSpeedMul)) : 1
     const impulseMul = Math.max(0.05, Math.min(1.5, gameConfig.knockLaunchImpulseMul)) * highMul
+    const tAgg =
+      typeof opts?.aggressorChargeT === 'number' && Number.isFinite(opts.aggressorChargeT)
+        ? Math.max(0, Math.min(1, opts.aggressorChargeT))
+        : null
+    const chargeKnockScale =
+      auth && tAgg !== null
+        ? gameConfig.knockVoiceMinMul + tAgg * (gameConfig.knockVoiceMaxMul - gameConfig.knockVoiceMinMul)
+        : 1
     const pctLift = Math.min(2.5, victimPct / 100)
     const vyMul = 1 + pctLift * 0.52
     const baseKnock =
       gameConfig.knockbackOnPlayer *
       gameConfig.playerHurtKnockMul *
       comboMul *
+      chargeKnockScale *
       launchMul *
       impulseMul
     playerKnock.addScaledVector(_knDir, baseKnock)
@@ -2243,7 +2267,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         pendingPeerShotAudioById.delete(data.shotId)
         voice.resumeAudio()
         const hitPos = pendingVictimHitPosByShotId.get(data.shotId)
-        if (hitPos) voice.playBufferSpatialAt(buf, hitPos, camera)
+        if (hitPos) voice.playBufferSpatialAt(buf, hitPos, camera, { victimHitReceive: true })
         else voice.playBuffer(buf)
         pendingVictimHitPosByShotId.delete(data.shotId)
       }
@@ -2869,51 +2893,55 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   async function runRematchSequence(): Promise<void> {
+    pvpMatchEpoch += 1
+    seriesTransitionActive = false
     rematchSequenceActive = true
-    pendingOutgoingRematchId = null
-    pendingIncomingRematchId = null
-    matchOutcome = null
-    seriesWinsSelf = 0
-    seriesWinsOpp = 0
-    hideMatchEndAndRematchUiFully()
-    chargingLmb = false
-    clearPistolState()
-    controls.unlock()
-    keys.forward = false
-    keys.back = false
-    keys.left = false
-    keys.right = false
-    winFinisher = null
-    hideWinGameSplash()
-    playerPercent = 0
-    enemyPercent = 0
-    syncHud()
-    browserHost?.reset()
-    hideMatchEndAndRematchUiFully()
+    try {
+      pendingOutgoingRematchId = null
+      pendingIncomingRematchId = null
+      matchOutcome = null
+      seriesWinsSelf = 0
+      seriesWinsOpp = 0
+      hideMatchEndAndRematchUiFully()
+      chargingLmb = false
+      clearPistolState()
+      controls.unlock()
+      keys.forward = false
+      keys.back = false
+      keys.left = false
+      keys.right = false
+      winFinisher = null
+      hideWinGameSplash()
+      playerPercent = 0
+      enemyPercent = 0
+      syncHud()
+      browserHost?.reset()
+      hideMatchEndAndRematchUiFully()
 
-    if (rematchSeqLayer && rematchBlackSheet) {
-      rematchSeqLayer.hidden = false
-      rematchBlackSheet.classList.remove('rematch-black-sheet--slide')
-      rematchBlackSheet.style.transform = 'translateX(0)'
-      await sleepMs(320)
+      if (rematchSeqLayer && rematchBlackSheet) {
+        rematchSeqLayer.hidden = false
+        rematchBlackSheet.classList.remove('rematch-black-sheet--slide')
+        rematchBlackSheet.style.transform = 'translateX(0)'
+        await sleepMs(320)
+      }
+
+      spawnActors()
+      syncHud()
+
+      if (rematchBlackSheet) {
+        void rematchBlackSheet.offsetWidth
+        rematchBlackSheet.classList.add('rematch-black-sheet--slide')
+        await sleepMs(900)
+        if (rematchSeqLayer) rematchSeqLayer.hidden = true
+        rematchBlackSheet.classList.remove('rematch-black-sheet--slide')
+      }
+
+      await runPvpCountdown321()
+    } finally {
+      rematchSequenceActive = false
+      hideMatchEndAndRematchUiFully()
+      if (matchEndOverlay) matchEndOverlay.hidden = true
     }
-
-    spawnActors()
-    syncHud()
-
-    if (rematchBlackSheet) {
-      void rematchBlackSheet.offsetWidth
-      rematchBlackSheet.classList.add('rematch-black-sheet--slide')
-      await sleepMs(900)
-      if (rematchSeqLayer) rematchSeqLayer.hidden = true
-      rematchBlackSheet.classList.remove('rematch-black-sheet--slide')
-    }
-
-    await runPvpCountdown321()
-
-    rematchSequenceActive = false
-    hideMatchEndAndRematchUiFully()
-    if (matchEndOverlay) matchEndOverlay.hidden = true
     tryPointerLock()
   }
 
@@ -3183,9 +3211,12 @@ async function initGame(lobby: LobbyResult): Promise<void> {
             bot.applyLaunchPercentCataclysm(_knDir)
           } else {
             const launchMul = launchKnockMulFromPercent(enemyPercent)
+            const chargeKnockT =
+              gameConfig.knockVoiceMinMul +
+              shotT * (gameConfig.knockVoiceMaxMul - gameConfig.knockVoiceMinMul)
             bot.applyKnockback(
               _knDir,
-              gameConfig.knockbackOnBot * launchMul * pistolKnockMul,
+              gameConfig.knockbackOnBot * launchMul * pistolKnockMul * chargeKnockT,
               enemyPercent,
               botAimY,
             )
@@ -3211,7 +3242,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         const victimClip = bot.peekProjectileVoice()
         _fp.copy(bot.projPos)
         bot.markHitDealt()
-        if (victimClip) voice.playBufferSpatialAt(victimClip, _fp, camera)
+        if (victimClip) voice.playBufferSpatialAt(victimClip, _fp, camera, { victimHitReceive: true })
         _knDir.subVectors(camera.position, _fp)
         _knDir.y = 0
         if (_knDir.lengthSq() < 1e-8) _knDir.set(0, 0, 1)
@@ -3858,6 +3889,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           hostCheckBananaSlips()
         }
         syncBananaHandVis()
+      } else if (rematchSequenceActive && !matchOutcome) {
+        const playerProjActive = arms.isProjectileActive()
+        arms.update(delta)
+        bot.update(delta, camera.position, terrainPhysics, playerProjActive)
       } else if (matchOutcome) {
         arms.update(delta)
       }

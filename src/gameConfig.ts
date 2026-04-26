@@ -2,8 +2,6 @@
 
 export const defaultGameConfig = {
   moveSpeed: 50,
-  /** Legacy (unused): sprint removed; Shift now triggers dash. */
-  sprintSpeedMul: 1.48,
   damping: 8,
   eyeHeight: 1.55,
   mouseSensitivity: 1,
@@ -55,14 +53,8 @@ export const defaultGameConfig = {
   jumpFxShake: 0,
   /** Brief white overlay strength on jump (0–1); separate from punch hit-flash. */
   jumpFxWhiteFlash: 0,
-  /** Cyan radial burst on jump — disabled in-game; kept for tweaks compatibility. */
-  jumpFxBurstOpacity: 0,
   playerRadius: 0.38,
 
-  /** Bot hits on you before you lose (ring-out still applies). */
-  hitsToWin: 2,
-  /** Legacy Tweaks; win is ring-out / launch percent, not hit count. */
-  enemyHitsToWin: 3,
   punchMaxRange: 42,
   /** Initial fist speed along aim; straight-line projectile (no gravity when fistGravity is 0). */
   punchProjectileSpeed: 56,
@@ -91,19 +83,9 @@ export const defaultGameConfig = {
   knockBotBelowAimMul: 0.58,
   /** Base knock on bot (multiplied by voice `t` lerp). */
   knockbackOnBot: 62,
-  /** Legacy: unused; knock uses knockVoice Min/Max. */
-  knockRingShot1Mul: 0.2,
-  knockRingShot2Mul: 0.5,
-  knockRingShot3Mul: 1.2,
   /** At quiet voice (t=0) knock = base × this; at loud (t=1) × that. */
   knockVoiceMinMul: 0.4,
   knockVoiceMaxMul: 1.05,
-  /** Legacy Tweaks (unused: percent combat). */
-  playerMaxHealth: 100,
-  enemyMaxHealth: 100,
-  /** Legacy Tweaks (unused: percent combat). */
-  voiceDamageMin: 6,
-  voiceDamageMax: 18,
   /** PvE: percent added when the bot’s fist hits you. */
   botFistPercentGain: 12,
   /** 0..1: bot fist knock lerp (uses knockVoice min/max). */
@@ -223,17 +205,10 @@ export const defaultGameConfig = {
   voiceShotSpeedMinMul: 0.24,
   /** Speed multiplier cap when voice is maxed (× punchProjectileSpeed). */
   voiceShotSpeedMaxMul: 1.56,
-  voiceChargeMinRelease: 0.22,
-  /** Legacy unused (always fire on release; `t` from charge). */
-  voiceChargeFullThreshold: 0,
   /** Scales RMS → charge buildup. */
   voiceChargeSensitivity: 1.85,
   /** × RMS after sensitivity — higher = reach max charge with less shouting. */
   voiceChargeRmsScale: (4.2 / 1.7) * 2.1,
-  /** Legacy Tweaks (charge meter no longer uses this). */
-  voiceChargeAttack: 14,
-  /** Legacy Tweaks. */
-  voiceChargeRelease: 6,
   voiceSilenceRmsThreshold: 0.01,
   /** Seconds of quiet mic before charge starts decaying. */
   voiceSilenceBeforeDecaySec: 2,
@@ -241,8 +216,6 @@ export const defaultGameConfig = {
   voiceChargeDecayPerSec: 0.72,
   /** How fast charge rises at full loudness while LMB held (per second toward 1). */
   voiceChargeRisePerSec: 0.66,
-  voiceChargeSilenceDissipate: 1.35,
-  voiceChargePeakHoldSec: 0,
   /** Bar shake / highlight when this normalized charge is exceeded. */
   voiceOverloadThreshold: 0.85,
   /** Shooter hit replay: fade gain to zero over this many seconds (capped vs clip length). */
@@ -257,6 +230,11 @@ export const defaultGameConfig = {
    * raise to hear shots over SFX; very high may clip).
    */
   voiceClipPlaybackGainMul: 1.45,
+  /**
+   * Extra gain multiplier when you are the **victim** and hear the opponent’s shot
+   * spatialized at the hit (PvP; stacks × `voiceClipPlaybackGainMul`).
+   */
+  voiceClipVictimReceiveGainMul: 2,
 
   /** Max seconds of mic captured per charge (MediaRecorder cap). */
   voiceRecordMaxSec: 10,
@@ -316,12 +294,12 @@ export const defaultGameConfig = {
    * Outgoing is **muted to peer** while a voice **shot** is being recorded (LMB or pistol RMB).
    */
   proximityVoipEnabled: 1,
-  /** Web Audio output gain for peer live voice (0–1). */
-  proximityVoipOutputMul: 0.95,
+  /** Web Audio output gain for peer live voice; can exceed 1 in Tweaks to hear the peer clearly. */
+  proximityVoipOutputMul: 1.25,
   /** Panner ref distance (world u) for peer live voice. */
-  proximityVoipRefDistance: 16,
-  proximityVoipMaxDistance: 220,
-  proximityVoipRolloff: 0.42,
+  proximityVoipRefDistance: 24,
+  proximityVoipMaxDistance: 240,
+  proximityVoipRolloff: 0.35,
 
   /** Proximity-style hit audio: distance at which rolloff starts (world units). */
   voiceHitRefDistance: 5,

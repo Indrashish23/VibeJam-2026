@@ -304,9 +304,16 @@ export class VoiceChargeManager {
     src.playbackRate.value = Math.max(0.5, Math.min(2.6, r))
   }
 
-  private voiceClipOutGain(c: AudioContext): GainNode {
+  private voiceClipOutGain(
+    c: AudioContext,
+    options?: { victimHitReceive?: boolean },
+  ): GainNode {
     const g = c.createGain()
-    g.gain.value = Math.max(0, Math.min(4, gameConfig.voiceClipPlaybackGainMul))
+    const base = Math.max(0, Math.min(4, gameConfig.voiceClipPlaybackGainMul))
+    const extra = options?.victimHitReceive
+      ? Math.max(0, Math.min(3, gameConfig.voiceClipVictimReceiveGainMul))
+      : 1
+    g.gain.value = Math.min(8, base * extra)
     return g
   }
 
@@ -546,6 +553,7 @@ export class VoiceChargeManager {
     buf: AudioBuffer | null,
     soundWorld: Vector3,
     camera: PerspectiveCamera,
+    playOpts?: { victimHitReceive?: boolean },
   ): void {
     this.stopVoiceClipPlayback()
     const c = this.ctx
@@ -583,7 +591,7 @@ export class VoiceChargeManager {
       src.buffer = buf
       this.applyVoiceDeliveryRate(src)
       src.connect(panner)
-      const out = this.voiceClipOutGain(c)
+      const out = this.voiceClipOutGain(c, playOpts)
       panner.connect(out)
       out.connect(c.destination)
       this.trackPlayback(() => {

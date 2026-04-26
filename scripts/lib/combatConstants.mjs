@@ -13,9 +13,8 @@ export const COMBAT = {
   botBodyRadius: 0.72,
   /** Same as client: projectileRadius + botBodyRadius * reachMul */
   reachMul: 0.88,
-  enemyHitsToWin: 3,
-  hitsToWin: 2,
-  voiceMinChargeToFire: 0.75,
+  /** Must match `gameConfig.voiceMinChargeToFire`. */
+  voiceMinChargeToFire: 0.36,
   percentGainMin: 4,
   percentGainMax: 22,
   /** Approximate capsule feet offset (matches BotFighter geometry). */

@@ -42,7 +42,7 @@ export function createProximityVoip3d(
         out.gain.value = 0
         return
       }
-      out.gain.value = Math.max(0, Math.min(1, gameConfig.proximityVoipOutputMul))
+      out.gain.value = Math.max(0, Math.min(2, gameConfig.proximityVoipOutputMul))
       panner.refDistance = gameConfig.proximityVoipRefDistance
       panner.maxDistance = gameConfig.proximityVoipMaxDistance
       panner.rolloffFactor = gameConfig.proximityVoipRolloff
