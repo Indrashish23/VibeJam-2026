@@ -17,7 +17,8 @@ export function createProximityVoip3d(
   out.gain.value = 0
 
   const panner = ctx.createPanner()
-  panner.panningModel = 'HRTF'
+  /* equalpower 3D is more stable than HRTF for some headsets / angles (voice stays audible). */
+  panner.panningModel = 'equalpower'
   panner.distanceModel = 'inverse'
   panner.refDistance = gameConfig.proximityVoipRefDistance
   panner.maxDistance = gameConfig.proximityVoipMaxDistance
@@ -36,6 +37,7 @@ export function createProximityVoip3d(
     resume: () => void ctx.resume(),
 
     tick: () => {
+      if (ctx.state === 'suspended') void ctx.resume()
       if (gameConfig.proximityVoipEnabled < 0.5) {
         out.gain.value = 0
         return

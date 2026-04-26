@@ -317,11 +317,11 @@ export const defaultGameConfig = {
    */
   proximityVoipEnabled: 1,
   /** Web Audio output gain for peer live voice (0–1). */
-  proximityVoipOutputMul: 0.65,
+  proximityVoipOutputMul: 0.95,
   /** Panner ref distance (world u) for peer live voice. */
-  proximityVoipRefDistance: 5,
-  proximityVoipMaxDistance: 90,
-  proximityVoipRolloff: 1.2,
+  proximityVoipRefDistance: 16,
+  proximityVoipMaxDistance: 220,
+  proximityVoipRolloff: 0.42,
 
   /** Proximity-style hit audio: distance at which rolloff starts (world units). */
   voiceHitRefDistance: 5,

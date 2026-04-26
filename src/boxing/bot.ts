@@ -841,17 +841,6 @@ export class BotFighter {
         return
       }
       const rad = PROJECTILE_R * this.projSizeMul
-      const hwIn = gameConfig.groundWidth / 2 - rad * 0.5
-      const hdIn = gameConfig.groundDepth / 2 - rad * 0.5
-      const minY = rad
-      if (
-        Math.abs(this.projPos.x) <= hwIn &&
-        Math.abs(this.projPos.z) <= hdIn &&
-        this.projPos.y <= minY + 0.08
-      ) {
-        this.clearProjectile()
-        return
-      }
       const hw = gameConfig.groundWidth / 2 + rad
       const hd = gameConfig.groundDepth / 2 + rad
       if (Math.abs(this.projPos.x) > hw || Math.abs(this.projPos.z) > hd) {
@@ -880,13 +869,15 @@ export class BotFighter {
     const hw = gameConfig.groundWidth / 2 - rad * 0.5
     const hd = gameConfig.groundDepth / 2 - rad * 0.5
     const minY = rad
-    const onDeck =
+    if (
       Math.abs(this.projPos.x) <= hw &&
       Math.abs(this.projPos.z) <= hd &&
-      this.projPos.y <= minY + 0.08
-    if (onDeck) {
-      this.clearProjectile()
-      return
+      this.projPos.y <= minY + 0.1
+    ) {
+      this.projPos.y = minY
+      this.projVel.y = 0
+      this.projVel.x *= 0.8
+      this.projVel.z *= 0.8
     }
     let hit = false
     if (Math.abs(this.projPos.x) > hw) {

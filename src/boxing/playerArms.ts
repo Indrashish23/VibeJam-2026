@@ -282,17 +282,6 @@ export class PlayerArms {
         return
       }
       const rad = PROJECTILE_R * this.proj.sizeMul
-      const hwIn = gameConfig.groundWidth / 2 - rad * 0.5
-      const hdIn = gameConfig.groundDepth / 2 - rad * 0.5
-      const minY = rad
-      if (
-        Math.abs(this.proj.pos.x) <= hwIn &&
-        Math.abs(this.proj.pos.z) <= hdIn &&
-        this.proj.pos.y <= minY + 0.08
-      ) {
-        this.resetProjectile()
-        return
-      }
       const hw = gameConfig.groundWidth / 2 + rad
       const hd = gameConfig.groundDepth / 2 + rad
       if (Math.abs(this.proj.pos.x) > hw || Math.abs(this.proj.pos.z) > hd) {
@@ -328,15 +317,16 @@ export class PlayerArms {
     const hd = gameConfig.groundDepth / 2 - rad * 0.5
     const minY = rad
 
-    const onDeck =
+    /* Rest on the deck: clamp Y / damp; do not destroy the shot (was reset before). */
+    if (
       Math.abs(this.proj.pos.x) <= hw &&
       Math.abs(this.proj.pos.z) <= hd &&
-      this.proj.pos.y <= minY + 0.08
-
-    if (onDeck) {
+      this.proj.pos.y <= minY + 0.1
+    ) {
       this.proj.pos.y = minY
-      this.proj.vel.set(0, 0, 0)
-      return true
+      this.proj.vel.y = 0
+      this.proj.vel.x *= 0.8
+      this.proj.vel.z *= 0.8
     }
 
     let hit = false

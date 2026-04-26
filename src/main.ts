@@ -3469,6 +3469,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       if (tryBananaRmb()) return
     }
     if (gameplayInputBlocked()) return
+    void proxVoip3d?.resume()
 
     if (pistolModeOn()) {
       if (e.button === 0) {
