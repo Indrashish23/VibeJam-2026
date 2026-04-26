@@ -233,6 +233,15 @@ export const defaultGameConfig = {
   /** Voice shots per round; `0` = unlimited. */
   voiceShotAmmoMax: 0,
 
+  /**
+   * Experimental pistol/magazine mode toggle. When 1, RMB-hold-to-shout fills the magazine
+   * (`voiceMagazineSize` rounds), and LMB clicks fire one pre-loaded snippet per click without
+   * recharging. Recharge is only allowed when the magazine is empty. 0 = legacy charge-and-release.
+   */
+  voicePistolModeEnabled: 0,
+  /** Pistol mode: rounds in a full magazine (snippets carved equally from the recorded clip). */
+  voiceMagazineSize: 10,
+
   /** Proximity-style hit audio: distance at which rolloff starts (world units). */
   voiceHitRefDistance: 5,
   voiceHitMaxDistance: 96,

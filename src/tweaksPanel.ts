@@ -220,6 +220,7 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
   }
 
   const gameplayPanelEarly = sectionPanels.get('thePlayer')
+  let pistolModeCb: HTMLInputElement | null = null
   if (gameplayPanelEarly) {
     const wrap = document.createElement('div')
     wrap.className = 'tweaks-row tweaks-row-select'
@@ -253,6 +254,27 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
     wrap.appendChild(name)
     wrap.appendChild(sel)
     gameplayPanelEarly.insertBefore(wrap, gameplayPanelEarly.firstChild)
+
+    /* Pistol mode toggle — sits above the projectile dropdown so it's the very first row in Gameplay. */
+    const pistolWrap = document.createElement('label')
+    pistolWrap.className = 'tweaks-row tweaks-row-bool'
+    pistolWrap.title =
+      'Experimental: hold RMB to shout-charge a magazine, click LMB to fire each pre-loaded snippet (no charge per shot). Recharge only when empty.'
+    const pistolCb = document.createElement('input')
+    pistolCb.type = 'checkbox'
+    pistolCb.checked = gameConfig.voicePistolModeEnabled >= 0.5
+    pistolCb.addEventListener('change', () => {
+      gameConfig.voicePistolModeEnabled = pistolCb.checked ? 1 : 0
+      hooks.onConfigChanged?.()
+    })
+    const pistolName = document.createElement('span')
+    pistolName.className = 'tweaks-name'
+    pistolName.textContent = 'Pistol mode (experimental)'
+    pistolName.title = pistolWrap.title
+    pistolWrap.appendChild(pistolCb)
+    pistolWrap.appendChild(pistolName)
+    pistolModeCb = pistolCb
+    gameplayPanelEarly.insertBefore(pistolWrap, gameplayPanelEarly.firstChild)
   }
 
   if (hooks.onTriggerKnockbackDev) {
@@ -299,6 +321,9 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
       projectileModeSel.value = String(
         Math.max(0, Math.min(2, Math.round(gameConfig.voiceProjectileMode))),
       )
+    }
+    if (pistolModeCb) {
+      pistolModeCb.checked = gameConfig.voicePistolModeEnabled >= 0.5
     }
     syncSceneFromConfig()
     hooks.onConfigChanged?.()

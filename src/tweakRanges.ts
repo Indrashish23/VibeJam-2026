@@ -105,6 +105,8 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   voiceLookdownBoostVy: { min: 0, max: 24, step: 0.2 },
   voiceLookdownBoostMaxVy: { min: 4, max: 40, step: 0.5 },
   voiceShotAmmoMax: { min: 0, max: 99, step: 1 },
+  voicePistolModeEnabled: { min: 0, max: 1, step: 1 },
+  voiceMagazineSize: { min: 1, max: 30, step: 1 },
   voiceProjectileMode: { min: 0, max: 2, step: 1 },
   voiceHitRefDistance: { min: 0.5, max: 80, step: 0.5 },
   voiceHitMaxDistance: { min: 8, max: 240, step: 2 },
@@ -272,6 +274,8 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   voiceLookdownBoostVy: 'Look-down shot vy boost',
   voiceLookdownBoostMaxVy: 'Look-down max vy after boost',
   voiceShotAmmoMax: 'Voice shots / round (0 = ∞)',
+  voicePistolModeEnabled: 'Pistol mode enabled (0/1)',
+  voiceMagazineSize: 'Pistol mode magazine size',
   voiceProjectileMode: 'Projectile delivery mode (0–2)',
   voiceHitRefDistance: 'Spatial hit ref dist',
   voiceHitMaxDistance: 'Spatial hit max dist',
@@ -547,6 +551,10 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   voiceLookdownBoostVy: 'Upward velocity added when a valid look-down shot fires and the hop token is available.',
   voiceLookdownBoostMaxVy: 'After applying the look-down boost, vy is clamped to at most this value.',
   voiceShotAmmoMax: 'Maximum voice shots per round; 0 means unlimited.',
+  voicePistolModeEnabled:
+    'Experimental: 1 = pistol/magazine mode (RMB hold = shout-charge, LMB click = instant snippet shot). 0 = legacy charge-and-release. Also exposed as a checkbox at the top of the Gameplay tab.',
+  voiceMagazineSize:
+    'Pistol mode: rounds loaded into a fully charged magazine. The recorded clip is split into this many equal-time snippets when fully charged (fewer rounds = longer snippets when partially charged).',
   voiceProjectileMode:
     '0 = flying projectile, 1 = instant hitscan from mouth along view, 2 = hitscan from camera/eye. Also in Gameplay dropdown.',
   voiceHitRefDistance: 'Distance at which spatial “whoosh” hit audio begins to roll off.',
@@ -642,6 +650,7 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
     id: 'projectile',
     title: 'Projectile',
     keys: [
+      'voiceMagazineSize',
       'punchMaxRange',
       'punchProjectileSpeed',
       'fistAirDrag',

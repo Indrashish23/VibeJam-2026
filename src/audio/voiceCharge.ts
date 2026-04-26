@@ -350,6 +350,113 @@ export class VoiceChargeManager {
     }
   }
 
+  /** Pistol mode: play a slice of an existing AudioBuffer without copying samples. */
+  playBufferSlice(buf: AudioBuffer | null, offsetSec: number, durationSec: number): void {
+    this.stopVoiceClipPlayback()
+    const c = this.ctx
+    if (!c || !buf) {
+      this.playFallbackHitSound()
+      return
+    }
+    try {
+      const src = c.createBufferSource()
+      src.buffer = buf
+      this.applyVoiceDeliveryRate(src)
+      src.connect(c.destination)
+      this.trackPlayback(() => {
+        try {
+          src.stop(0)
+        } catch {
+          /* ignore */
+        }
+        try {
+          src.disconnect()
+        } catch {
+          /* ignore */
+        }
+      })
+      const off = Math.max(0, Math.min(buf.duration, offsetSec))
+      const dur = Math.max(0.01, Math.min(buf.duration - off, durationSec))
+      src.start(0, off, dur)
+    } catch {
+      this.playFallbackHitSound()
+    }
+  }
+
+  /** Pistol mode (spatial): play a slice positioned in world space; same rolloff knobs as `playBufferSpatialAt`. */
+  playBufferSliceSpatialAt(
+    buf: AudioBuffer | null,
+    offsetSec: number,
+    durationSec: number,
+    soundWorld: Vector3,
+    camera: PerspectiveCamera,
+  ): void {
+    this.stopVoiceClipPlayback()
+    const c = this.ctx
+    if (!c || !buf) {
+      this.playFallbackHitSound()
+      return
+    }
+    try {
+      camera.getWorldPosition(_listenerPos)
+      camera.getWorldDirection(_listenerFwd)
+      _listenerFwd.normalize()
+
+      const listener = c.listener
+      listener.positionX.value = _listenerPos.x
+      listener.positionY.value = _listenerPos.y
+      listener.positionZ.value = _listenerPos.z
+      listener.forwardX.value = _listenerFwd.x
+      listener.forwardY.value = _listenerFwd.y
+      listener.forwardZ.value = _listenerFwd.z
+      listener.upX.value = _listenerUp.x
+      listener.upY.value = _listenerUp.y
+      listener.upZ.value = _listenerUp.z
+
+      const panner = c.createPanner()
+      panner.panningModel = 'HRTF'
+      panner.distanceModel = 'inverse'
+      panner.refDistance = gameConfig.voiceHitRefDistance
+      panner.maxDistance = gameConfig.voiceHitMaxDistance
+      panner.rolloffFactor = gameConfig.voiceHitRolloff
+      panner.coneInnerAngle = 360
+      panner.coneOuterAngle = 360
+      panner.setPosition(soundWorld.x, soundWorld.y, soundWorld.z)
+
+      const src = c.createBufferSource()
+      src.buffer = buf
+      this.applyVoiceDeliveryRate(src)
+      src.connect(panner)
+      panner.connect(c.destination)
+      this.trackPlayback(() => {
+        try {
+          src.stop(0)
+        } catch {
+          /* ignore */
+        }
+        try {
+          src.disconnect()
+          panner.disconnect()
+        } catch {
+          /* ignore */
+        }
+      })
+      src.onended = () => {
+        try {
+          src.disconnect()
+          panner.disconnect()
+        } catch {
+          /* ignore */
+        }
+      }
+      const off = Math.max(0, Math.min(buf.duration, offsetSec))
+      const dur = Math.max(0.01, Math.min(buf.duration - off, durationSec))
+      src.start(0, off, dur)
+    } catch {
+      this.playFallbackHitSound()
+    }
+  }
+
   /** Shooter-only replay: fades gain to zero over this many seconds (capped vs clip length). */
   playBufferFading(buf: AudioBuffer | null): void {
     this.stopVoiceClipPlayback()
@@ -470,4 +577,68 @@ export class VoiceChargeManager {
       this.playFallbackHitSound()
     }
   }
+}
+
+/**
+ * Pistol mode: extract a slice of an AudioBuffer as a 16-bit PCM WAV blob.
+ * `decodeAudioData` accepts WAV in all major browsers, so this is safe to send across PartyKit
+ * via the existing `voiceShot` payload (mime: 'audio/wav').
+ */
+export function audioBufferSliceToWavBlob(
+  buf: AudioBuffer,
+  offsetSec: number,
+  durationSec: number,
+): Blob {
+  const sampleRate = buf.sampleRate
+  const channels = Math.max(1, Math.min(2, buf.numberOfChannels))
+  const startFrame = Math.max(0, Math.min(buf.length, Math.floor(offsetSec * sampleRate)))
+  const endFrame = Math.max(
+    startFrame + 1,
+    Math.min(buf.length, startFrame + Math.floor(durationSec * sampleRate)),
+  )
+  const frames = endFrame - startFrame
+
+  const channelData: Float32Array[] = []
+  for (let ch = 0; ch < channels; ch++) {
+    channelData.push(buf.getChannelData(ch))
+  }
+
+  const blockAlign = channels * 2 // 16-bit PCM
+  const byteRate = sampleRate * blockAlign
+  const dataBytes = frames * blockAlign
+  const bufferBytes = 44 + dataBytes
+  const ab = new ArrayBuffer(bufferBytes)
+  const view = new DataView(ab)
+
+  function writeStr(offset: number, s: string) {
+    for (let i = 0; i < s.length; i++) view.setUint8(offset + i, s.charCodeAt(i))
+  }
+
+  writeStr(0, 'RIFF')
+  view.setUint32(4, bufferBytes - 8, true)
+  writeStr(8, 'WAVE')
+  writeStr(12, 'fmt ')
+  view.setUint32(16, 16, true) // PCM fmt chunk size
+  view.setUint16(20, 1, true) // PCM format
+  view.setUint16(22, channels, true)
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, byteRate, true)
+  view.setUint16(32, blockAlign, true)
+  view.setUint16(34, 16, true) // bits per sample
+  writeStr(36, 'data')
+  view.setUint32(40, dataBytes, true)
+
+  let p = 44
+  for (let i = 0; i < frames; i++) {
+    const src = startFrame + i
+    for (let ch = 0; ch < channels; ch++) {
+      let s = channelData[ch][src] ?? 0
+      if (s > 1) s = 1
+      else if (s < -1) s = -1
+      view.setInt16(p, s < 0 ? s * 0x8000 : s * 0x7fff, true)
+      p += 2
+    }
+  }
+
+  return new Blob([ab], { type: 'audio/wav' })
 }

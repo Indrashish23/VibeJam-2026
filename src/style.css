@@ -826,6 +826,43 @@ body {
   pointer-events: none;
 }
 
+.ammo-count {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 22pt;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #fde68a;
+  text-align: center;
+  margin-bottom: 0.18rem;
+  line-height: 1;
+  text-shadow:
+    -1px -1px 0 rgba(0, 0, 0, 0.85),
+    1px -1px 0 rgba(0, 0, 0, 0.85),
+    -1px 1px 0 rgba(0, 0, 0, 0.85),
+    1px 1px 0 rgba(0, 0, 0, 0.85),
+    0 0 14px rgba(251, 191, 36, 0.55);
+}
+
+.ammo-count--empty {
+  color: #fca5a5;
+  text-shadow:
+    -1px -1px 0 rgba(0, 0, 0, 0.85),
+    1px -1px 0 rgba(0, 0, 0, 0.85),
+    -1px 1px 0 rgba(0, 0, 0, 0.85),
+    1px 1px 0 rgba(0, 0, 0, 0.85),
+    0 0 14px rgba(248, 113, 113, 0.55);
+}
+
+.ammo-count--charging {
+  color: #93c5fd;
+  text-shadow:
+    -1px -1px 0 rgba(0, 0, 0, 0.85),
+    1px -1px 0 rgba(0, 0, 0, 0.85),
+    -1px 1px 0 rgba(0, 0, 0, 0.85),
+    1px 1px 0 rgba(0, 0, 0, 0.85),
+    0 0 14px rgba(96, 165, 250, 0.6);
+}
+
 .charge-bar-label {
   font-size: 24pt;
   letter-spacing: 0.02em;
@@ -1407,6 +1444,22 @@ body {
   margin: 0 0 0.35rem;
   font-size: 1.35rem;
   color: #f1f5f9;
+}
+
+.match-end-card--forfeit h2,
+.match-end-card--forfeit p {
+  animation: match-forfeit-flash 0.26s ease-in-out infinite alternate;
+}
+
+@keyframes match-forfeit-flash {
+  from {
+    color: #f8fafc;
+    text-shadow: 0 0 0 rgba(248, 250, 252, 0);
+  }
+  to {
+    color: #fca5a5;
+    text-shadow: 0 0 18px rgba(252, 165, 165, 0.55);
+  }
 }
 
 .match-end-card p {

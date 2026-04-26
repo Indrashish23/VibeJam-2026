@@ -33,7 +33,7 @@ import { gameConfig } from './gameConfig'
 import { isMapId, loadMap, type MapHandle, type MapId, type SpawnSlot } from './maps'
 import { BotFighter, type BotMode } from './boxing/bot'
 import { PlayerArms } from './boxing/playerArms'
-import { VoiceChargeManager } from './audio/voiceCharge'
+import { VoiceChargeManager, audioBufferSliceToWavBlob } from './audio/voiceCharge'
 import { mountTweaksPanel } from './tweaksPanel'
 import { runLobbyGate, type LobbyResult } from './lobbyGate'
 import { base64ToBlob, blobToBase64 } from './net/blobCodec'
@@ -101,6 +101,8 @@ if (stunnedBgEl) stunnedBgEl.src = stunnedEffectBgUrl
 const matchEndOverlay = document.getElementById('match-end-overlay') as HTMLDivElement | null
 const matchEndTitle = document.getElementById('match-end-title')
 const matchEndSub = document.getElementById('match-end-sub')
+const matchEndCardEl =
+  matchEndOverlay?.querySelector('.match-end-card') as HTMLDivElement | null
 const matchRematchPrimaryActionsEl = document.getElementById(
   'match-rematch-primary-actions',
 ) as HTMLDivElement | null
@@ -141,6 +143,7 @@ const chargeBarWrap = document.getElementById('charge-bar-wrap') as HTMLDivEleme
 const chargeBarFill = document.getElementById('charge-bar-fill') as HTMLDivElement | null
 const chargeBarMinMark = document.getElementById('charge-bar-min') as HTMLDivElement | null
 const chargeBarStatus = document.getElementById('charge-bar-status') as HTMLDivElement | null
+const ammoCountEl = document.getElementById('ammo-count') as HTMLDivElement | null
 const micBlockedOverlay = document.getElementById('mic-blocked-overlay') as HTMLDivElement | null
 const micBlockedSubEl = document.getElementById('mic-blocked-sub') as HTMLParagraphElement | null
 const countdownTitleEl = document.getElementById('countdown-title') as HTMLParagraphElement | null
@@ -352,6 +355,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let browserHost: ReturnType<typeof createBrowserHostAuthority> | null = null
   let mpPresenceCount = 0
   let mpOpponentName: string | null = null
+  let peerSeenInRoom = false
+  let opponentForfeitHandled = false
+  let leavingToLobby = false
+  const guestAwaitingHostHello = lobby.mode === 'online' && lobby.role === 'guest'
+  let guestSawHostHello = !guestAwaitingHostHello
 
   /** Percent HUD foe line: peer hello name, else public-listing host name for guests; never internal dummy label. */
   function opponentHudName(): string {
@@ -914,6 +922,28 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let voiceInputBlocked = true
   let voiceResumeCountdownActive = false
 
+  /** Pistol mode (experimental): RMB hold = shout-charge a magazine; LMB click = fire snippet. */
+  type PistolSlot = { offsetSec: number; durationSec: number }
+  type PistolMagazine = { buf: AudioBuffer; slots: PistolSlot[] }
+  let chargingRmb = false
+  let pistolMag: PistolMagazine | null = null
+  let pistolNextSlot = 0
+  function pistolModeOn(): boolean {
+    return gameConfig.voicePistolModeEnabled >= 0.5
+  }
+  function pistolMagSize(): number {
+    return Math.max(1, Math.min(99, Math.round(gameConfig.voiceMagazineSize)))
+  }
+  function pistolAmmoLeft(): number {
+    if (!pistolMag) return 0
+    return Math.max(0, pistolMag.slots.length - pistolNextSlot)
+  }
+  function clearPistolState(): void {
+    chargingRmb = false
+    pistolMag = null
+    pistolNextSlot = 0
+  }
+
   let tweakConfigDebounce: ReturnType<typeof setTimeout> | null = null
   let tweakConfigResetChain: Promise<void> = Promise.resolve()
 
@@ -1022,6 +1052,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     while (rematchSequenceActive) await sleepMs(55)
 
     chargingLmb = false
+    clearPistolState()
     voice.resetChargeMeter()
     voiceChargeSmoothed = 0
     if (chargeBarFill) chargeBarFill.style.width = '0%'
@@ -1234,6 +1265,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   function scheduleMpBegin(): void {
     if (!isOnline || mpSeqStarted || mpPhase === 'live') return
     if (mpPresenceCount < 2) return
+    if (guestAwaitingHostHello && !guestSawHostHello) return
     if (
       lobby.mode === 'online' &&
       !isAuthoritativeListenServer() &&
@@ -1251,6 +1283,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       mpBeginTimer = null
       if (mpSeqStarted || mpPhase === 'live') return
       if (mpPresenceCount < 2) return
+      if (guestAwaitingHostHello && !guestSawHostHello) return
       if (!mpOpponentName) {
         const hint =
           lobby.mode === 'online' && lobby.role === 'guest'
@@ -1269,6 +1302,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   /** Hide match-end overlay and all rematch negotiation UI (incoming / waiting / cancel). */
   function hideMatchEndAndRematchUiFully(): void {
     if (matchEndOverlay) matchEndOverlay.hidden = true
+    matchEndCardEl?.classList.remove('match-end-card--forfeit')
     if (matchRematchIncomingEl) matchRematchIncomingEl.hidden = true
     if (matchRematchPrimaryActionsEl) matchRematchPrimaryActionsEl.hidden = true
     if (matchRematchBtnEl) matchRematchBtnEl.hidden = true
@@ -1303,6 +1337,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   function returnToLobbyReload(notifyOpponent: boolean = false): void {
+    leavingToLobby = true
     if (notifyOpponent && isOnline && lobby.mode === 'online' && (mpSocket?.readyState === 1 || rtcGame)) {
       try {
         sendGameTraffic({ type: 'matchCancelled' })
@@ -1319,6 +1354,31 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     window.setTimeout(() => {
       window.location.reload()
     }, delay)
+  }
+
+  function showOpponentForfeitAndReturn(): void {
+    if (opponentForfeitHandled) return
+    opponentForfeitHandled = true
+    clearMovementKeys()
+    hideWinGameSplash()
+    winFinisher = null
+    matchOutcome = null
+    hideMatchEndAndRematchUiFully()
+    try {
+      controls.unlock()
+    } catch {
+      /* ignore */
+    }
+    triggerHitImpactFx()
+    voice.resumeAudio()
+    voice.playFallbackHitSound()
+    if (matchEndOverlay) matchEndOverlay.hidden = false
+    matchEndCardEl?.classList.add('match-end-card--forfeit')
+    if (matchEndTitle) matchEndTitle.textContent = 'Your opponent forfeited'
+    if (matchEndSub) matchEndSub.textContent = 'GAME OVER'
+    window.setTimeout(() => {
+      returnToLobbyReload(false)
+    }, 1450)
   }
 
   function beginOnlineRematchRequest(): void {
@@ -1408,6 +1468,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
     if (ty === 'presence' && typeof data.count === 'number') {
       mpPresenceCount = data.count
+      if (mpPresenceCount >= 2) {
+        peerSeenInRoom = true
+      } else if (peerSeenInRoom && lobby.mode === 'online') {
+        showOpponentForfeitAndReturn()
+      }
       scheduleMpBegin()
       return
     }
@@ -1418,7 +1483,19 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     ) {
       const other: 'host' | 'guest' = lobby.role === 'host' ? 'guest' : 'host'
       if (data.role === other) {
+        peerSeenInRoom = true
+        if (lobby.mode === 'online' && lobby.role === 'guest' && data.role === 'host') {
+          guestSawHostHello = true
+        }
         mpOpponentName = data.displayName.trim() || 'Player'
+        if (lobby.mode === 'online' && lobby.role === 'host') {
+          sendGameTraffic({
+            type: 'hello',
+            displayName: displayPlayerName(),
+            role: lobby.role,
+            mapId: map.id,
+          })
+        }
         /* Host is authoritative on map: guest swaps to match the host's choice. */
         if (lobby.mode === 'online' && lobby.role === 'guest' && isMapId(data.mapId)) {
           void swapMap(data.mapId)
@@ -1902,6 +1979,176 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
   }
 
+  /** Pistol mode: build a fresh AudioBuffer holding just the snippet's samples (cheap, ≤1s usually). */
+  function sliceBufferToBuffer(
+    src: AudioBuffer,
+    offsetSec: number,
+    durationSec: number,
+  ): AudioBuffer | null {
+    const ctx = voice.getAudioContext()
+    if (!ctx) return null
+    const start = Math.max(0, Math.min(src.length, Math.floor(offsetSec * src.sampleRate)))
+    const end = Math.max(
+      start + 1,
+      Math.min(src.length, start + Math.floor(durationSec * src.sampleRate)),
+    )
+    const frames = Math.max(1, end - start)
+    const channels = Math.max(1, src.numberOfChannels)
+    const out = ctx.createBuffer(channels, frames, src.sampleRate)
+    for (let ch = 0; ch < channels; ch++) {
+      const dst = out.getChannelData(ch)
+      const inp = src.getChannelData(ch).subarray(start, start + frames)
+      dst.set(inp)
+    }
+    return out
+  }
+
+  /** Pistol mode: RMB released — decode recording, slice equally into round(charge × magSize) snippets. */
+  async function finishPistolReload(): Promise<void> {
+    const blob = await voice.finishChargeRecording()
+    /* Visual telegraph: keep charge frozen for the HUD to show ammo/cap fill from now on. */
+    const cap = pistolMagSize()
+    const liveCharge = voiceInputBlocked
+      ? Math.max(0, Math.min(1, gameConfig.voiceDryFireT))
+      : voiceChargeSmoothed
+    let ammo = Math.max(0, Math.min(cap, Math.round(liveCharge * cap)))
+    if (ammo <= 0) {
+      voice.resetChargeMeter()
+      voiceChargeSmoothed = 0
+      if (chargeBarFill) chargeBarFill.style.width = '0%'
+      if (chargeBarWrap) chargeBarWrap.classList.remove('charge-bar-wrap--ready')
+      if (chargeBarWrap) chargeBarWrap.classList.remove('charge-bar-wrap--overload')
+      return
+    }
+    let buf: AudioBuffer | null = null
+    try {
+      buf = await voice.decodeRecording(blob)
+    } catch {
+      buf = null
+    }
+    if (!buf || buf.duration < 0.05) {
+      /* Decode failed or clip too short — refund charge so the player can retry. */
+      voice.resetChargeMeter()
+      voiceChargeSmoothed = 0
+      if (chargeBarFill) chargeBarFill.style.width = '0%'
+      return
+    }
+    const slotDur = buf.duration / ammo
+    const slots: PistolSlot[] = []
+    for (let i = 0; i < ammo; i++) {
+      slots.push({ offsetSec: i * slotDur, durationSec: slotDur })
+    }
+    pistolMag = { buf, slots }
+    pistolNextSlot = 0
+    /* Reset live charge so the bar redraws from ammo/cap on the next frame. */
+    voice.resetChargeMeter()
+    voiceChargeSmoothed = 0
+    if (chargeBarWrap) chargeBarWrap.classList.remove('charge-bar-wrap--overload')
+    if (chargeBarWrap) chargeBarWrap.classList.remove('charge-bar-wrap--ready')
+  }
+
+  /** Pistol mode: LMB click — fire the next snippet as a fresh shot (no charging, no record). */
+  async function firePistolShot(): Promise<void> {
+    if (!pistolMag || pistolNextSlot >= pistolMag.slots.length) return
+    const slot = pistolMag.slots[pistolNextSlot]
+    /* Build a self-contained AudioBuffer for this snippet so the existing hit-replay path works unchanged. */
+    const snippetBuf = sliceBufferToBuffer(pistolMag.buf, slot.offsetSec, slot.durationSec)
+
+    queueLocalAnimOneShot('shooting')
+
+    /* Pistol shots are uniform full-strength. Use t=1 against existing charge-driven knock/percent maths. */
+    const t = 1
+    const speedMul = gameConfig.voiceShotSpeedMaxMul
+    const sizeMul = Math.max(
+      0.15,
+      gameConfig.projectileSizeBase * (1 + gameConfig.projectileSizeChargeMaxBonus * t),
+    )
+
+    camera.getWorldDirection(_aimDir)
+    _camFwd.copy(_aimDir).normalize()
+    _camRight.crossVectors(_camFwd, _worldUp)
+    if (_camRight.lengthSq() < 1e-6) _camRight.set(1, 0, 0)
+    _camRight.normalize()
+    _muzzleWorld
+      .copy(camera.position)
+      .addScaledVector(_camFwd, gameConfig.pcMouthForward)
+      .addScaledVector(_worldUp, gameConfig.pcMouthHeight)
+      .addScaledVector(_camRight, gameConfig.pcMouthSide)
+
+    const projMode = Math.max(0, Math.min(2, Math.round(gameConfig.voiceProjectileMode)))
+    const fired =
+      projMode === 1
+        ? arms.tryHeadscanFire(speedMul, snippetBuf, t, sizeMul, _muzzleWorld, _aimDir)
+        : projMode === 2
+          ? arms.tryHeadscanFire(speedMul, snippetBuf, t, sizeMul, camera.position, _aimDir)
+          : arms.tryFire(speedMul, snippetBuf, t, sizeMul, _muzzleWorld, _aimDir)
+    if (!fired) return
+
+    /* Consume one round; clear the magazine when emptied so the HUD prompt swaps to "Hold RMB". */
+    pistolNextSlot += 1
+    if (pistolNextSlot >= pistolMag.slots.length) {
+      pistolMag = null
+      pistolNextSlot = 0
+    }
+    const ammoCap = Math.round(gameConfig.voiceShotAmmoMax)
+    if (ammoCap > 0 && voiceAmmoLeft > 0) voiceAmmoLeft -= 1
+
+    /* Look-down hop: keep the existing ergonomic boost identical to legacy fire path. */
+    if (voiceDownBoostReady && camera.rotation.x <= -gameConfig.voiceLookdownPitchMin) {
+      vy = Math.min(
+        gameConfig.voiceLookdownBoostMaxVy,
+        vy + Math.max(0, gameConfig.voiceLookdownBoostVy),
+      )
+      grounded = false
+      voiceDownBoostReady = false
+    }
+
+    if (
+      isOnline &&
+      mpPhase === 'live' &&
+      lobby.mode === 'online' &&
+      bot.mode === 'network' &&
+      snippetBuf
+    ) {
+      const shotId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+      const o = new Vector3()
+      const v = new Vector3()
+      arms.copyLastShotWorld(o, v)
+      try {
+        /* snippetBuf is already a self-contained slice — encode the whole thing. */
+        const wavBlob = audioBufferSliceToWavBlob(snippetBuf, 0, snippetBuf.duration)
+        const audioB64 = await blobToBase64(wavBlob)
+        const payload: Record<string, unknown> = {
+          type: 'voiceShot',
+          shotId,
+          ox: o.x,
+          oy: o.y,
+          oz: o.z,
+          vx: v.x,
+          vy: v.y,
+          vz: v.z,
+          chargeT: t,
+          shotScale: sizeMul,
+          mime: 'audio/wav',
+          audioB64,
+          fromRole: lobby.role,
+        }
+        pendingAttackerShotAudioById.set(shotId, snippetBuf)
+        if (pendingAttackerShotAudioById.size > 240) {
+          const first = pendingAttackerShotAudioById.keys().next().value as string | undefined
+          if (first) pendingAttackerShotAudioById.delete(first)
+        }
+        sendGameTraffic(payload)
+        if (lobby.role === 'host' && browserHost) {
+          browserHost.processVoiceShot('host', payload)
+        }
+      } catch {
+        mpDiagCounters.voiceShotSendFail++
+        debugMpLog('pistol voiceShot build/send failed (slice encode?)')
+      }
+    }
+  }
+
   function syncHud(): void {
     if (percentLabelYouEl) percentLabelYouEl.textContent = `${displayPlayerName()}[you]`
     if (percentLabelFoeEl) percentLabelFoeEl.textContent = opponentHudName()
@@ -1917,6 +2164,25 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   function updateChargeStatusUi(charge: number): void {
     if (!chargeBarWrap || !chargeBarStatus) return
+    if (pistolModeOn()) {
+      const left = pistolAmmoLeft()
+      const cap = pistolMagSize()
+      const ready = left > 0 && !voiceInputBlocked && !multiplayerBlocksPlay() && !chargingRmb
+      const charging = chargingRmb && !voiceInputBlocked
+      const label = charging
+        ? 'Shout to Load'
+        : ready
+          ? `Click LMB to Fire (${left}/${cap})`
+          : 'Hold RMB to Shout-Load Ammo'
+      chargeBarStatus.textContent = label
+      chargeBarStatus.classList.toggle('charge-bar-label--ready', ready)
+      chargeBarStatus.classList.toggle('charge-bar-label--prompt', !ready)
+      chargeBarStatus.classList.toggle('shimmer', ready)
+      chargeBarWrap.classList.toggle('charge-bar-wrap--ready', ready)
+      if (chargeBarMinMark) chargeBarMinMark.style.display = 'none'
+      return
+    }
+    if (chargeBarMinMark) chargeBarMinMark.style.display = ''
     const min = Math.max(0.01, Math.min(1, gameConfig.voiceMinChargeToFire))
     const ready = charge >= min && !voiceInputBlocked && !multiplayerBlocksPlay()
     chargeBarStatus.textContent = ready ? 'Ready to Shoot' : 'Make Sound to Charge'
@@ -2063,6 +2329,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (hitFlashEl) hitFlashEl.style.opacity = '0'
     arms.resetAll()
     chargingLmb = false
+    clearPistolState()
     {
       const cap = Math.round(gameConfig.voiceShotAmmoMax)
       voiceAmmoLeft = cap > 0 ? cap : -1
@@ -2185,6 +2452,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     seriesWinsOpp = 0
     hideMatchEndAndRematchUiFully()
     chargingLmb = false
+    clearPistolState()
     controls.unlock()
     keys.forward = false
     keys.back = false
@@ -2242,6 +2510,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     hideWinGameSplash()
     winFinisher = null
     matchOutcome = outcome
+    matchEndCardEl?.classList.remove('match-end-card--forfeit')
     triggerHitImpactFx()
     voice.resumeAudio()
     voice.playFallbackHitSound()
@@ -2626,23 +2895,54 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (document.hidden) clearMovementKeys()
   })
 
-  function onMouseDown(e: MouseEvent): void {
-    if (e.button !== 0) return
-    const ammoCap = Math.round(gameConfig.voiceShotAmmoMax)
-    if (ammoCap > 0 && voiceAmmoLeft <= 0) return
-    if (
+  function gameplayInputBlocked(): boolean {
+    return (
       voiceResumeCountdownActive ||
       multiplayerBlocksPlay() ||
       tweaksPanelOpen ||
       leaveMatchDialogOpen ||
-      matchOutcome ||
-      winFinisher ||
+      matchOutcome !== null ||
+      winFinisher !== null ||
       rematchSequenceActive ||
       seriesTransitionActive ||
-      playerHurt !== 'none' ||
-      arms.isProjectileActive()
+      playerHurt !== 'none'
     )
+  }
+
+  function onMouseDown(e: MouseEvent): void {
+    if (e.button !== 0 && e.button !== 2) return
+    if (gameplayInputBlocked()) return
+
+    if (pistolModeOn()) {
+      if (e.button === 0) {
+        /* LMB: fire one snippet from the magazine. Blocked while RMB-charging. */
+        if (chargingRmb) return
+        if (pistolAmmoLeft() <= 0) return
+        if (arms.isProjectileActive()) return
+        const ammoCap = Math.round(gameConfig.voiceShotAmmoMax)
+        if (ammoCap > 0 && voiceAmmoLeft <= 0) return
+        voice.resumeAudio()
+        void firePistolShot()
+        return
+      }
+      /* RMB: only allow recharge when the magazine is empty. */
+      if (e.button === 2) {
+        if (chargingRmb || chargingLmb) return
+        if (pistolAmmoLeft() > 0) return
+        if (arms.isProjectileActive()) return
+        voice.resumeAudio()
+        voice.startChargeRecording()
+        if (!voiceInputBlocked) queueLocalAnimOneShot('recording')
+        chargingRmb = true
+      }
       return
+    }
+
+    /* Legacy: LMB hold-charge-and-release. RMB does nothing. */
+    if (e.button !== 0) return
+    const ammoCap = Math.round(gameConfig.voiceShotAmmoMax)
+    if (ammoCap > 0 && voiceAmmoLeft <= 0) return
+    if (arms.isProjectileActive()) return
     voice.resumeAudio()
     voice.startChargeRecording()
     if (!voiceInputBlocked) queueLocalAnimOneShot('recording')
@@ -2650,6 +2950,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   function onMouseUp(e: MouseEvent): void {
+    if (e.button === 2 && chargingRmb) {
+      chargingRmb = false
+      void finishPistolReload()
+      return
+    }
     if (e.button !== 0) return
     if (!chargingLmb) return
     chargingLmb = false
@@ -2865,7 +3170,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           z: camera.position.z,
           fy,
           ry: camera.rotation.y,
-          recording: chargingLmb,
+          recording: chargingLmb || chargingRmb,
           animBase: deriveLocalAnimBase(),
           animOneShot: localAnimOneShot,
           animEpoch: localAnimEpoch,
@@ -2874,8 +3179,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       }
     }
 
-    if (multiplayerBlocksPlay() && chargingLmb) {
+    if (multiplayerBlocksPlay() && (chargingLmb || chargingRmb)) {
       chargingLmb = false
+      chargingRmb = false
       voice.resetChargeMeter()
       voiceChargeSmoothed = 0
       void voice.finishChargeRecording()
@@ -2884,14 +3190,33 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
 
     if (!voiceInputBlocked && !voiceResumeCountdownActive && !multiplayerBlocksPlay()) {
-      voiceChargeSmoothed = voice.tickChargeAccum(delta, chargingLmb)
+      voiceChargeSmoothed = voice.tickChargeAccum(delta, chargingLmb || chargingRmb)
+    }
+    const pistolOn = pistolModeOn()
+    if (ammoCountEl) {
+      if (pistolOn) {
+        const cap = pistolMagSize()
+        const left = pistolAmmoLeft()
+        ammoCountEl.textContent = `${left}/${cap}`
+        ammoCountEl.classList.toggle('ammo-count--empty', left <= 0 && !chargingRmb)
+        ammoCountEl.classList.toggle('ammo-count--charging', chargingRmb)
+        ammoCountEl.hidden = false
+      } else {
+        ammoCountEl.hidden = true
+      }
     }
     if (chargeBarFill) {
-      const pct = Math.min(150, voiceChargeSmoothed * 100)
+      let pct = Math.min(150, voiceChargeSmoothed * 100)
+      if (pistolOn && !chargingRmb) {
+        const cap = pistolMagSize()
+        const left = pistolAmmoLeft()
+        pct = (left / cap) * 100
+      }
       chargeBarFill.style.width = `${pct}%`
     }
     if (chargeBarWrap) {
-      if (voiceChargeSmoothed >= gameConfig.voiceOverloadThreshold) {
+      const overload = !pistolOn && voiceChargeSmoothed >= gameConfig.voiceOverloadThreshold
+      if (overload) {
         chargeBarWrap.classList.add('charge-bar-wrap--overload')
       } else {
         chargeBarWrap.classList.remove('charge-bar-wrap--overload')
@@ -3068,7 +3393,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
             type: 'hello',
             displayName: displayPlayerName(),
             role: onlineLobby.role,
-            mapId: lobby.mode === 'online' ? lobby.mapId : 'default',
+            mapId: map.id,
           }),
         )
         queueMicrotask(() => maybeStartPublicHostAnnounce())
@@ -3087,6 +3412,20 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           mpToast.hidden = false
           mpToast.classList.add('mp-toast--bad')
         }
+      })
+      mpSocket.addEventListener('close', () => {
+        debugMpLog('ws close')
+        if (leavingToLobby) return
+        if (peerSeenInRoom && lobby.mode === 'online') {
+          showOpponentForfeitAndReturn()
+          return
+        }
+        if (mpToast) {
+          mpToast.textContent = 'Connection closed. Returning to lobby…'
+          mpToast.hidden = false
+          mpToast.classList.add('mp-toast--bad')
+        }
+        window.setTimeout(() => returnToLobbyReload(false), 900)
       })
     } catch {
       console.warn('[multiplayer] no transport configured at build time')
