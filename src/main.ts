@@ -64,6 +64,7 @@ import {
 } from './audio/backgroundMusic'
 import { playFootstepOneShot } from './audio/footstepsSfx'
 import { playJumpOneShot, playLandOneShot } from './audio/playerMoveSfx'
+import { createProximityVoip3d } from './audio/proximityVoip3d'
 import { mountUserSettingsPanel, setUserSettingsPointerControls } from './userSettingsUI'
 import { setPartyKitHostSession, getPartyKitHost } from './net/partyKitHost'
 import { createProceduralSky } from './skyDome'
@@ -372,6 +373,50 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let mpSocket: MultiplayerWire | null = null
   /** When set, game JSON prefers WebRTC data channel; signaling stays on `mpSocket`. */
   let rtcGame: WebRtcGameApi | null = null
+  type ProxVoip3d = ReturnType<typeof createProximityVoip3d>
+  let proxVoip3d: ProxVoip3d | null = null
+  const _voipFwd = new Vector3()
+  let proxVoipLocalAttached = false
+
+  function tryAttachProximityVoip(): void {
+    if (proxVoipLocalAttached) return
+    if (!isOnline || lobby.mode !== 'online' || !rtcGame) return
+    if (gameConfig.proximityVoipEnabled < 0.5) return
+    if (rtcGame.channel?.readyState !== 'open') return
+    if (voiceInputBlocked) return
+    const t = voice.cloneAudioTrackForVoip()
+    if (!t) return
+    rtcGame.attachLocalProximityVoipTrack(t)
+    if (voice.isChargeRecordingNow()) rtcGame.setLocalVoipGameRecordingBlock(true)
+    proxVoipLocalAttached = true
+  }
+
+  function disposeProxVoip3dPlayer(): void {
+    try {
+      proxVoip3d?.dispose()
+    } catch {
+      /* ignore */
+    }
+    proxVoip3d = null
+  }
+
+  function onRemoteProximityVoipStream(stream: MediaStream): void {
+    if (gameConfig.proximityVoipEnabled < 0.5) {
+      for (const tr of stream.getTracks()) tr.stop()
+      return
+    }
+    disposeProxVoip3dPlayer()
+    proxVoip3d = createProximityVoip3d(
+      stream,
+      () => camera.position,
+      () => {
+        camera.getWorldDirection(_voipFwd)
+        return _voipFwd
+      },
+      () => bot.bodyCenter,
+    )
+    void proxVoip3d.resume()
+  }
   /** Host-only authority when using browser P2P (no Node `pvp-host`). */
   let browserHost: ReturnType<typeof createBrowserHostAuthority> | null = null
   let mpPresenceCount = 0
@@ -890,6 +935,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     rtcGame = createWebRtcGameChannel({
       role: lobby.role,
       signalSend: (o) => sendMp(o),
+      includeProximityVoip: gameConfig.proximityVoipEnabled >= 0.5,
+      onRemoteVoipStream: onRemoteProximityVoipStream,
       onGameJsonString: (raw) => {
         let data: Record<string, unknown>
         try {
@@ -901,6 +948,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       },
       onChannelOpen: () => {
         debugMpLog('rtc dataChannel open')
+        tryAttachProximityVoip()
       },
     })
     if (lobby.role === 'host') {
@@ -1412,7 +1460,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     updateMicBlockedUi()
     window.clearInterval(micPollId)
     if (ok) {
-      if (!isOnline) {
+      if (isOnline) {
+        tryAttachProximityVoip()
+      } else {
         await runVoiceResumeCountdown()
         tryPointerLock()
       }
@@ -1425,7 +1475,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
             voiceInputBlocked = false
             updateMicBlockedUi()
             window.clearInterval(micPollId)
-            if (!isOnline) {
+            if (isOnline) {
+              tryAttachProximityVoip()
+            } else {
               await runVoiceResumeCountdown()
               tryPointerLock()
             }
@@ -1570,6 +1622,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       } catch {
         /* ignore */
       }
+    }
+    disposeProxVoip3dPlayer()
+    proxVoipLocalAttached = false
+    try {
+      rtcGame?.dispose()
+    } catch {
+      /* ignore */
     }
     try {
       mpSocket?.close()
@@ -2193,6 +2252,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   async function releaseVoiceShot(): Promise<void> {
     const blob = await voice.finishChargeRecording()
+    rtcGame?.setLocalVoipGameRecordingBlock(false)
     queueLocalAnimOneShot('shooting')
     const buf = await voice.decodeRecording(blob)
     const raw = voiceInputBlocked
@@ -2322,6 +2382,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   /** Pistol mode: RMB released — decode recording, slice equally into round(charge × magSize) snippets. */
   async function finishPistolReload(): Promise<void> {
     const blob = await voice.finishChargeRecording()
+    rtcGame?.setLocalVoipGameRecordingBlock(false)
     /* Visual telegraph: keep charge frozen for the HUD to show ammo/cap fill from now on. */
     const cap = pistolMagSize()
     const liveCharge = voiceInputBlocked
@@ -3425,7 +3486,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         if (arms.isProjectileActive()) return
         voice.resumeAudio()
         voice.startChargeRecording()
-        if (voice.isChargeRecordingNow()) playLocalVoiceRecordStartSfx()
+        if (voice.isChargeRecordingNow()) {
+          playLocalVoiceRecordStartSfx()
+          rtcGame?.setLocalVoipGameRecordingBlock(true)
+        }
         if (!voiceInputBlocked) queueLocalAnimOneShot('recording')
         chargingRmb = true
       }
@@ -3439,7 +3503,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (arms.isProjectileActive()) return
     voice.resumeAudio()
     voice.startChargeRecording()
-    if (voice.isChargeRecordingNow()) playLocalVoiceRecordStartSfx()
+    if (voice.isChargeRecordingNow()) {
+      playLocalVoiceRecordStartSfx()
+      rtcGame?.setLocalVoipGameRecordingBlock(true)
+    }
     if (!voiceInputBlocked) queueLocalAnimOneShot('recording')
     chargingLmb = true
   }
@@ -3638,6 +3705,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let debugMpHb = 0
   function animate() {
     const delta = Math.min(clock.getDelta(), gameConfig.movementMaxDelta)
+    proxVoip3d?.tick()
     const wantsUnlit = gameConfig.lightingUnlitMode >= 0.5
     if (wantsUnlit !== lastUnlitMode) {
       applyLightingModeToScene(wantsUnlit)

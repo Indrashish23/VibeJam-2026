@@ -129,6 +129,15 @@ export class VoiceChargeManager {
     return this.recorder !== null && this.recorder.state === 'recording'
   }
 
+  /**
+   * Independent copy of the live mic for WebRTC proximity voice (separate from MediaRecorder).
+   * The original used for the charge can stay enabled while the clone is muted to peer.
+   */
+  cloneAudioTrackForVoip(): MediaStreamTrack | null {
+    const t = this.stream?.getAudioTracks()[0]
+    return t ? t.clone() : null
+  }
+
   /** Call when LMB pressed — begins recording blob for hit playback. */
   startChargeRecording(): void {
     this.clearRecordCapTimer()

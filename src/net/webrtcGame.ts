@@ -1,6 +1,6 @@
 /**
- * WebRTC data channel for game JSON (voice shots, poses) after SDP exchange over the signaling socket.
- * No separate listen process — browsers connect peer-to-peer (STUN; TURN may be needed for some NATs).
+ * WebRTC data channel for game JSON (voice shots, poses) + optional full-duplex proximity voice.
+ * Signaling over the same socket (rtcOffer, rtcAnswer, rtcIce); browsers use STUN.
  */
 
 export type SignalSend = (obj: Record<string, unknown>) => void
@@ -10,6 +10,12 @@ export type WebRtcGameApi = {
   handleSignal: (data: Record<string, unknown>) => Promise<boolean>
   hostStartHandshake: () => Promise<void>
   sendGameJson: (obj: Record<string, unknown>) => void
+  /**
+   * Send a **clone** of the same mic the game uses (not the main track, so we can mute for peer
+   * during voice-shot recording without breaking MediaRecorder).
+   */
+  attachLocalProximityVoipTrack: (track: MediaStreamTrack) => void
+  setLocalVoipGameRecordingBlock: (blocked: boolean) => void
   dispose: () => void
 }
 
@@ -25,10 +31,57 @@ export function createWebRtcGameChannel(opts: {
   signalSend: SignalSend
   onGameJsonString: (raw: string) => void
   onChannelOpen: () => void
+  /** If true, add m=audio; clone mic attached later. */
+  includeProximityVoip: boolean
+  onRemoteVoipStream?: (stream: MediaStream) => void
 }): WebRtcGameApi {
   const pc = new RTCPeerConnection(ICE)
   let dc: RTCDataChannel | null = null
   let hostOfferSent = false
+
+  let localVoipTrack: MediaStreamTrack | null = null
+  let localVoipBlocked = false
+  const hostAudioTrans: RTCRtpTransceiver | null = opts.includeProximityVoip
+    ? pc.addTransceiver('audio', { direction: 'sendrecv' })
+    : null
+
+  function setLocalTrackEnabledToPeer() {
+    if (localVoipTrack) {
+      /* Block = voice-shot recording — peer hears nothing (clone is muted, main mic still records). */
+      localVoipTrack.enabled = !localVoipBlocked
+    }
+  }
+
+  function attachLocalProximityVoipTrack(track: MediaStreamTrack): void {
+    if (!opts.includeProximityVoip) return
+    if (localVoipTrack) {
+      try {
+        localVoipTrack.stop()
+      } catch {
+        /* ignore */
+      }
+    }
+    localVoipTrack = track
+    setLocalTrackEnabledToPeer()
+    try {
+      if (opts.role === 'host' && hostAudioTrans) {
+        void hostAudioTrans.sender.replaceTrack(localVoipTrack)
+      } else {
+        let g: RTCRtpTransceiver | undefined = pc
+          .getTransceivers()
+          .find((t) => t.sender && t.receiver && t.currentDirection && t.currentDirection !== 'inactive')
+        if (!g) g = pc.getTransceivers().find((t) => t.sender && t.receiver)
+        if (g?.sender) void g.sender.replaceTrack(localVoipTrack)
+      }
+    } catch {
+      /* replaceTrack can fail on odd states */
+    }
+  }
+
+  function setLocalVoipGameRecordingBlock(blocked: boolean): void {
+    localVoipBlocked = blocked
+    setLocalTrackEnabledToPeer()
+  }
 
   function attachDc(channel: RTCDataChannel): void {
     dc = channel
@@ -43,6 +96,14 @@ export function createWebRtcGameChannel(opts: {
     attachDc(pc.createDataChannel('game', { ordered: true }))
   } else {
     pc.ondatachannel = (ev) => attachDc(ev.channel)
+  }
+
+  if (opts.includeProximityVoip) {
+    pc.ontrack = (ev) => {
+      if (ev.track.kind !== 'audio') return
+      const st = ev.streams[0] ?? new MediaStream([ev.track])
+      opts.onRemoteVoipStream?.(st)
+    }
   }
 
   pc.onicecandidate = (ev) => {
@@ -107,6 +168,10 @@ export function createWebRtcGameChannel(opts: {
 
   function dispose(): void {
     try {
+      if (localVoipTrack) {
+        localVoipTrack.stop()
+        localVoipTrack = null
+      }
       dc?.close()
     } catch {
       /* ignore */
@@ -126,6 +191,8 @@ export function createWebRtcGameChannel(opts: {
     handleSignal,
     hostStartHandshake,
     sendGameJson,
+    attachLocalProximityVoipTrack,
+    setLocalVoipGameRecordingBlock,
     dispose,
   }
 }

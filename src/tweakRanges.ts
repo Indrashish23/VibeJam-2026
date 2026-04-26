@@ -120,6 +120,11 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   voiceClipPlaybackGainMul: { min: 0.5, max: 3, step: 0.05 },
   voiceClipExtractToActiveSound: { min: 0, max: 1, step: 1 },
   voiceClipExtractRmsRatio: { min: 0.04, max: 0.55, step: 0.02 },
+  proximityVoipEnabled: { min: 0, max: 1, step: 1 },
+  proximityVoipOutputMul: { min: 0, max: 1, step: 0.02 },
+  proximityVoipRefDistance: { min: 1, max: 50, step: 0.5 },
+  proximityVoipMaxDistance: { min: 8, max: 220, step: 2 },
+  proximityVoipRolloff: { min: 0.2, max: 3, step: 0.05 },
   voiceRecordMaxSec: { min: 2, max: 60, step: 0.5 },
   voiceLookdownPitchMin: { min: 0.08, max: 1.35, step: 0.02 },
   voiceLookdownBoostVy: { min: 0, max: 24, step: 0.2 },
@@ -326,6 +331,11 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   voiceClipPlaybackGainMul: 'Hit voice playback volume (×)',
   voiceClipExtractToActiveSound: 'Decode: clip to active sound (0/1)',
   voiceClipExtractRmsRatio: 'Decode: RMS / peak to keep a window',
+  proximityVoipEnabled: 'Online: live proximity voice (0/1)',
+  proximityVoipOutputMul: 'Online VoIP: output gain (0–1)',
+  proximityVoipRefDistance: 'Online VoIP: panner ref (u)',
+  proximityVoipMaxDistance: 'Online VoIP: max hear (u)',
+  proximityVoipRolloff: 'Online VoIP: rolloff',
   voiceRecordMaxSec: 'Voice record max (s)',
   voiceLookdownPitchMin: 'Look-down boost min |pitch| (rad)',
   voiceLookdownBoostVy: 'Look-down shot vy boost',
@@ -692,6 +702,12 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
     '1 = after decode, drop low-RMS windows and trim idle room/ambient, keeping the voiced “peaks” only. 0 = use the raw recording (full clip).',
   voiceClipExtractRmsRatio:
     'For each 12ms hop window, keep if RMS is above (peak window RMS) × this. Higher = stricter, less background; too high can clip words.',
+  proximityVoipEnabled:
+    '1 = WebRTC full-duplex live voice in online P2P, spatialized to the opponent. Outgoing to peer is cut while you hold a voice-shot record (LMB or pistol RMB).',
+  proximityVoipOutputMul: 'Master gain for the remote live voice in your speakers (after distance panning).',
+  proximityVoipRefDistance: 'Web Audio Panner: distance in world units where the peer is still about full level before falloff.',
+  proximityVoipMaxDistance: 'Beyond this distance the peer is effectively inaudible for live proximity voice.',
+  proximityVoipRolloff: 'How sharp the falloff is between ref and max distance (inverse model).',
   voiceRecordMaxSec:
     'Hard cap on how many seconds of microphone audio are kept per charge (smaller = less data over the network).',
   voiceLookdownPitchMin:
@@ -896,6 +912,11 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'voiceRecordSfxVolumeMul',
       'voiceReleaseSfxEnabled',
       'voiceReleaseSfxVolumeMul',
+      'proximityVoipEnabled',
+      'proximityVoipOutputMul',
+      'proximityVoipRefDistance',
+      'proximityVoipMaxDistance',
+      'proximityVoipRolloff',
     ],
   },
   {

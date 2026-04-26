@@ -311,6 +311,18 @@ export const defaultGameConfig = {
   /** When extraction is on, keep 12ms windows with RMS &gt; peak × this (0.04–0.55). */
   voiceClipExtractRmsRatio: 0.2,
 
+  /**
+   * Online: WebRTC full-duplex live voice (0/1), spatialized to opponent position.
+   * Outgoing is **muted to peer** while a voice **shot** is being recorded (LMB or pistol RMB).
+   */
+  proximityVoipEnabled: 1,
+  /** Web Audio output gain for peer live voice (0–1). */
+  proximityVoipOutputMul: 0.65,
+  /** Panner ref distance (world u) for peer live voice. */
+  proximityVoipRefDistance: 5,
+  proximityVoipMaxDistance: 90,
+  proximityVoipRolloff: 1.2,
+
   /** Proximity-style hit audio: distance at which rolloff starts (world units). */
   voiceHitRefDistance: 5,
   voiceHitMaxDistance: 96,
