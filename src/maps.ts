@@ -49,20 +49,6 @@ function normalizeSceneName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
 }
 
-function isColliderNodeName(name: string): boolean {
-  const n = normalizeSceneName(name)
-  return n.startsWith('col_') || n.startsWith('coll_') || n.startsWith('collision_')
-}
-
-function hasColliderMarker(node: Object3D): boolean {
-  let cur: Object3D | null = node
-  while (cur) {
-    if (isColliderNodeName(cur.name)) return true
-    cur = cur.parent
-  }
-  return false
-}
-
 function disposeObject3D(root: Object3D): void {
   root.traverse((node) => {
     const mesh = node as Mesh
@@ -130,7 +116,6 @@ async function loadIslandMap(_scene: Scene, hubRoot: Group): Promise<MapHandle> 
 
   container.add(gltf.scene)
   const colliders: Object3D[] = []
-  const allMeshes: Object3D[] = []
   let spawnA: Vector3 | null = null
   let spawnB: Vector3 | null = null
   gltf.scene.updateMatrixWorld(true)
@@ -146,11 +131,9 @@ async function loadIslandMap(_scene: Scene, hubRoot: Group): Promise<MapHandle> 
     if ((mesh as Mesh).isMesh) {
       mesh.castShadow = true
       mesh.receiveShadow = true
-      allMeshes.push(mesh)
-      if (hasColliderMarker(mesh)) colliders.push(mesh)
+      colliders.push(mesh)
     }
   })
-  if (colliders.length === 0) colliders.push(...allMeshes)
 
   /* Fallback keeps broken test exports playable, but named spawn markers win. */
   const bbox = new Box3().setFromObject(gltf.scene)
