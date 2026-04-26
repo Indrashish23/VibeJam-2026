@@ -18,10 +18,13 @@ export type UserSettingsPersisted = {
   mouseSensitivity: number
   voiceChargeSensitivity: number
   cameraShakeMul: number
+  /** 0..1. Multiplies dev Tweaks BGM. */
+  bgmMul: number
   masterSfxMul: number
 }
 
 let cameraShakeMul = 1
+let bgmMul = 1
 let masterSfxMul = 1
 
 export function getCameraShakeMul(): number {
@@ -32,6 +35,10 @@ export function getMasterSfxMul(): number {
   return masterSfxMul
 }
 
+export function getBgmMul(): number {
+  return bgmMul
+}
+
 export function setCameraShakeMul(v: number): void {
   cameraShakeMul = Math.max(0, Math.min(1.5, v))
 }
@@ -40,9 +47,14 @@ export function setMasterSfxMul(v: number): void {
   masterSfxMul = Math.max(0, Math.min(1, v))
 }
 
+export function setBgmMul(v: number): void {
+  bgmMul = Math.max(0, Math.min(1, v))
+}
+
 /** Load from localStorage for current display name; merges into `gameConfig` for mouse + mic. */
 export function loadUserSettings(): void {
   cameraShakeMul = 1
+  bgmMul = 1
   masterSfxMul = 1
   const key = getSettingsKeyForPlayer()
   let raw: string | null = null
@@ -70,6 +82,9 @@ export function loadUserSettings(): void {
   if (typeof j.masterSfxMul === 'number') {
     setMasterSfxMul(j.masterSfxMul)
   }
+  if (typeof j.bgmMul === 'number') {
+    setBgmMul(j.bgmMul)
+  }
 }
 
 export function saveUserSettings(): void {
@@ -77,6 +92,7 @@ export function saveUserSettings(): void {
     mouseSensitivity: gameConfig.mouseSensitivity,
     voiceChargeSensitivity: gameConfig.voiceChargeSensitivity,
     cameraShakeMul,
+    bgmMul,
     masterSfxMul,
   }
   try {

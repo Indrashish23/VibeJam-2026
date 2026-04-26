@@ -78,20 +78,49 @@
         </label>
         <h3 class="user-settings-h3">Audio</h3>
         <label class="user-settings-row">
-          <span>Sound effects (master)</span>
+          <span>Music</span>
           <input
-            type="number"
-            id="user-s-sfx"
-            class="user-settings-input"
+            type="range"
+            id="user-s-bgm"
+            class="user-settings-input user-settings-input--range"
             min="0"
             max="1"
-            step="0.05"
-            title="Master volume for in-game SFX (footsteps, more later). BGM is in Tweaks → Sound."
+            step="0.1"
+            value="1"
+            list="user-s-audio-ticks"
+            title="Volume for background music (× dev level in Tweaks → Sound)"
           />
         </label>
+        <label class="user-settings-row">
+          <span>Sound effects</span>
+          <input
+            type="range"
+            id="user-s-sfx"
+            class="user-settings-input user-settings-input--range"
+            min="0"
+            max="1"
+            step="0.1"
+            value="1"
+            list="user-s-audio-ticks"
+            title="Master for footsteps, voice UI, jump, land, etc. (× Tweaks → Sound → SFX)"
+          />
+        </label>
+        <datalist id="user-s-audio-ticks">
+          <option value="0"></option>
+          <option value="0.1"></option>
+          <option value="0.2"></option>
+          <option value="0.3"></option>
+          <option value="0.4"></option>
+          <option value="0.5"></option>
+          <option value="0.6"></option>
+          <option value="0.7"></option>
+          <option value="0.8"></option>
+          <option value="0.9"></option>
+          <option value="1"></option>
+        </datalist>
         <p class="user-settings-hint">
-          BGM and footstep tuning: open dev panel (<kbd class="user-settings-kbd">T</kbd> or
-          <kbd class="user-settings-kbd">−</kbd>) → <strong>Sound</strong>.
+          Extra dev tuning: <kbd class="user-settings-kbd">T</kbd> or
+          <kbd class="user-settings-kbd">−</kbd> → <strong>Sound</strong> (BGM + SFX levels, footsteps, etc.).
         </p>
       </div>
     </div>

@@ -1,12 +1,12 @@
 import { gameConfig } from '../gameConfig'
-import { getMasterSfxMul } from '../userSettingsStorage'
+import { getSfxChainMul } from './sfxChain'
 
 const CLIPS: string[] = [2, 3, 4, 5, 6, 7].map((n) =>
   new URL(`../../Assets/SFX/Footsteps/footstep-cat-${n}.wav`, import.meta.url).href,
 )
 
 /**
- * Plays a random footstep; volume = `footstepVolumeMul` × `masterSfxMul` (player).
+ * Plays a random footstep; volume = `footstepVolumeMul` × SFX chain (Settings + Tweaks).
  */
 export function playFootstepOneShot(): void {
   if (gameConfig.footstepSfxEnabled < 0.5) return
@@ -15,8 +15,7 @@ export function playFootstepOneShot(): void {
   const a = new Audio()
   a.src = u
   const dev = Math.max(0, Math.min(1, gameConfig.footstepVolumeMul))
-  const p = getMasterSfxMul()
-  a.volume = Math.max(0, Math.min(1, dev * p))
+  a.volume = Math.max(0, Math.min(1, dev * getSfxChainMul()))
   void a.play().catch(() => {
     /* ignore */
   })

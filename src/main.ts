@@ -34,6 +34,7 @@ import { isMapId, loadMap, type MapHandle, type MapId, type SpawnSlot } from './
 import { BotFighter, type BotMode } from './boxing/bot'
 import { PlayerArms } from './boxing/playerArms'
 import { VoiceChargeManager, audioBufferSliceToWavBlob } from './audio/voiceCharge'
+import { playLocalVoiceRecordReleaseSfx, playLocalVoiceRecordStartSfx } from './audio/voiceRecordUiSfx'
 import { mountTweaksPanel } from './tweaksPanel'
 import { runLobbyGate, type LobbyResult } from './lobbyGate'
 import { base64ToBlob, blobToBase64 } from './net/blobCodec'
@@ -58,6 +59,7 @@ import {
 } from './userSettingsStorage'
 import { initBackgroundMusic, wireBackgroundMusicToFirstGesture } from './audio/backgroundMusic'
 import { playFootstepOneShot } from './audio/footstepsSfx'
+import { playJumpOneShot, playLandOneShot } from './audio/playerMoveSfx'
 import { mountUserSettingsPanel, setUserSettingsPointerControls } from './userSettingsUI'
 import { setPartyKitHostSession, getPartyKitHost } from './net/partyKitHost'
 import { createProceduralSky } from './skyDome'
@@ -2982,6 +2984,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       vy = gameConfig.jumpForce
       grounded = false
       lastJumpAt = now
+      if (!multiplayerBlocksPlay()) playJumpOneShot()
       return
     }
     /* Mid-air double jump: replace (not add to) vertical velocity for a clean second pop. */
@@ -2989,6 +2992,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       vy = gameConfig.jumpForce
       airJumpsLeft -= 1
       lastJumpAt = now
+      if (!multiplayerBlocksPlay()) playJumpOneShot()
     }
   }
 
@@ -3412,6 +3416,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         if (arms.isProjectileActive()) return
         voice.resumeAudio()
         voice.startChargeRecording()
+        if (voice.isChargeRecordingNow()) playLocalVoiceRecordStartSfx()
         if (!voiceInputBlocked) queueLocalAnimOneShot('recording')
         chargingRmb = true
       }
@@ -3425,6 +3430,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (arms.isProjectileActive()) return
     voice.resumeAudio()
     voice.startChargeRecording()
+    if (voice.isChargeRecordingNow()) playLocalVoiceRecordStartSfx()
     if (!voiceInputBlocked) queueLocalAnimOneShot('recording')
     chargingLmb = true
   }
@@ -3432,12 +3438,14 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   function onMouseUp(e: MouseEvent): void {
     if (e.button === 2 && chargingRmb) {
       chargingRmb = false
+      playLocalVoiceRecordReleaseSfx()
       void finishPistolReload()
       return
     }
     if (e.button !== 0) return
     if (!chargingLmb) return
     chargingLmb = false
+    playLocalVoiceRecordReleaseSfx()
     void releaseVoiceShot()
   }
 
@@ -3455,10 +3463,12 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
   window.addEventListener('resize', onResize)
 
-  function tickForwardFootstep(delta: number): void {
+  function tickMovementFootstep(delta: number): void {
     if (multiplayerBlocksPlay()) return
     if (tweaksPanelOpen || leaveMatchDialogOpen || matchOutcome) return
-    if (!keys.forward) {
+    const moving =
+      keys.forward || keys.back || keys.left || keys.right
+    if (!moving) {
       footstepHoldSec = 0
       footstepLastMs = 0
       return
@@ -3556,6 +3566,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     resolvePlayerCollision(_moveStart, delta)
 
     if (!groundedBeforeResolve && grounded) {
+      if (!multiplayerBlocksPlay() && !tweaksPanelOpen && !leaveMatchDialogOpen && !matchOutcome) {
+        playLandOneShot()
+      }
       voiceDownBoostReady = true
       airDashReady = true
       airJumpsLeft = Math.max(0, Math.round(gameConfig.airJumpsMax))
@@ -3581,7 +3594,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
 
     controls.pointerSpeed = gameConfig.mouseSensitivity
-    tickForwardFootstep(delta)
+    tickMovementFootstep(delta)
   }
 
   function triggerHitImpactFx(): void {

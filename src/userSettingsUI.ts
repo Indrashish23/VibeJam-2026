@@ -1,9 +1,11 @@
 import { gameConfig } from './gameConfig'
 import {
+  getBgmMul,
   getCameraShakeMul,
   getMasterSfxMul,
   loadUserSettings,
   saveUserSettings,
+  setBgmMul,
   setCameraShakeMul,
   setMasterSfxMul,
 } from './userSettingsStorage'
@@ -28,11 +30,13 @@ export function mountUserSettingsPanel(opts: { root: HTMLElement }): { open: boo
   const inMouse = root.querySelector('#user-s-mouse') as HTMLInputElement | null
   const inMic = root.querySelector('#user-s-mic') as HTMLInputElement | null
   const inShake = root.querySelector('#user-s-shake') as HTMLInputElement | null
+  const inBgm = root.querySelector('#user-s-bgm') as HTMLInputElement | null
   const inSfx = root.querySelector('#user-s-sfx') as HTMLInputElement | null
-  if (!inMouse || !inMic || !inShake || !inSfx || !panel) return state
+  if (!inMouse || !inMic || !inShake || !inBgm || !inSfx || !panel) return state
   const elMouse = inMouse
   const elMic = inMic
   const elShake = inShake
+  const elBgm = inBgm
   const elSfx = inSfx
   const pan = panel
 
@@ -41,6 +45,7 @@ export function mountUserSettingsPanel(opts: { root: HTMLElement }): { open: boo
     elMouse.value = String(gameConfig.mouseSensitivity)
     elMic.value = String(gameConfig.voiceChargeSensitivity)
     elShake.value = String(getCameraShakeMul())
+    elBgm.value = String(getBgmMul())
     elSfx.value = String(getMasterSfxMul())
   }
 
@@ -48,6 +53,7 @@ export function mountUserSettingsPanel(opts: { root: HTMLElement }): { open: boo
     gameConfig.mouseSensitivity = Math.max(0.01, Math.min(8, parseFloat(elMouse.value) || 1))
     gameConfig.voiceChargeSensitivity = Math.max(0.05, Math.min(4, parseFloat(elMic.value) || 1.85))
     setCameraShakeMul(parseFloat(elShake.value) || 1)
+    setBgmMul(parseFloat(elBgm.value) || 1)
     setMasterSfxMul(parseFloat(elSfx.value) || 1)
   }
 
@@ -79,7 +85,7 @@ export function mountUserSettingsPanel(opts: { root: HTMLElement }): { open: boo
   btn.setAttribute('aria-controls', 'user-settings-panel')
   pan.setAttribute('role', 'dialog')
   pan.setAttribute('aria-label', 'Settings')
-  ;[elMouse, elMic, elShake, elSfx].forEach((el) => {
+  ;[elMouse, elMic, elShake, elBgm, elSfx].forEach((el) => {
     el.addEventListener('input', () => {
       applyFromControls()
       saveUserSettings()

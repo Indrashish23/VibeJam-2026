@@ -1,4 +1,5 @@
 import { gameConfig } from '../gameConfig'
+import { getBgmMul } from '../userSettingsStorage'
 
 const TRACKS = [
   new URL(
@@ -21,7 +22,7 @@ function clamp01(n: number): number {
 
 function applyVolumeFromConfig(): void {
   if (!audio) return
-  audio.volume = clamp01(gameConfig.bgmVolume)
+  audio.volume = clamp01(gameConfig.bgmVolume * getBgmMul())
 }
 
 function pickNextIndex(): void {

@@ -406,20 +406,41 @@ export const defaultGameConfig = {
   debugRoomActive: 0,
 
   /**
-   * Sound (Tweaks dev panel) — BGM and footstep; player Settings uses master SFX (see user settings storage).
-   * Background music `HTMLAudioElement` volume; also mirrored by `src/audio/backgroundMusic.ts` each frame.
+   * Sound (Tweaks): BGM `×` player Music in Settings, SFX chain, footsteps, jump/land, voice UI SFX.
+   * BGM: `src/audio/backgroundMusic.ts` each frame.
    */
-  bgmVolume: 0.6,
-  /** Min seconds holding forward before the first footstep. */
+  /** Dev BGM level (0–1); final volume × player Music in Settings. */
+  bgmVolume: 0.1,
+  /** Min seconds holding a move key (WASD) before the first footstep. */
   footstepMinHoldSec: 0.01,
-  /** Seconds between one-shot footstep triggers while forward is held. */
+  /** Seconds between one-shot footstep triggers while moving on ground. */
   footstepIntervalSec: 0.5,
   /** 0 = off, 1 = on. */
   footstepSfxEnabled: 1,
   /**
-   * Dev relative level for one-shot footstep clips (0–1); multiplied with player `masterSfxMul` in Settings.
+   * Dev relative level for one-shot footstep clips (0–1); × Settings SFX × `sfxTweakVolumeMul`.
    */
-  footstepVolumeMul: 0.75,
+  footstepVolumeMul: 1,
+  /**
+   * Tweaks “SFX” (0–1) applied on top of Settings → Sound effects. Chained in `src/audio/sfxChain.ts`.
+   */
+  sfxTweakVolumeMul: 1,
+  /** 0/1. Local: one-shot on jump (ground + double jump). */
+  jumpSfxEnabled: 1,
+  /** Dev gain for jump one-shot. */
+  jumpSfxVolumeMul: 1,
+  /** 0/1. Local: one-shot when feet touch ground from air. */
+  landSfxEnabled: 1,
+  /** Dev gain for land one-shot. */
+  landSfxVolumeMul: 1,
+  /** 0 = off. Local only: one-shot when mic charge recording actually starts. */
+  voiceRecordSfxEnabled: 1,
+  /** Dev level × (0–1) for `RecordingSound.ogg`; × master SFX in Settings. */
+  voiceRecordSfxVolumeMul: 0.85,
+  /** 0 = off. Local only: one-shot on release of charge (LMB or pistol RMB). */
+  voiceReleaseSfxEnabled: 1,
+  /** Dev level × (0–1) for `ReleaseSound.ogg`; × master SFX in Settings. */
+  voiceReleaseSfxVolumeMul: 0.9,
 } as const
 
 export type GameConfigKey = keyof typeof defaultGameConfig

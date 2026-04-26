@@ -123,6 +123,11 @@ export class VoiceChargeManager {
     }
   }
 
+  /** True when `MediaRecorder` is actively recording a charge (mic stream + recorder started). */
+  isChargeRecordingNow(): boolean {
+    return this.recorder !== null && this.recorder.state === 'recording'
+  }
+
   /** Call when LMB pressed — begins recording blob for hit playback. */
   startChargeRecording(): void {
     this.clearRecordCapTimer()

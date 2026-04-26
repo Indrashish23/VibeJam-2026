@@ -34,7 +34,16 @@ export type TweaksPanelHooks = {
   onTriggerKnockbackDev?: () => void
 }
 
-type RowInput = { key: GameConfigKey; range: HTMLInputElement; num: HTMLInputElement }
+type RowInput = { key: GameConfigKey; range: HTMLInputElement; num: HTMLInputElement | null }
+
+/** Sliders for 0–1 with tick marks only: no number field (Tweaks Sound). */
+const TWEAK_RANGE_ONLY_KEYS = new Set<GameConfigKey>([
+  'bgmVolume',
+  'sfxTweakVolumeMul',
+  'footstepVolumeMul',
+  'jumpSfxVolumeMul',
+  'landSfxVolumeMul',
+])
 
 function formatTweakValue(v: number): string {
   if (Number.isInteger(v)) return String(v)
@@ -49,7 +58,8 @@ function appendConfigRow(
 ): HTMLElement {
   const r = TWEAK_RANGE[key]
   const row = document.createElement('label')
-  row.className = 'tweaks-row'
+  const hideNum = TWEAK_RANGE_ONLY_KEYS.has(key)
+  row.className = hideNum ? 'tweaks-row tweaks-row--range-only' : 'tweaks-row'
   const tip = TWEAK_TOOLTIP[key]
   row.title = tip
 
@@ -65,17 +75,25 @@ function appendConfigRow(
   range.step = String(r.step)
   range.title = tip
 
-  const num = document.createElement('input')
-  num.type = 'number'
-  num.min = String(r.min)
-  num.max = String(r.max)
-  num.step = String(r.step)
-  num.title = tip
+  const num: HTMLInputElement | null = hideNum
+    ? null
+    : (() => {
+        const n = document.createElement('input')
+        n.type = 'number'
+        n.min = String(r.min)
+        n.max = String(r.max)
+        n.step = String(r.step)
+        n.title = tip
+        return n
+      })()
+  if (hideNum) {
+    range.setAttribute('list', 'tweak-ticks-01')
+  }
 
   function syncRow() {
     const v = gameConfig[key]
     range.value = String(v)
-    num.value = String(v)
+    if (num) num.value = String(v)
   }
 
   function applyValue(raw: number) {
@@ -87,12 +105,12 @@ function appendConfigRow(
   }
 
   range.addEventListener('input', () => applyValue(Number.parseFloat(range.value)))
-  num.addEventListener('change', () => applyValue(Number.parseFloat(num.value)))
+  num?.addEventListener('change', () => applyValue(Number.parseFloat(num.value)))
 
   rows.push({ key, range, num })
   row.appendChild(name)
   row.appendChild(range)
-  row.appendChild(num)
+  if (num) row.appendChild(num)
   syncRow()
   return row
 }
@@ -108,6 +126,15 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
   panel.className = 'tweaks-panel'
   panel.setAttribute('aria-label', 'Dev tweaks')
   panel.hidden = true
+
+  const tick01 = document.createElement('datalist')
+  tick01.id = 'tweak-ticks-01'
+  for (let i = 0; i <= 10; i++) {
+    const o = document.createElement('option')
+    o.value = i === 0 ? '0' : i === 10 ? '1' : (i * 0.1).toFixed(1)
+    tick01.appendChild(o)
+  }
+  panel.appendChild(tick01)
 
   const header = document.createElement('div')
   header.className = 'tweaks-panel-header'
@@ -351,7 +378,7 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
     for (const row of rows) {
       const v = gameConfig[row.key]
       row.range.value = String(v)
-      row.num.value = String(v)
+      if (row.num) row.num.value = String(v)
     }
     if (projectileModeSel) {
       projectileModeSel.value = String(
@@ -429,7 +456,7 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
     for (const row of rows) {
       if (row.key === 'debugRoomActive') {
         row.range.value = String(next)
-        row.num.value = String(next)
+        if (row.num) row.num.value = String(next)
       }
     }
     refreshDebugRoomBtnLabel()

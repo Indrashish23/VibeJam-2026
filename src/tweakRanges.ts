@@ -211,11 +211,20 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   bananaHandLocalY: { min: -2, max: 1, step: 0.02 },
   bananaHandLocalZ: { min: -3, max: 1, step: 0.02 },
 
-  bgmVolume: { min: 0, max: 1, step: 0.02 },
+  bgmVolume: { min: 0, max: 1, step: 0.1 },
   footstepMinHoldSec: { min: 0, max: 0.2, step: 0.005 },
   footstepIntervalSec: { min: 0.1, max: 2, step: 0.05 },
   footstepSfxEnabled: { min: 0, max: 1, step: 1 },
-  footstepVolumeMul: { min: 0, max: 1, step: 0.02 },
+  footstepVolumeMul: { min: 0, max: 1, step: 0.1 },
+  sfxTweakVolumeMul: { min: 0, max: 1, step: 0.1 },
+  jumpSfxEnabled: { min: 0, max: 1, step: 1 },
+  jumpSfxVolumeMul: { min: 0, max: 1, step: 0.1 },
+  landSfxEnabled: { min: 0, max: 1, step: 1 },
+  landSfxVolumeMul: { min: 0, max: 1, step: 0.1 },
+  voiceRecordSfxEnabled: { min: 0, max: 1, step: 1 },
+  voiceRecordSfxVolumeMul: { min: 0, max: 1, step: 0.02 },
+  voiceReleaseSfxEnabled: { min: 0, max: 1, step: 1 },
+  voiceReleaseSfxVolumeMul: { min: 0, max: 1, step: 0.02 },
 }
 
 /** Human-readable labels for the tweaks panel (fallback: raw config key). */
@@ -413,11 +422,20 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   bananaHandLocalX: 'Banana: hand X (cam local)',
   bananaHandLocalY: 'Banana: hand Y (cam local)',
   bananaHandLocalZ: 'Banana: hand Z (cam local)',
-  bgmVolume: 'Background music volume (dev)',
-  footstepMinHoldSec: 'Footstep: min forward hold (s)',
+  bgmVolume: 'Background music (dev) × player Music in Settings',
+  footstepMinHoldSec: 'Footstep: min WASD hold (s)',
   footstepIntervalSec: 'Footstep: step interval (s)',
   footstepSfxEnabled: 'Footstep SFX (0/1)',
-  footstepVolumeMul: 'Footstep: dev level × (0–1)',
+  footstepVolumeMul: 'Footstep: dev level × (0–1; ticked slider)',
+  sfxTweakVolumeMul: 'SFX (Tweaks) × Settings SFX',
+  jumpSfxEnabled: 'Jump one-shot (0/1, local)',
+  jumpSfxVolumeMul: 'Jump: dev gain (× SFX chain)',
+  landSfxEnabled: 'Land one-shot (0/1, local)',
+  landSfxVolumeMul: 'Land: dev gain (× SFX chain)',
+  voiceRecordSfxEnabled: 'Voice: record start SFX (0/1, local)',
+  voiceRecordSfxVolumeMul: 'Voice: record start level × (0–1)',
+  voiceReleaseSfxEnabled: 'Voice: release SFX (0/1, local)',
+  voiceReleaseSfxVolumeMul: 'Voice: release level × (0–1)',
 }
 
 /**
@@ -532,11 +550,26 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   bananaHandLocalY: 'In-hand banana: camera-local down (negative) / up.',
   bananaHandLocalZ: 'In-hand banana: forward from camera in local space (negative = in front).',
 
-  bgmVolume: 'Shuffles BGM from Assets/Music; 0 mutes, 1 full. (Player Settings does not change this — dev Tweaks only.)',
-  footstepMinHoldSec: 'How long you must hold forward (seconds) before the first footstep plays while grounded.',
-  footstepIntervalSec: 'Seconds between footstep one-shots while you keep holding forward (measured from each trigger).',
+  bgmVolume:
+    'Dev multiplier on shuffled BGM from Assets/Music. Final volume = this × player Music in Settings. Default dev level starts at 0.1.',
+  footstepMinHoldSec:
+    'How long you must hold a move key (WASD) while grounded before the first footstep plays.',
+  footstepIntervalSec: 'Seconds between footstep one-shots while you keep moving (measured from each trigger).',
   footstepSfxEnabled: '0 = no footstep sounds; 1 = play cat footstep one-shots from Assets/SFX/Footsteps.',
-  footstepVolumeMul: 'Per-shot gain before the player “Sound effects” master in Settings. × master SFX in Settings.',
+  footstepVolumeMul:
+    'Per-shot dev gain; multiplied by Settings → Sound effects and Tweaks → SFX. Default 1 = 100% of that chain.',
+  sfxTweakVolumeMul:
+    'Extra SFX master in Tweaks (0–1). Chained as Settings SFX × this for footsteps, voice UI, jump, land, etc.',
+  jumpSfxEnabled: '0 = no jump one-shot. 1 = play JumpSound.ogg when you jump (ground or air, local only).',
+  jumpSfxVolumeMul: 'Dev gain for jump; multiplied by the SFX chain (Settings × Tweaks SFX).',
+  landSfxEnabled: '0 = no land thud. 1 = play LandingonGround.ogg when you land from air (local only).',
+  landSfxVolumeMul: 'Dev gain for landing; multiplied by the SFX chain (Settings × Tweaks SFX).',
+  voiceRecordSfxEnabled:
+    '0 = no sound when you start holding to charge a voice shot. 1 = play RecordingSound.ogg (local only, not sent over network).',
+  voiceRecordSfxVolumeMul: 'Gain for the record-start one-shot; multiplied by the SFX chain (Settings × Tweaks SFX).',
+  voiceReleaseSfxEnabled:
+    '0 = no sound on release. 1 = play ReleaseSound.ogg when you let go of charge (local only).',
+  voiceReleaseSfxVolumeMul: 'Gain for the release one-shot; multiplied by the SFX chain (Settings × Tweaks SFX).',
 
   ambientIntensity: 'Fill light strength from all directions (shadow softness).',
   sunIntensity: 'Main directional light strength (contrast and shadows).',
@@ -827,10 +860,19 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
     title: 'Sound',
     keys: [
       'bgmVolume',
+      'sfxTweakVolumeMul',
       'footstepSfxEnabled',
       'footstepVolumeMul',
       'footstepMinHoldSec',
       'footstepIntervalSec',
+      'jumpSfxEnabled',
+      'jumpSfxVolumeMul',
+      'landSfxEnabled',
+      'landSfxVolumeMul',
+      'voiceRecordSfxEnabled',
+      'voiceRecordSfxVolumeMul',
+      'voiceReleaseSfxEnabled',
+      'voiceReleaseSfxVolumeMul',
     ],
   },
   {
