@@ -14,7 +14,6 @@ import {
   MeshPhysicalMaterial,
   MeshStandardMaterial,
   Object3D,
-  Raycaster,
   Scene,
   Vector3,
 } from 'three'
@@ -31,6 +30,7 @@ import {
   type AvatarClipName,
   type AvatarOneShotClip,
 } from './localPlayerAvatar'
+import type { TerrainPhysics } from '../physics/terrainPhysics'
 
 const BOT_GLB_IDLE = new URL('../../Assets/MonkeyModel/Idle.glb', import.meta.url).href
 const BOT_GLB_RUNNING = new URL('../../Assets/MonkeyModel/Running.glb', import.meta.url).href
@@ -40,11 +40,6 @@ const BOT_GLB_RECORDING = new URL('../../Assets/MonkeyModel/RecordingSound.glb',
 const BOT_GLB_SHOOTING = new URL('../../Assets/MonkeyModel/ShootingSound.glb', import.meta.url).href
 
 export type BotMode = 'dummy' | 'smart' | 'network'
-
-const DOWN = new Vector3(0, -1, 0)
-const _ray = new Raycaster()
-
-const KNOCK_ESCAPE_EDGE = 3.1
 
 export class BotFighter {
   readonly root = new Group()
@@ -561,23 +556,24 @@ export class BotFighter {
     this.faceToward(worldPos)
   }
 
-  private syncGround(colliders: Object3D[]): void {
-    const feetY = this.root.position.y - this.feetFromCenter
-    _ray.set(
-      new Vector3(this.root.position.x, this.root.position.y + 12, this.root.position.z),
-      DOWN,
+  private resolveTerrainCollision(terrain: TerrainPhysics, start: Vector3): void {
+    _moveDesired.subVectors(this.root.position, start)
+    this.root.position.copy(start)
+    const radius = Math.max(0.05, gameConfig.botBodyRadius)
+    const totalHeight = Math.max(radius * 2 + 0.08, this.feetFromCenter * 2)
+    const result = terrain.moveCapsuleFromFeet(
+      'bot',
+      new Vector3(start.x, start.y - this.feetFromCenter, start.z),
+      _moveDesired,
+      radius,
+      totalHeight,
     )
-    _ray.far = 120
-    const hits = _ray.intersectObjects(colliders, false)
-    let best = -1e9
-    for (const h of hits) {
-      if (h.point.y > best) best = h.point.y
-    }
-    const skin = 0.06
-    if (best > -1e8 && feetY <= best + skin + 0.15) {
-      this.root.position.y = best + this.feetFromCenter + skin
-      if (this.vy <= 0.6) this.vy = 0
-      this.grounded = true
+    this.root.position.add(result.movement)
+    this.grounded = result.grounded
+    if (this.grounded && this.vy <= 0.6) {
+      this.vy = 0
+    } else if (_moveDesired.y > 0 && result.movement.y < _moveDesired.y - 0.01) {
+      this.vy = 0
     }
   }
 
@@ -764,7 +760,7 @@ export class BotFighter {
   update(
     delta: number,
     playerPos: Vector3,
-    colliders: Object3D[],
+    terrain: TerrainPhysics,
     _playerProjectileActive: boolean,
   ): void {
     this.updateRecordingTelegraph(delta)
@@ -799,6 +795,7 @@ export class BotFighter {
 
     const groundedAtStart = this.grounded
     this.grounded = false
+    _moveStart.copy(this.root.position)
 
     this.bodyCenter.copy(this.root.position)
     this.bodyCenter.y += this.feetFromCenter * 0.52
@@ -895,27 +892,7 @@ export class BotFighter {
     this.root.position.x += (this.velocity.x + this.knockXZ.x) * delta
     this.root.position.z += (this.velocity.z + this.knockXZ.z) * delta
 
-    const knockFree =
-      this.hurtPhase === 'none' && this.knockXZ.length() < KNOCK_ESCAPE_EDGE
-    if (knockFree) {
-      const hw = gameConfig.groundWidth * 0.5 - gameConfig.botBodyRadius - 0.72
-      const hd = gameConfig.groundDepth * 0.5 - gameConfig.botBodyRadius - 0.72
-      const pad = 1.85
-      let x = this.root.position.x
-      let z = this.root.position.z
-      const vx = this.velocity.x
-      const vz = this.velocity.z
-      if (x > hw - pad && vx > 0) this.velocity.x = 0
-      if (x < -hw + pad && vx < 0) this.velocity.x = 0
-      if (z > hd - pad && vz > 0) this.velocity.z = 0
-      if (z < -hd + pad && vz < 0) this.velocity.z = 0
-      x = Math.max(-hw, Math.min(hw, x))
-      z = Math.max(-hd, Math.min(hd, z))
-      this.root.position.x = x
-      this.root.position.z = z
-    }
-
-    this.syncGround(colliders)
+    this.resolveTerrainCollision(terrain, _moveStart)
 
     if (this.hurtPhase === 'air' && !this.hurtFinisher) {
       const elapsed = performance.now() - this.hurtAirSince
@@ -968,6 +945,8 @@ export class BotFighter {
 const _work = new Vector3()
 const _rad = new Vector3()
 const _tan = new Vector3()
+const _moveStart = new Vector3()
+const _moveDesired = new Vector3()
 
 function loadBotGltf(
   loader: GLTFLoader,

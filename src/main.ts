@@ -19,9 +19,7 @@ import {
   MathUtils,
   Mesh,
   MeshBasicMaterial,
-  Object3D,
   PerspectiveCamera,
-  Raycaster,
   Scene,
   Vector3,
   WebGLRenderer,
@@ -54,6 +52,7 @@ import { LowEndDitherShader } from './post/lowEndDitherShader'
 import { readStoredPlayerName, savePlayerName } from './playerName'
 import { setPartyKitHostSession, getPartyKitHost } from './net/partyKitHost'
 import { createProceduralSky } from './skyDome'
+import { TerrainPhysics } from './physics/terrainPhysics'
 import {
   bootstrapMpDebugUrl,
   isMpDebugMode,
@@ -82,8 +81,6 @@ try {
 }
 
 bootstrapMpDebugUrl()
-
-const DOWN = new Vector3(0, -1, 0)
 
 const usernameOverlay = document.getElementById('username-overlay') as HTMLDivElement
 const usernameForm = document.getElementById('username-form') as HTMLFormElement
@@ -293,6 +290,8 @@ const _camRight = new Vector3()
 const _worldUp = new Vector3(0, 1, 0)
 const _muzzleWorld = new Vector3()
 const _aimDir = new Vector3()
+const _moveStart = new Vector3()
+const _moveDesired = new Vector3()
 
 function sleepMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -525,13 +524,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   scene.add(hubRoot)
   const skyDome = createProceduralSky(scene)
 
-  /**
-   * Map handle is mutable: PvP guests swap to the host's chosen map at `hello`.
-   * `colliders` re-points to the active map's collider list so all read sites
-   * stay correct without reassigning `map`.
-   */
+  /** Map handle is mutable: PvP guests swap to the host's chosen map at `hello`. */
+  const terrainPhysics = await TerrainPhysics.create()
   let map: MapHandle = await loadMap(lobby.mapId, scene, hubRoot)
-  let colliders: Object3D[] = map.colliders
+  terrainPhysics.setTerrainMeshes(map.collisionMeshes)
 
   scene.add(camera)
 
@@ -722,11 +718,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   const playerKnock = new Vector3()
   const dashVel = new Vector3()
   let dashCdMs = 0
-
-  const raycaster = new Raycaster()
-  raycaster.far = 400
-  const feetRayOrigin = new Vector3()
-  const _normal = new Vector3()
 
   const clock = new Clock()
   const velocity = new Vector3()
@@ -1966,7 +1957,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       try {
         const next = await loadMap(newId, scene, hubRoot)
         map = next
-        colliders = next.colliders
+        terrainPhysics.setTerrainMeshes(next.collisionMeshes)
         old.dispose()
       } catch (err) {
         console.warn('[map] swap failed; keeping current map', err)
@@ -2254,64 +2245,34 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     return camera.position.y - eyeH()
   }
 
-  /**
-   * Raycast must start **above** the deck so we never tunnel through after knockback.
-   * Second pass: analytical snap on the stage top (y = 0) when over the platform XZ.
-   */
-  function resolveGround(): void {
-    const fy = feetY()
-    const rayY = Math.max(
-      camera.position.y + 2,
-      fy + 6,
-      12,
-    )
-    feetRayOrigin.set(camera.position.x, rayY, camera.position.z)
-    raycaster.set(feetRayOrigin, DOWN)
-    const hits = raycaster.intersectObjects(colliders, false)
-
-    const skin = 0.22
-    const maxStep = 2.4
-
-    grounded = false
-    let bestFloorY = -1e9
-
-    for (const h of hits) {
-      if (!h.face) continue
-      _normal.copy(h.face.normal).transformDirection(h.object.matrixWorld)
-      if (_normal.y < 0.35) continue
-      const gy = h.point.y
-      if (fy < gy - 0.2) continue
-      if (fy - gy > maxStep + skin) continue
-      if (gy > bestFloorY) bestFloorY = gy
-    }
-
-    if (bestFloorY > -1e8) {
-      const deltaFeet = fy - bestFloorY
-      if (deltaFeet <= skin && deltaFeet >= -2.5) {
-        camera.position.y = bestFloorY + eyeH()
-        if (vy <= 0.55) {
-          vy = 0
-          grounded = true
-        }
-      }
-    }
-
-    snapDeckSurface()
+  function playerCapsuleRadius(): number {
+    return Math.max(0.05, gameConfig.playerRadius)
   }
 
-  /** Hard snap when feet are still over the platform AABB (prevents falling through). */
-  function snapDeckSurface(): void {
-    const hw = gameConfig.groundWidth / 2 + 0.02
-    const hd = gameConfig.groundDepth / 2 + 0.02
-    const { x, z } = camera.position
-    if (Math.abs(x) > hw || Math.abs(z) > hd) return
+  function playerCapsuleHeight(): number {
+    const r = playerCapsuleRadius()
+    return Math.max(r * 2 + 0.08, eyeH())
+  }
 
-    const fy = feetY()
-    const deckTop = 0
-    if (fy <= deckTop + 0.35 && fy >= deckTop - 4 && vy <= 12) {
-      camera.position.y = deckTop + eyeH()
-      vy = Math.min(vy, 0)
-      grounded = true
+  function resolvePlayerCollision(start: Vector3): void {
+    _moveDesired.subVectors(camera.position, start)
+    camera.position.copy(start)
+
+    const result = terrainPhysics.moveCapsuleFromFeet(
+      'player',
+      new Vector3(start.x, start.y - eyeH(), start.z),
+      _moveDesired,
+      playerCapsuleRadius(),
+      playerCapsuleHeight(),
+    )
+
+    camera.position.add(result.movement)
+    grounded = result.grounded
+
+    if (grounded && vy <= 0.55) {
+      vy = 0
+    } else if (_moveDesired.y > 0 && result.movement.y < _moveDesired.y - 0.01) {
+      vy = 0
     }
   }
 
@@ -2413,7 +2374,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         return
       }
       arms.update(delta)
-      bot.update(delta, camera.position, colliders, false)
+      bot.update(delta, camera.position, terrainPhysics, false)
       updateWinFinisher(delta)
       advanceWinFlashTimer()
       return
@@ -2422,7 +2383,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     arms.update(delta)
 
     const playerProjActive = arms.isProjectileActive()
-    bot.update(delta, camera.position, colliders, playerProjActive)
+    bot.update(delta, camera.position, terrainPhysics, playerProjActive)
 
     /* Player projectile vs bot — dedicated listen server validates shots when authPvp() */
     if (arms.canDealHit() && !authPvp()) {
@@ -2634,6 +2595,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (multiplayerBlocksPlay()) return
 
     const groundedBeforeResolve = grounded
+    _moveStart.copy(camera.position)
 
     vy -= gameConfig.gravity * delta
     camera.position.y += vy * delta
@@ -2694,7 +2656,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
     dashVel.multiplyScalar(Math.exp(-gameConfig.dashDecay * delta))
 
-    resolveGround()
+    resolvePlayerCollision(_moveStart)
 
     if (!groundedBeforeResolve && grounded) {
       voiceDownBoostReady = true

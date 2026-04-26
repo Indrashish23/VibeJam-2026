@@ -31,8 +31,8 @@ export function isMapId(value: unknown): value is MapId {
 
 export type MapHandle = {
   id: MapId
-  /** Objects considered solid for ground raycasting + bot ground sync. */
-  colliders: Object3D[]
+  /** Meshes used to build static terrain colliders in Rapier. */
+  collisionMeshes: Mesh[]
   /** Returns true if `pos` should count as a ring-out (death/blast zone). */
   isBlastZone: (pos: Vector3) => boolean
   /** Camera world position for a spawn marker. */
@@ -47,6 +47,20 @@ const ISLAND_GLB_URL = new URL('../Assets/Maps/lowpoly_islandtest.glb', import.m
 
 function normalizeSceneName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+}
+
+function isCollisionNodeName(name: string): boolean {
+  const n = normalizeSceneName(name)
+  return n.startsWith('col_') || n.startsWith('coll_') || n.startsWith('collision_')
+}
+
+function hasCollisionMarker(node: Object3D): boolean {
+  let cur: Object3D | null = node
+  while (cur) {
+    if (isCollisionNodeName(cur.name)) return true
+    cur = cur.parent
+  }
+  return false
 }
 
 function disposeObject3D(root: Object3D): void {
@@ -77,7 +91,7 @@ function loadDefaultMap(_scene: Scene, hubRoot: Group): MapHandle {
 
   return {
     id: 'default',
-    colliders: [ground],
+    collisionMeshes: [ground],
     isBlastZone(pos: Vector3): boolean {
       if (pos.y < gameConfig.blastY) return true
       const halfW = gameConfig.groundWidth / 2 + gameConfig.blastMargin
@@ -115,7 +129,7 @@ async function loadIslandMap(_scene: Scene, hubRoot: Group): Promise<MapHandle> 
   })
 
   container.add(gltf.scene)
-  const colliders: Object3D[] = []
+  const collisionMeshes: Mesh[] = []
   let spawnA: Vector3 | null = null
   let spawnB: Vector3 | null = null
   gltf.scene.updateMatrixWorld(true)
@@ -131,7 +145,7 @@ async function loadIslandMap(_scene: Scene, hubRoot: Group): Promise<MapHandle> 
     if ((mesh as Mesh).isMesh) {
       mesh.castShadow = true
       mesh.receiveShadow = true
-      colliders.push(mesh)
+      if (hasCollisionMarker(mesh)) collisionMeshes.push(mesh)
     }
   })
 
@@ -148,7 +162,7 @@ async function loadIslandMap(_scene: Scene, hubRoot: Group): Promise<MapHandle> 
 
   return {
     id: 'island',
-    colliders,
+    collisionMeshes,
     isBlastZone(pos: Vector3): boolean {
       return pos.y < gameConfig.blastY
     },
