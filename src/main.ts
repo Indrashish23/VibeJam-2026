@@ -138,6 +138,7 @@ const rematchBlackSheet = document.getElementById('rematch-black-sheet') as HTML
 const countdownOverlay = document.getElementById('countdown-overlay') as HTMLDivElement | null
 const countdownNumEl = document.getElementById('countdown-num') as HTMLSpanElement | null
 const dashScanEl = document.getElementById('dash-scanlines') as HTMLDivElement | null
+const jumpVfxEl = document.getElementById('jump-vfx') as HTMLDivElement | null
 const chargeBarWrap = document.getElementById('charge-bar-wrap') as HTMLDivElement | null
 const chargeBarFill = document.getElementById('charge-bar-fill') as HTMLDivElement | null
 const chargeBarMinMark = document.getElementById('charge-bar-min') as HTMLDivElement | null
@@ -725,6 +726,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   const prevShake = new Vector3()
   let shakeIntensity = 0
   let flashIntensity = 0
+  let jumpBurstOpacity = 0
+  let jumpPopTimeout: ReturnType<typeof setTimeout> | null = null
 
   let vy = 0
   let grounded = false
@@ -1999,6 +2002,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     gameRoot.classList.remove('game-root--dash-tilt')
     gameRoot.style.transform = ''
     if (dashScanEl) dashScanEl.style.opacity = '0'
+    if (jumpVfxEl) jumpVfxEl.style.opacity = '0'
+    jumpBurstOpacity = 0
+    if (jumpPopTimeout) {
+      clearTimeout(jumpPopTimeout)
+      jumpPopTimeout = null
+    }
+    gameRoot.classList.remove('game-root--jump-pop')
     playerKnock.set(0, 0, 0)
     dashVel.set(0, 0, 0)
     vy = 0
@@ -2282,6 +2292,22 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
   }
 
+  function triggerJumpFx(airJump: boolean): void {
+    const mul = airJump ? 1.2 : 1
+    shakeIntensity = Math.max(shakeIntensity, gameConfig.jumpFxShake * mul)
+    flashIntensity = Math.max(flashIntensity, gameConfig.jumpFxWhiteFlash * mul)
+    jumpBurstOpacity = Math.max(jumpBurstOpacity, gameConfig.jumpFxBurstOpacity * mul)
+    gameRoot.classList.remove('game-root--jump-pop')
+    requestAnimationFrame(() => {
+      gameRoot.classList.add('game-root--jump-pop')
+    })
+    if (jumpPopTimeout) clearTimeout(jumpPopTimeout)
+    jumpPopTimeout = setTimeout(() => {
+      gameRoot.classList.remove('game-root--jump-pop')
+      jumpPopTimeout = null
+    }, 200)
+  }
+
   function tryJump() {
     if (
       tweaksPanelOpen ||
@@ -2299,6 +2325,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       vy = gameConfig.jumpForce
       grounded = false
       lastJumpAt = now
+      triggerJumpFx(false)
       return
     }
     /* Mid-air double jump: replace (not add to) vertical velocity for a clean second pop. */
@@ -2306,6 +2333,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       vy = gameConfig.jumpForce
       airJumpsLeft -= 1
       lastJumpAt = now
+      triggerJumpFx(true)
     }
   }
 
@@ -2718,6 +2746,15 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       } else {
         flashIntensity = 0
         hitFlashEl.style.opacity = '0'
+      }
+    }
+    if (jumpVfxEl) {
+      if (jumpBurstOpacity > 0.012) {
+        jumpBurstOpacity *= Math.exp(-22 * delta)
+        jumpVfxEl.style.opacity = String(Math.min(1, jumpBurstOpacity))
+      } else {
+        jumpBurstOpacity = 0
+        jumpVfxEl.style.opacity = '0'
       }
     }
   }

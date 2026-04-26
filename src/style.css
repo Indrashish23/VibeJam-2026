@@ -693,6 +693,34 @@ body {
   transition: opacity 0.06s linear;
 }
 
+.jump-vfx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 42;
+  opacity: 0;
+  mix-blend-mode: screen;
+  background:
+    radial-gradient(ellipse 95% 72% at 50% 108%, rgba(120, 255, 248, 0.95) 0%, rgba(40, 200, 255, 0.45) 22%, transparent 55%),
+    radial-gradient(ellipse 58% 50% at 50% 36%, rgba(255, 255, 255, 0.62) 0%, rgba(200, 245, 255, 0.22) 38%, transparent 62%);
+}
+
+.game-root--jump-pop {
+  animation: jump-pop-punch 0.18s ease-out;
+}
+
+@keyframes jump-pop-punch {
+  0% {
+    filter: brightness(1);
+  }
+  22% {
+    filter: brightness(1.22) saturate(1.35) contrast(1.04);
+  }
+  100% {
+    filter: brightness(1);
+  }
+}
+
 .game-root--dash-tilt {
   transform-origin: 50% 55%;
   transition: transform 0.08s ease-out;
