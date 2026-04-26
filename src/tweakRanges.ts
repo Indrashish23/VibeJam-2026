@@ -153,6 +153,7 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
 
   ambientIntensity: { min: 0, max: CAP, step: 0.05 },
   sunIntensity: { min: 0, max: CAP, step: 0.05 },
+  lightingUnlitMode: { min: 0, max: 1, step: 1 },
   stunnedStarScaleMul: { min: 0.35, max: 2.2, step: 0.02 },
   stunnedStarSpinMul: { min: 0.45, max: 5, step: 0.05 },
   stunnedStarSpreadMul: { min: 0.45, max: 2.35, step: 0.02 },
@@ -281,6 +282,7 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   skyCloudOpacity: 'Cloud opacity',
   ambientIntensity: 'Ambient light',
   sunIntensity: 'Sun strength',
+  lightingUnlitMode: 'Lighting mode: unlit (0/1)',
   pcAvatarYOffset: 'Body Y offset (lift / lower)',
   pcAvatarForward: 'Body forward offset (negative = behind camera)',
   pcAvatarSide: 'Body side offset',
@@ -415,6 +417,8 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
 
   ambientIntensity: 'Fill light strength from all directions (shadow softness).',
   sunIntensity: 'Main directional light strength (contrast and shadows).',
+  lightingUnlitMode:
+    '0 = normal lighting. 1 = force unlit rendering (materials ignore ambient/sun and use texture/color only).',
 
   hitsToWin: 'How many times you can be hit before a KO (ring-out still loses instantly).',
   enemyHitsToWin: 'How many clean hits you must land on the enemy to win the round.',
@@ -703,7 +707,7 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
   {
     id: 'lighting',
     title: 'Lighting',
-    keys: ['ambientIntensity', 'sunIntensity'],
+    keys: ['ambientIntensity', 'sunIntensity', 'lightingUnlitMode'],
   },
   {
     id: 'uiVfx',

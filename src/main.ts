@@ -15,7 +15,10 @@ import {
   LineBasicMaterial,
   LineLoop,
   LineSegments,
+  Material,
   MathUtils,
+  Mesh,
+  MeshBasicMaterial,
   Object3D,
   PerspectiveCamera,
   Raycaster,
@@ -441,6 +444,82 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   scene.add(sun)
   scene.add(sun.target)
   sun.target.position.set(0, 0, 0)
+
+  const litToUnlit = new WeakMap<Material, Material>()
+  const unlitToLit = new WeakMap<Material, Material>()
+  let lastUnlitMode = false
+  let unlitRescanTick = 0
+  function mapMaterialForLightingMode(src: Material, unlit: boolean): Material {
+    if (unlit) {
+      const cached = litToUnlit.get(src)
+      if (cached) return cached
+      const shaderLike = src as unknown as { isShaderMaterial?: boolean }
+      if (shaderLike.isShaderMaterial) return src
+      const m = src as unknown as {
+        map?: unknown
+        color?: { clone?: () => unknown }
+        vertexColors?: boolean
+        wireframe?: boolean
+        transparent?: boolean
+        opacity?: number
+        alphaTest?: number
+        side?: number
+        visible?: boolean
+        depthTest?: boolean
+        depthWrite?: boolean
+        name?: string
+      }
+      const basic = new MeshBasicMaterial()
+      const basicAs = basic as unknown as {
+        map?: unknown
+        color?: { copy?: (c: unknown) => void; set?: (v: unknown) => void }
+        vertexColors?: boolean
+        wireframe?: boolean
+        transparent?: boolean
+        opacity?: number
+        alphaTest?: number
+        side?: unknown
+        visible?: boolean
+        depthTest?: boolean
+        depthWrite?: boolean
+      }
+      basicAs.map = m.map ?? null
+      if (m.color && basicAs.color?.copy) basicAs.color.copy(m.color)
+      else basicAs.color?.set?.(0xffffff)
+      basicAs.vertexColors = !!m.vertexColors
+      basicAs.wireframe = !!m.wireframe
+      basicAs.transparent = !!m.transparent
+      basicAs.opacity = m.opacity ?? 1
+      basicAs.alphaTest = m.alphaTest ?? 0
+      basicAs.side = m.side
+      basicAs.visible = m.visible ?? true
+      basicAs.depthTest = m.depthTest ?? true
+      basicAs.depthWrite = m.depthWrite ?? true
+      if (m.name) basic.name = `${m.name} (unlit)`
+      litToUnlit.set(src, basic)
+      unlitToLit.set(basic, src)
+      return basic
+    }
+    return unlitToLit.get(src) ?? src
+  }
+  function applyLightingModeToScene(unlit: boolean): void {
+    ambient.intensity = unlit ? 0 : gameConfig.ambientIntensity
+    sun.intensity = unlit ? 0 : gameConfig.sunIntensity
+    scene.traverse((node) => {
+      const mesh = node as Mesh
+      if (!mesh.isMesh) return
+      const matRef = (mesh as unknown as { material?: Material | Material[] }).material
+      if (!matRef) return
+      if (Array.isArray(matRef)) {
+        ;(mesh as unknown as { material: Material[] }).material = matRef.map((m) =>
+          mapMaterialForLightingMode(m, unlit),
+        )
+      } else {
+        ;(mesh as unknown as { material: Material }).material = mapMaterialForLightingMode(matRef, unlit)
+      }
+    })
+    lastUnlitMode = unlit
+  }
 
   const hubRoot = new Group()
   scene.add(hubRoot)
@@ -1897,6 +1976,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       spawnActors()
       applySunShadowFrustum()
       syncBlastBoundsLine()
+      applyLightingModeToScene(gameConfig.lightingUnlitMode >= 0.5)
     })()
     swapMapInFlight = work
     try {
@@ -2136,6 +2216,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     bot.dispose(scene)
     botMode = mode
     bot = new BotFighter(scene, botMode, new Vector3(0, 1.45, -gameConfig.groundDepth / 2 + 12))
+    applyLightingModeToScene(gameConfig.lightingUnlitMode >= 0.5)
     instantHudRematch()
   }
 
@@ -2679,6 +2760,15 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let debugMpHb = 0
   function animate() {
     const delta = Math.min(clock.getDelta(), gameConfig.movementMaxDelta)
+    const wantsUnlit = gameConfig.lightingUnlitMode >= 0.5
+    if (wantsUnlit !== lastUnlitMode) {
+      applyLightingModeToScene(wantsUnlit)
+      unlitRescanTick = 0
+    } else if (wantsUnlit) {
+      /* Catch meshes that appear later (async avatar/bot/map loads) while unlit mode is active. */
+      unlitRescanTick = (unlitRescanTick + 1) % 20
+      if (unlitRescanTick === 0) applyLightingModeToScene(true)
+    }
 
     if (DEBUG_MP) {
       mpDiagSnapshot.lobbyOnline = lobby.mode === 'online'
@@ -3100,6 +3190,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       sun,
       syncVisualsFromConfig: () => {
         skyDome.syncFromConfig()
+        applyLightingModeToScene(gameConfig.lightingUnlitMode >= 0.5)
       },
       onToggle(open) {
         tweaksPanelOpen = open
