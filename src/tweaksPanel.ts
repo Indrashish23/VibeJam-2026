@@ -221,6 +221,16 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
 
   const gameplayPanelEarly = sectionPanels.get('thePlayer')
   let pistolModeCb: HTMLInputElement | null = null
+  let pistolModeCbInSection: HTMLInputElement | null = null
+  /**
+   * Both the gameplay-top-of-tab checkbox and the in-section pistol-mode checkbox mutate the same
+   * `voicePistolModeEnabled` key; this keeps them visually in sync when either is flipped.
+   */
+  function syncPistolModeCheckboxes(): void {
+    const on = gameConfig.voicePistolModeEnabled >= 0.5
+    if (pistolModeCb) pistolModeCb.checked = on
+    if (pistolModeCbInSection) pistolModeCbInSection.checked = on
+  }
   if (gameplayPanelEarly) {
     const wrap = document.createElement('div')
     wrap.className = 'tweaks-row tweaks-row-select'
@@ -265,6 +275,7 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
     pistolCb.checked = gameConfig.voicePistolModeEnabled >= 0.5
     pistolCb.addEventListener('change', () => {
       gameConfig.voicePistolModeEnabled = pistolCb.checked ? 1 : 0
+      syncPistolModeCheckboxes()
       hooks.onConfigChanged?.()
     })
     const pistolName = document.createElement('span')
@@ -275,6 +286,31 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
     pistolWrap.appendChild(pistolName)
     pistolModeCb = pistolCb
     gameplayPanelEarly.insertBefore(pistolWrap, gameplayPanelEarly.firstChild)
+  }
+
+  /* Mirror checkbox inside the Pistol section so the toggle lives alongside its tweaks too. */
+  const pistolPanelEl = sectionPanels.get('pistol')
+  if (pistolPanelEl) {
+    const wrap = document.createElement('label')
+    wrap.className = 'tweaks-row tweaks-row-bool'
+    wrap.title =
+      'Experimental: hold RMB to shout-charge a magazine, click LMB to fire each pre-loaded snippet (no charge per shot). Recharge only when empty.'
+    const cb = document.createElement('input')
+    cb.type = 'checkbox'
+    cb.checked = gameConfig.voicePistolModeEnabled >= 0.5
+    cb.addEventListener('change', () => {
+      gameConfig.voicePistolModeEnabled = cb.checked ? 1 : 0
+      syncPistolModeCheckboxes()
+      hooks.onConfigChanged?.()
+    })
+    const name = document.createElement('span')
+    name.className = 'tweaks-name'
+    name.textContent = 'Pistol mode enabled'
+    name.title = wrap.title
+    wrap.appendChild(cb)
+    wrap.appendChild(name)
+    pistolModeCbInSection = cb
+    pistolPanelEl.insertBefore(wrap, pistolPanelEl.firstChild)
   }
 
   if (hooks.onTriggerKnockbackDev) {
@@ -322,9 +358,7 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
         Math.max(0, Math.min(2, Math.round(gameConfig.voiceProjectileMode))),
       )
     }
-    if (pistolModeCb) {
-      pistolModeCb.checked = gameConfig.voicePistolModeEnabled >= 0.5
-    }
+    syncPistolModeCheckboxes()
     syncSceneFromConfig()
     hooks.onConfigChanged?.()
   })

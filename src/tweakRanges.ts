@@ -124,6 +124,11 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   voiceShotAmmoMax: { min: 0, max: 99, step: 1 },
   voicePistolModeEnabled: { min: 0, max: 1, step: 1 },
   voiceMagazineSize: { min: 1, max: 30, step: 1 },
+  pistolShotSpeedMul: { min: 0.1, max: 2, step: 0.02 },
+  pistolKnockMul: { min: 0, max: 1, step: 0.01 },
+  pistolPercentMul: { min: 0, max: 1, step: 0.02 },
+  pistolShotSizeMul: { min: 0.25, max: 2, step: 0.05 },
+  pistolReloadStepMs: { min: 20, max: 400, step: 5 },
   voiceProjectileMode: { min: 0, max: 2, step: 1 },
   voiceHitRefDistance: { min: 0.5, max: 80, step: 0.5 },
   voiceHitMaxDistance: { min: 8, max: 240, step: 2 },
@@ -292,7 +297,12 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   voiceLookdownBoostMaxVy: 'Look-down max vy after boost',
   voiceShotAmmoMax: 'Voice shots / round (0 = ∞)',
   voicePistolModeEnabled: 'Pistol mode enabled (0/1)',
-  voiceMagazineSize: 'Pistol mode magazine size',
+  voiceMagazineSize: 'Pistol magazine size',
+  pistolShotSpeedMul: 'Pistol shot speed × (direct, bypasses voice min/max)',
+  pistolKnockMul: 'Pistol knockback × (final scaler on impulse)',
+  pistolPercentMul: 'Pistol launch-% gain × (per-hit scaler)',
+  pistolShotSizeMul: 'Pistol projectile size ×',
+  pistolReloadStepMs: 'Pistol reload tick (ms per +1)',
   voiceProjectileMode: 'Projectile delivery mode (0–2)',
   voiceHitRefDistance: 'Spatial hit ref dist',
   voiceHitMaxDistance: 'Spatial hit max dist',
@@ -586,9 +596,19 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   voiceLookdownBoostMaxVy: 'After applying the look-down boost, vy is clamped to at most this value.',
   voiceShotAmmoMax: 'Maximum voice shots per round; 0 means unlimited.',
   voicePistolModeEnabled:
-    'Experimental: 1 = pistol/magazine mode (RMB hold = shout-charge, LMB click = instant snippet shot). 0 = legacy charge-and-release. Also exposed as a checkbox at the top of the Gameplay tab.',
+    'Experimental: 1 = pistol/magazine mode (RMB hold = shout-charge, LMB click = instant snippet shot). 0 = legacy charge-and-release. Also exposed as a checkbox at the top of the Gameplay tab and inside the Pistol mode section.',
   voiceMagazineSize:
     'Pistol mode: rounds loaded into a fully charged magazine. The recorded clip is split into this many equal-time snippets when fully charged (fewer rounds = longer snippets when partially charged).',
+  pistolShotSpeedMul:
+    'Pistol mode only. Direct multiplier on `punchProjectileSpeed` for pistol shots; bypasses the voice shot min/max clamp so you can dial pistol speed independently of voice shots.',
+  pistolKnockMul:
+    'Pistol mode only. Final multiplier on knockback impulse when a local pistol shot connects. Lower = much weaker stagger so spam clicks don’t fling players off the deck.',
+  pistolPercentMul:
+    'Pistol mode only. Multiplier on the launch-% gained by the victim per pistol-shot hit. Lower = victims build launch-% slowly even under sustained pistol fire.',
+  pistolShotSizeMul:
+    'Pistol mode only. Visual + hit size multiplier applied to pistol projectiles (replaces the voice charge-bonus sizing for pistol shots).',
+  pistolReloadStepMs:
+    'Pistol mode only. Time in milliseconds between each +1 round revealed during the reload animation (lower = snappier reload pop).',
   voiceProjectileMode:
     '0 = flying projectile, 1 = instant hitscan from mouth along view, 2 = hitscan from camera/eye. Also in Gameplay dropdown.',
   voiceHitRefDistance: 'Distance at which spatial “whoosh” hit audio begins to roll off.',
@@ -718,7 +738,6 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
     id: 'projectile',
     title: 'Projectile',
     keys: [
-      'voiceMagazineSize',
       'punchMaxRange',
       'punchProjectileSpeed',
       'fistAirDrag',
@@ -730,6 +749,18 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'voiceShotSpeedMinMul',
       'voiceShotSpeedMaxMul',
       'voiceMinChargeToFire',
+    ],
+  },
+  {
+    id: 'pistol',
+    title: 'Pistol mode (experimental)',
+    keys: [
+      'voiceMagazineSize',
+      'pistolShotSpeedMul',
+      'pistolShotSizeMul',
+      'pistolKnockMul',
+      'pistolPercentMul',
+      'pistolReloadStepMs',
     ],
   },
   {

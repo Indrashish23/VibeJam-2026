@@ -146,6 +146,7 @@ const chargeBarFill = document.getElementById('charge-bar-fill') as HTMLDivEleme
 const chargeBarMinMark = document.getElementById('charge-bar-min') as HTMLDivElement | null
 const chargeBarStatus = document.getElementById('charge-bar-status') as HTMLDivElement | null
 const ammoCountEl = document.getElementById('ammo-count') as HTMLDivElement | null
+const ammoFeedbackEl = document.getElementById('ammo-feedback') as HTMLDivElement | null
 const micBlockedOverlay = document.getElementById('mic-blocked-overlay') as HTMLDivElement | null
 const micBlockedSubEl = document.getElementById('mic-blocked-sub') as HTMLParagraphElement | null
 const countdownTitleEl = document.getElementById('countdown-title') as HTMLParagraphElement | null
@@ -931,6 +932,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let chargingRmb = false
   let pistolMag: PistolMagazine | null = null
   let pistolNextSlot = 0
+  /**
+   * Reload reveal animation state: after RMB release we build the full mag, but the player only
+   * "sees" rounds load 1, 2, 3, … with a `+1` pop on each tick. Firing is gated on revealed slots
+   * so spam clicks during reload still respect the visual ammo count.
+   */
+  let pistolReloadRevealed = 0
+  let pistolReloadAccMs = 0
   function pistolModeOn(): boolean {
     return gameConfig.voicePistolModeEnabled >= 0.5
   }
@@ -939,12 +947,24 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
   function pistolAmmoLeft(): number {
     if (!pistolMag) return 0
-    return Math.max(0, pistolMag.slots.length - pistolNextSlot)
+    const revealed = Math.min(pistolMag.slots.length, pistolReloadRevealed)
+    return Math.max(0, revealed - pistolNextSlot)
   }
   function clearPistolState(): void {
     chargingRmb = false
     pistolMag = null
     pistolNextSlot = 0
+    pistolReloadRevealed = 0
+    pistolReloadAccMs = 0
+  }
+  /** Fire the +1 pop animation next to the ammo count by re-triggering its CSS keyframe. */
+  function popAmmoFeedback(): void {
+    if (!ammoFeedbackEl) return
+    ammoFeedbackEl.textContent = '+1'
+    ammoFeedbackEl.hidden = false
+    ammoFeedbackEl.classList.remove('ammo-feedback--pop')
+    void ammoFeedbackEl.offsetWidth
+    ammoFeedbackEl.classList.add('ammo-feedback--pop')
   }
 
   let tweakConfigDebounce: ReturnType<typeof setTimeout> | null = null
@@ -2052,6 +2072,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
     pistolMag = { buf, slots }
     pistolNextSlot = 0
+    /* Reload reveal: start at 0 visible rounds; the per-frame tick increments at `pistolReloadStepMs`
+       cadence, popping a `+1` next to the ammo counter for each round revealed. */
+    pistolReloadRevealed = 0
+    pistolReloadAccMs = 0
     /* Reset live charge so the bar redraws from ammo/cap on the next frame. */
     voice.resetChargeMeter()
     voiceChargeSmoothed = 0
@@ -2059,22 +2083,41 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (chargeBarWrap) chargeBarWrap.classList.remove('charge-bar-wrap--ready')
   }
 
+  /** Per-frame: advance the reveal animation while a fresh mag is being loaded. */
+  function tickPistolReloadAnim(deltaMs: number): void {
+    if (!pistolMag) return
+    if (pistolReloadRevealed >= pistolMag.slots.length) return
+    const stepMs = Math.max(10, gameConfig.pistolReloadStepMs)
+    pistolReloadAccMs += deltaMs
+    let safety = 0
+    while (
+      pistolReloadAccMs >= stepMs &&
+      pistolReloadRevealed < pistolMag.slots.length &&
+      safety++ < 32
+    ) {
+      pistolReloadAccMs -= stepMs
+      pistolReloadRevealed += 1
+      popAmmoFeedback()
+    }
+  }
+
   /** Pistol mode: LMB click — fire the next snippet as a fresh shot (no charging, no record). */
   async function firePistolShot(): Promise<void> {
-    if (!pistolMag || pistolNextSlot >= pistolMag.slots.length) return
+    if (!pistolMag) return
+    /* Respect the reload reveal — clicking before a round is "loaded" should be a no-op. */
+    if (pistolAmmoLeft() <= 0) return
+    if (pistolNextSlot >= pistolMag.slots.length) return
     const slot = pistolMag.slots[pistolNextSlot]
     /* Build a self-contained AudioBuffer for this snippet so the existing hit-replay path works unchanged. */
     const snippetBuf = sliceBufferToBuffer(pistolMag.buf, slot.offsetSec, slot.durationSec)
 
     queueLocalAnimOneShot('shooting')
 
-    /* Pistol shots are uniform full-strength. Use t=1 against existing charge-driven knock/percent maths. */
+    /* Pistol shots use their own dedicated tweaks — independent from voice charge-and-release. */
     const t = 1
-    const speedMul = gameConfig.voiceShotSpeedMaxMul
-    const sizeMul = Math.max(
-      0.15,
-      gameConfig.projectileSizeBase * (1 + gameConfig.projectileSizeChargeMaxBonus * t),
-    )
+    const speedMul = Math.max(0.05, gameConfig.pistolShotSpeedMul)
+    const sizeMul = Math.max(0.15, gameConfig.pistolShotSizeMul)
+    const fireOpts = { pistolMode: true, bypassSpeedClamp: true }
 
     camera.getWorldDirection(_aimDir)
     _camFwd.copy(_aimDir).normalize()
@@ -2090,10 +2133,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     const projMode = Math.max(0, Math.min(2, Math.round(gameConfig.voiceProjectileMode)))
     const fired =
       projMode === 1
-        ? arms.tryHeadscanFire(speedMul, snippetBuf, t, sizeMul, _muzzleWorld, _aimDir)
+        ? arms.tryHeadscanFire(speedMul, snippetBuf, t, sizeMul, _muzzleWorld, _aimDir, fireOpts)
         : projMode === 2
-          ? arms.tryHeadscanFire(speedMul, snippetBuf, t, sizeMul, camera.position, _aimDir)
-          : arms.tryFire(speedMul, snippetBuf, t, sizeMul, _muzzleWorld, _aimDir)
+          ? arms.tryHeadscanFire(speedMul, snippetBuf, t, sizeMul, camera.position, _aimDir, fireOpts)
+          : arms.tryFire(speedMul, snippetBuf, t, sizeMul, _muzzleWorld, _aimDir, fireOpts)
     if (!fired) return
 
     /* Consume one round; clear the magazine when emptied so the HUD prompt swaps to "Hold RMB". */
@@ -2763,11 +2806,15 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       const reach = arms.projectileRadius() + gameConfig.botBodyRadius * 0.88
       if (_fp.distanceTo(bot.bodyCenter) < reach) {
         const shotT = arms.peekShotT()
+        const isPistolShot = arms.peekIsPistolShot()
         const hitAudio = arms.takeHitAudio()
         arms.markDealt()
         voice.playBufferSpatialAt(hitAudio, bot.bodyCenter, camera)
         const botAimY = knockDirFromFistImpact(_fp, _knDir)
-        const gain = percentGainFromCharge(shotT)
+        /* Pistol shots use dedicated multipliers so spam-clicks can't fling the bot off-stage. */
+        const pistolPctMul = isPistolShot ? Math.max(0, gameConfig.pistolPercentMul) : 1
+        const pistolKnockMul = isPistolShot ? Math.max(0, gameConfig.pistolKnockMul) : 1
+        const gain = percentGainFromCharge(shotT) * pistolPctMul
         const prevEnemyPct = enemyPercent
         enemyPercent = Math.min(999, enemyPercent + gain)
         syncHud()
@@ -2783,7 +2830,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
             const launchMul = launchKnockMulFromPercent(enemyPercent)
             bot.applyKnockback(
               _knDir,
-              gameConfig.knockbackOnBot * launchMul,
+              gameConfig.knockbackOnBot * launchMul * pistolKnockMul,
               enemyPercent,
               botAimY,
             )
@@ -3223,6 +3270,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (!voiceInputBlocked && !voiceResumeCountdownActive && !multiplayerBlocksPlay()) {
       voiceChargeSmoothed = voice.tickChargeAccum(delta, chargingLmb || chargingRmb)
     }
+    tickPistolReloadAnim(delta * 1000)
     const pistolOn = pistolModeOn()
     if (ammoCountEl) {
       if (pistolOn) {

@@ -270,10 +270,33 @@ export const defaultGameConfig = {
    * Experimental pistol/magazine mode toggle. When 1, RMB-hold-to-shout fills the magazine
    * (`voiceMagazineSize` rounds), and LMB clicks fire one pre-loaded snippet per click without
    * recharging. Recharge is only allowed when the magazine is empty. 0 = legacy charge-and-release.
+   *
+   * Pistol-only tweaks below are isolated from the global voice/projectile knobs so legacy mode
+   * is unaffected when the toggle is 0.
    */
   voicePistolModeEnabled: 0,
   /** Pistol mode: rounds in a full magazine (snippets carved equally from the recorded clip). */
   voiceMagazineSize: 10,
+  /**
+   * Pistol mode: direct projectile speed multiplier (× `punchProjectileSpeed`) for pistol shots.
+   * Bypasses the voice shot speed min/max clamp so pistol can be tuned independently. Lower =
+   * slower travel (easier to dodge / less spam pressure).
+   */
+  pistolShotSpeedMul: 0.55,
+  /**
+   * Pistol mode: scales the resolved knockback impulse on local pistol-shot hits.
+   * Way down by default so spam clicks can't fling people off the stage.
+   */
+  pistolKnockMul: 0.18,
+  /**
+   * Pistol mode: scales the launch-percent gain added to the victim per pistol-shot hit.
+   * Lower = victims build launch-% slowly even under sustained pistol fire.
+   */
+  pistolPercentMul: 0.4,
+  /** Pistol mode: projectile visual + hit size multiplier for pistol shots only. */
+  pistolShotSizeMul: 0.85,
+  /** Pistol mode: ms between each +1 round revealed during the reload animation. */
+  pistolReloadStepMs: 80,
 
   /** Proximity-style hit audio: distance at which rolloff starts (world units). */
   voiceHitRefDistance: 5,

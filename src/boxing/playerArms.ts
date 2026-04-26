@@ -27,6 +27,25 @@ type ProjectileState = {
   shotT: number
   /** Visual + collision scale multiplier for this fired shot. */
   sizeMul: number
+  /**
+   * True when this shot was fired from the experimental pistol mode. Hit-resolve sites read this
+   * via `peekIsPistolShot()` to scale knock/percent independently of the legacy voice formula.
+   */
+  pistolMode: boolean
+}
+
+/**
+ * Optional extra parameters for `tryFire` / `tryHeadscanFire`. Kept on a single object so adding new
+ * pistol-mode metadata or future shot variants stays backward-compatible (legacy callers omit it).
+ */
+export type FireOptions = {
+  /** Tag the spawned projectile as a pistol shot so the hit-resolve site can apply pistol scaling. */
+  pistolMode?: boolean
+  /**
+   * When true, `speedFactor` is used directly without clamping into `[voiceShotSpeedMin, …Max]`.
+   * Pistol mode uses this so its dedicated `pistolShotSpeedMul` can sit below the voice min.
+   */
+  bypassSpeedClamp?: boolean
 }
 
 /**
@@ -80,6 +99,7 @@ export class PlayerArms {
       hitAudio: null,
       shotT: 0,
       sizeMul: 1,
+      pistolMode: false,
     }
   }
 
@@ -107,6 +127,7 @@ export class PlayerArms {
     sizeMul = 1,
     originWorld?: Vector3,
     dirWorld?: Vector3,
+    options?: FireOptions,
   ): boolean {
     if (this.proj.active) return false
 
@@ -123,10 +144,12 @@ export class PlayerArms {
       this.camera.getWorldDirection(this.proj.vel)
     }
     const base = gameConfig.punchProjectileSpeed
-    const mul = Math.max(
-      gameConfig.voiceShotSpeedMinMul,
-      Math.min(gameConfig.voiceShotSpeedMaxMul, speedFactor),
-    )
+    const mul = options?.bypassSpeedClamp
+      ? Math.max(0.05, speedFactor)
+      : Math.max(
+          gameConfig.voiceShotSpeedMinMul,
+          Math.min(gameConfig.voiceShotSpeedMaxMul, speedFactor),
+        )
     this.proj.vel.normalize().multiplyScalar(base * mul)
 
     this.proj.pos.copy(this._tmp)
@@ -134,6 +157,7 @@ export class PlayerArms {
     this.proj.hitAudio = hitAudio
     this.proj.shotT = Math.max(0, Math.min(1, shotT))
     this.proj.sizeMul = Math.max(0.15, Math.min(6, sizeMul))
+    this.proj.pistolMode = options?.pistolMode === true
     this.proj.active = true
     this.proj.flying = true
     this.dealt = false
@@ -155,6 +179,7 @@ export class PlayerArms {
     sizeMul: number,
     originWorld: Vector3,
     dirWorld: Vector3,
+    options?: FireOptions,
   ): boolean {
     if (this.proj.active) return false
     if (!dirWorld || dirWorld.lengthSq() < 1e-8) {
@@ -165,10 +190,12 @@ export class PlayerArms {
     this.hitscanOrigin.copy(originWorld)
 
     const base = gameConfig.punchProjectileSpeed
-    const mul = Math.max(
-      gameConfig.voiceShotSpeedMinMul,
-      Math.min(gameConfig.voiceShotSpeedMaxMul, speedFactor),
-    )
+    const mul = options?.bypassSpeedClamp
+      ? Math.max(0.05, speedFactor)
+      : Math.max(
+          gameConfig.voiceShotSpeedMinMul,
+          Math.min(gameConfig.voiceShotSpeedMaxMul, speedFactor),
+        )
     const speed = base * mul
 
     this.proj.pos.copy(this.hitscanOrigin)
@@ -177,6 +204,7 @@ export class PlayerArms {
     this.proj.hitAudio = hitAudio
     this.proj.shotT = Math.max(0, Math.min(1, shotT))
     this.proj.sizeMul = Math.max(0.15, Math.min(6, sizeMul))
+    this.proj.pistolMode = options?.pistolMode === true
     this.proj.active = true
     this.proj.flying = false
     this.hitscanMode = true
@@ -333,6 +361,7 @@ export class PlayerArms {
     this.proj.hitAudio = null
     this.proj.shotT = 0
     this.proj.sizeMul = 1
+    this.proj.pistolMode = false
     this.hitscanMode = false
     this.mesh.scale.setScalar(1)
     this.mesh.visible = false
@@ -370,6 +399,11 @@ export class PlayerArms {
   peekShotT(): number {
     if (!this.proj.active) return 0
     return this.proj.shotT
+  }
+
+  /** True if the live projectile / headscan was fired in pistol mode (used to apply pistol scaling). */
+  peekIsPistolShot(): boolean {
+    return this.proj.active && this.proj.pistolMode
   }
 
   projectileRadius(): number {
