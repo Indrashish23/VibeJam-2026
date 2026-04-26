@@ -285,6 +285,8 @@ if (DEBUG_MP && debugMpPanel) {
 }
 
 const _knDir = new Vector3()
+const _knFromShot = new Vector3()
+const _tmpKnock = new Vector3()
 const _fp = new Vector3()
 const _camFwd = new Vector3()
 const _camRight = new Vector3()
@@ -726,8 +728,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   const prevShake = new Vector3()
   let shakeIntensity = 0
   let flashIntensity = 0
-  let jumpBurstOpacity = 0
-  let jumpPopTimeout: ReturnType<typeof setTimeout> | null = null
 
   let vy = 0
   let grounded = false
@@ -1248,6 +1248,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       bot.root.position.copy(map.getBotSpawn(opponent, bot.getFootOffset()))
       bot.networkTargetPos.copy(bot.root.position)
       bot.alignFacingToward(camera.position)
+      warpRapierCapsulesToCurrentActors()
     }
 
     const name = mpOpponentName ?? 'Player'
@@ -1705,11 +1706,37 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   function applyPeerMeleeHit(
     dx: number,
     dz: number,
-    opts?: { authoritative?: boolean; victimPercent?: number; overkill150?: boolean },
+    opts?: {
+      authoritative?: boolean
+      victimPercent?: number
+      overkill150?: boolean
+      /** When set, knock direction and lift use camera − shot (3D), then flatten for XZ slide. */
+      knockFromWorld?: Vector3
+    },
   ): void {
-    _knDir.set(dx, 0, dz)
-    if (_knDir.lengthSq() < 1e-8) _knDir.set(0, 0, 1)
-    _knDir.normalize()
+    let belowAim = 0
+    if (opts?.knockFromWorld) {
+      _knFromShot.subVectors(camera.position, opts.knockFromWorld)
+      if (_knFromShot.lengthSq() < 1e-8) {
+        _knDir.set(dx, 0, dz)
+        if (_knDir.lengthSq() < 1e-8) _knDir.set(0, 0, 1)
+        _knDir.normalize()
+      } else {
+        _knFromShot.normalize()
+        belowAim = Math.max(0, _knFromShot.y)
+        _knDir.copy(_knFromShot)
+        _knDir.y = 0
+        if (_knDir.lengthSq() < 1e-8) {
+          _knDir.set(dx, 0, dz)
+          if (_knDir.lengthSq() < 1e-8) _knDir.set(0, 0, 1)
+        }
+        _knDir.normalize()
+      }
+    } else {
+      _knDir.set(dx, 0, dz)
+      if (_knDir.lengthSq() < 1e-8) _knDir.set(0, 0, 1)
+      _knDir.normalize()
+    }
     const now = performance.now()
     const auth = opts?.authoritative === true
     if (!auth && (now < playerInvulnUntil || playerHurt === 'air' || playerHurt === 'recover'))
@@ -1745,15 +1772,16 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     const impulseMul = Math.max(0.05, Math.min(1.5, gameConfig.knockLaunchImpulseMul)) * highMul
     const pctLift = Math.min(2.5, victimPct / 100)
     const vyMul = 1 + pctLift * 0.52
-    playerKnock.addScaledVector(
-      _knDir,
+    const baseKnock =
       gameConfig.knockbackOnPlayer *
-        gameConfig.playerHurtKnockMul *
-        comboMul *
-        launchMul *
-        impulseMul,
-    )
+      gameConfig.playerHurtKnockMul *
+      comboMul *
+      launchMul *
+      impulseMul
+    playerKnock.addScaledVector(_knDir, baseKnock)
     vy += gameConfig.playerHurtVyBoost * comboMul * vyMul
+    vy += baseKnock * gameConfig.knockVictimLiftMul
+    vy += baseKnock * gameConfig.knockVictimBelowAimMul * belowAim
     triggerHitImpactFx()
     triggerLocalVictimWhiteFlash()
   }
@@ -1834,7 +1862,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       .addScaledVector(_camFwd, gameConfig.pcMouthForward)
       .addScaledVector(_worldUp, gameConfig.pcMouthHeight)
       .addScaledVector(_camRight, gameConfig.pcMouthSide)
-    const fired = arms.tryFire(speedMul, buf, t, sizeMul, _muzzleWorld, _aimDir)
+    const projMode = Math.max(0, Math.min(2, Math.round(gameConfig.voiceProjectileMode)))
+    const fired =
+      projMode === 1
+        ? arms.tryHeadscanFire(speedMul, buf, t, sizeMul, _muzzleWorld, _aimDir)
+        : projMode === 2
+          ? arms.tryHeadscanFire(speedMul, buf, t, sizeMul, camera.position, _aimDir)
+          : arms.tryFire(speedMul, buf, t, sizeMul, _muzzleWorld, _aimDir)
     if (fired) {
       voice.stopVoiceClipPlayback()
       voice.resetChargeMeter()
@@ -1979,6 +2013,52 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
   }
 
+  function warpRapierCapsulesToCurrentActors(): void {
+    _moveStart.set(camera.position.x, feetY(), camera.position.z)
+    terrainPhysics.warpCapsuleToFeet(
+      'player',
+      _moveStart,
+      playerCapsuleRadius(),
+      playerCapsuleHeight(),
+    )
+    const br = Math.max(0.05, gameConfig.botBodyRadius)
+    const footOff = bot.getFootOffset()
+    const bh = Math.max(br * 2 + 0.08, footOff * 2)
+    _moveStart.set(
+      bot.root.position.x,
+      bot.root.position.y - footOff,
+      bot.root.position.z,
+    )
+    terrainPhysics.warpCapsuleToFeet('bot', _moveStart, br, bh)
+  }
+
+  /** Immediately sync PvP pose so the peer’s puppet snaps to spawn after a round reset. */
+  function flushPvpSpawnPose(): void {
+    if (!isPvp()) return
+    const fy = camera.position.y - eyeH()
+    if (lobby.mode === 'online' && lobby.role === 'host' && browserHost) {
+      browserHost.setPose('host', {
+        x: camera.position.x,
+        z: camera.position.z,
+        fy,
+        ry: camera.rotation.y,
+      })
+    }
+    sendGameTraffic({
+      type: 'pose',
+      x: camera.position.x,
+      z: camera.position.z,
+      fy,
+      ry: camera.rotation.y,
+      recording: false,
+      animBase: deriveLocalAnimBase(),
+      animOneShot: null,
+      animEpoch: localAnimEpoch,
+      speedN: 0,
+    })
+    poseSendAcc = 0
+  }
+
   function spawnActors(): void {
     const slots = spawnSlots()
     const playerSpawn = map.getPlayerSpawn(slots.player, eyeH())
@@ -2003,12 +2083,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     gameRoot.style.transform = ''
     if (dashScanEl) dashScanEl.style.opacity = '0'
     if (jumpVfxEl) jumpVfxEl.style.opacity = '0'
-    jumpBurstOpacity = 0
-    if (jumpPopTimeout) {
-      clearTimeout(jumpPopTimeout)
-      jumpPopTimeout = null
-    }
-    gameRoot.classList.remove('game-root--jump-pop')
+    velocity.set(0, 0, 0)
+    clearMovementKeys()
     playerKnock.set(0, 0, 0)
     dashVel.set(0, 0, 0)
     vy = 0
@@ -2032,6 +2108,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     voiceDownBoostReady = true
     airDashReady = true
     airJumpsLeft = Math.max(0, Math.round(gameConfig.airJumpsMax))
+    warpRapierCapsulesToCurrentActors()
+    flushPvpSpawnPose()
     applySunShadowFrustum()
     syncBlastBoundsLine()
   }
@@ -2085,16 +2163,26 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
   }
 
-  /** Push direction from fist impact → bot flies along punch line (XZ). */
-  function knockDirFromFistImpact(fistWorld: Vector3, out: Vector3): void {
-    out.subVectors(bot.bodyCenter, fistWorld)
-    out.y = 0
-    if (out.lengthSq() < 1e-8) {
-      out.subVectors(bot.root.position, camera.position)
-      out.y = 0
+  /**
+   * Push direction from fist impact → bot knock on XZ; returns normalized fist→body Y (for lift).
+   */
+  function knockDirFromFistImpact(fistWorld: Vector3, outXZ: Vector3): number {
+    _knFromShot.subVectors(bot.bodyCenter, fistWorld)
+    if (_knFromShot.lengthSq() < 1e-8) {
+      _knFromShot.subVectors(bot.root.position, camera.position)
     }
-    if (out.lengthSq() < 1e-8) out.set(0, 0, 1)
-    out.normalize()
+    if (_knFromShot.lengthSq() < 1e-8) _knFromShot.set(0, 0, 1)
+    _knFromShot.normalize()
+    const aimY = _knFromShot.y
+    outXZ.copy(_knFromShot)
+    outXZ.y = 0
+    if (outXZ.lengthSq() < 1e-8) {
+      camera.getWorldDirection(_tmpKnock)
+      outXZ.set(_tmpKnock.x, 0, _tmpKnock.z)
+      if (outXZ.lengthSq() < 1e-8) outXZ.set(0, 0, 1)
+    }
+    outXZ.normalize()
+    return aimY
   }
 
   function percentGainFromCharge(charge: number): number {
@@ -2292,22 +2380,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
   }
 
-  function triggerJumpFx(airJump: boolean): void {
-    const mul = airJump ? 1.2 : 1
-    shakeIntensity = Math.max(shakeIntensity, gameConfig.jumpFxShake * mul)
-    flashIntensity = Math.max(flashIntensity, gameConfig.jumpFxWhiteFlash * mul)
-    jumpBurstOpacity = Math.max(jumpBurstOpacity, gameConfig.jumpFxBurstOpacity * mul)
-    gameRoot.classList.remove('game-root--jump-pop')
-    requestAnimationFrame(() => {
-      gameRoot.classList.add('game-root--jump-pop')
-    })
-    if (jumpPopTimeout) clearTimeout(jumpPopTimeout)
-    jumpPopTimeout = setTimeout(() => {
-      gameRoot.classList.remove('game-root--jump-pop')
-      jumpPopTimeout = null
-    }, 200)
-  }
-
   function tryJump() {
     if (
       tweaksPanelOpen ||
@@ -2325,7 +2397,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       vy = gameConfig.jumpForce
       grounded = false
       lastJumpAt = now
-      triggerJumpFx(false)
       return
     }
     /* Mid-air double jump: replace (not add to) vertical velocity for a clean second pop. */
@@ -2333,7 +2404,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       vy = gameConfig.jumpForce
       airJumpsLeft -= 1
       lastJumpAt = now
-      triggerJumpFx(true)
     }
   }
 
@@ -2421,14 +2491,18 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
     /* Player projectile vs bot — dedicated listen server validates shots when authPvp() */
     if (arms.canDealHit() && !authPvp()) {
-      arms.getProjectileWorld(_fp)
+      if (arms.isHeadscan()) {
+        arms.getHeadscanContactPoint(bot.bodyCenter, _fp)
+      } else {
+        arms.getProjectileWorld(_fp)
+      }
       const reach = arms.projectileRadius() + gameConfig.botBodyRadius * 0.88
       if (_fp.distanceTo(bot.bodyCenter) < reach) {
         const shotT = arms.peekShotT()
         const hitAudio = arms.takeHitAudio()
         arms.markDealt()
         voice.playBuffer(hitAudio)
-        knockDirFromFistImpact(_fp, _knDir)
+        const botAimY = knockDirFromFistImpact(_fp, _knDir)
         const gain = percentGainFromCharge(shotT)
         const prevEnemyPct = enemyPercent
         enemyPercent = Math.min(999, enemyPercent + gain)
@@ -2443,11 +2517,18 @@ async function initGame(lobby: LobbyResult): Promise<void> {
             bot.applyLaunchPercentCataclysm(_knDir)
           } else {
             const launchMul = launchKnockMulFromPercent(enemyPercent)
-            bot.applyKnockback(_knDir, gameConfig.knockbackOnBot * launchMul, enemyPercent)
+            bot.applyKnockback(
+              _knDir,
+              gameConfig.knockbackOnBot * launchMul,
+              enemyPercent,
+              botAimY,
+            )
           }
           triggerHitImpactFx()
           bot.flashVictimInvuln(gameConfig.hitVictimWhiteFlashMs)
         }
+      } else if (arms.isHeadscan()) {
+        arms.markDealt()
       }
     }
 
@@ -2478,6 +2559,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         applyPeerMeleeHit(_knDir.x, _knDir.z, {
           victimPercent: playerPercent,
           overkill150: crossed150,
+          knockFromWorld: _fp,
         })
       }
     }
@@ -2746,15 +2828,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       } else {
         flashIntensity = 0
         hitFlashEl.style.opacity = '0'
-      }
-    }
-    if (jumpVfxEl) {
-      if (jumpBurstOpacity > 0.012) {
-        jumpBurstOpacity *= Math.exp(-22 * delta)
-        jumpVfxEl.style.opacity = String(Math.min(1, jumpBurstOpacity))
-      } else {
-        jumpBurstOpacity = 0
-        jumpVfxEl.style.opacity = '0'
       }
     }
   }

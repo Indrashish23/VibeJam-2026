@@ -46,12 +46,17 @@ export const defaultGameConfig = {
   jumpCooldownMs: 480,
   /** How many extra mid-air jumps you get per landing cycle (1 = double jump). */
   airJumpsMax: 1,
+  /**
+   * Projectile delivery (Gameplay panel dropdown + optional slider copy).
+   * 0 = ballistic cube, 1 = instant ray / “head scan” from mouth, 2 = ray from camera (eye).
+   */
+  voiceProjectileMode: 0,
   /** Camera shake peak when you jump (world units; stacks with hit shake via max). */
   jumpFxShake: 0,
   /** Brief white overlay strength on jump (0–1); separate from punch hit-flash. */
   jumpFxWhiteFlash: 0,
-  /** Cyan radial burst opacity peak on jump (screen blend; 0–1). */
-  jumpFxBurstOpacity: 0.58,
+  /** Cyan radial burst on jump — disabled in-game; kept for tweaks compatibility. */
+  jumpFxBurstOpacity: 0,
   playerRadius: 0.38,
 
   /** Bot hits on you before you lose (ring-out still applies). */
@@ -76,6 +81,14 @@ export const defaultGameConfig = {
   projectileSizeChargeMaxBonus: 0.57,
   /** Horizontal knockback on player when bot lands a hit (non-parried). */
   knockbackOnPlayer: 20,
+  /** Converts horizontal knock impulse into upward vy (pop when hurt; tune with capsule slide). */
+  knockVictimLiftMul: 0.52,
+  /** Extra vy when the shot connects from below you (uses aim vector Y from shot → victim). */
+  knockVictimBelowAimMul: 0.62,
+  /** Extra bot vy from knock strength (launch arc vs sliding on the deck). */
+  knockBotVertBoostMul: 0.4,
+  /** Extra bot vy when the shot is from below (normalized fist→body Y, × strength). */
+  knockBotBelowAimMul: 0.58,
   /** Base knock on bot (multiplied by voice `t` lerp). */
   knockbackOnBot: 62,
   /** Legacy: unused; knock uses knockVoice Min/Max. */

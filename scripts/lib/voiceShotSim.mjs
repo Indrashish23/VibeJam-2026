@@ -25,6 +25,31 @@ export function simulateVoiceShotHit(origin, vel, oppCenter, shotScale = 1) {
   const g = C.fistGravity
   const drag = C.fistAirDrag
 
+  const projMode = Math.max(0, Math.min(2, Math.round(C.voiceProjectileMode ?? 0)))
+  if (projMode >= 1 && g < 1e-6 && drag < 1e-6) {
+    const speed = Math.hypot(vel.x, vel.y, vel.z) || 1
+    const dx0 = vel.x / speed
+    const dy0 = vel.y / speed
+    const dz0 = vel.z / speed
+    const ox = oppCenter.x - origin.x
+    const oy = oppCenter.y - origin.y
+    const oz = oppCenter.z - origin.z
+    const t = ox * dx0 + oy * dy0 + oz * dz0
+    const tClamped = Math.max(0, Math.min(maxR, t))
+    const px = origin.x + dx0 * tClamped
+    const py = origin.y + dy0 * tClamped
+    const pz = origin.z + dz0 * tClamped
+    const dx = px - oppCenter.x
+    const dy = py - oppCenter.y
+    const dz = pz - oppCenter.z
+    const dist = Math.hypot(dx, dy * 0.75, dz)
+    if (dist >= reach) return { hit: false }
+    const h = Math.hypot(dx, dz)
+    const kx = h > 1e-6 ? dx / h : 0
+    const kz = h > 1e-6 ? dz / h : 1
+    return { hit: true, dx: kx, dz: kz }
+  }
+
   if (g < 1e-6 && drag < 1e-6) {
     const speed = Math.hypot(vel.x, vel.y, vel.z) || 1
     const dir = { x: vel.x / speed, y: vel.y / speed, z: vel.z / speed }

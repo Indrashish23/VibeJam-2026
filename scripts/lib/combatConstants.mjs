@@ -3,6 +3,8 @@
  */
 export const COMBAT = {
   eyeHeight: 1.55,
+  /** 0 = ballistic, 1+ = head hitscan (must match client `gameConfig.voiceProjectileMode`). */
+  voiceProjectileMode: 0,
   punchMaxRange: 42,
   fistGravity: 0,
   fistAirDrag: 0,

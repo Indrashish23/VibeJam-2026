@@ -41,6 +41,11 @@ export class PlayerArms {
 
   private dealt = true
 
+  /** When true, this shot is an instant ray (no flying mesh); see `voiceProjectileMode`. */
+  private hitscanMode = false
+  private readonly hitscanOrigin = new Vector3()
+  private readonly hitscanDir = new Vector3()
+
   /** Last successful fire (world space), for network replication. */
   private readonly lastShotOrigin = new Vector3()
   private readonly lastShotVel = new Vector3()
@@ -139,6 +144,65 @@ export class PlayerArms {
     return true
   }
 
+  /**
+   * Instant hitscan along `dirWorld` from `originWorld` (mouth or eye).
+   * Reuses the same charge, audio, and network origin/velocity as ballistic shots.
+   */
+  tryHeadscanFire(
+    speedFactor: number,
+    hitAudio: AudioBuffer | null,
+    shotT: number,
+    sizeMul: number,
+    originWorld: Vector3,
+    dirWorld: Vector3,
+  ): boolean {
+    if (this.proj.active) return false
+    if (!dirWorld || dirWorld.lengthSq() < 1e-8) {
+      this.camera.getWorldDirection(this.hitscanDir)
+    } else {
+      this.hitscanDir.copy(dirWorld).normalize()
+    }
+    this.hitscanOrigin.copy(originWorld)
+
+    const base = gameConfig.punchProjectileSpeed
+    const mul = Math.max(
+      gameConfig.voiceShotSpeedMinMul,
+      Math.min(gameConfig.voiceShotSpeedMaxMul, speedFactor),
+    )
+    const speed = base * mul
+
+    this.proj.pos.copy(this.hitscanOrigin)
+    this.proj.spawnPos.copy(this.hitscanOrigin)
+    this.proj.vel.copy(this.hitscanDir).multiplyScalar(speed)
+    this.proj.hitAudio = hitAudio
+    this.proj.shotT = Math.max(0, Math.min(1, shotT))
+    this.proj.sizeMul = Math.max(0.15, Math.min(6, sizeMul))
+    this.proj.active = true
+    this.proj.flying = false
+    this.hitscanMode = true
+    this.dealt = false
+
+    this.lastShotOrigin.copy(this.hitscanOrigin)
+    this.lastShotVel.copy(this.hitscanDir).multiplyScalar(speed)
+    return true
+  }
+
+  /** True while a head-scan shot is waiting for combat resolution this frame. */
+  isHeadscan(): boolean {
+    return this.hitscanMode && this.proj.active
+  }
+
+  /**
+   * Closest point on the aim segment [origin, origin+dir*maxRange] for knock FX / hit position.
+   */
+  getHeadscanContactPoint(target: Vector3, out: Vector3): void {
+    const maxR = gameConfig.punchMaxRange
+    this._tmp.subVectors(target, this.hitscanOrigin)
+    const t = this._tmp.dot(this.hitscanDir)
+    const tClamped = Math.max(0, Math.min(maxR, t))
+    out.copy(this.hitscanOrigin).addScaledVector(this.hitscanDir, tClamped)
+  }
+
   copyLastShotWorld(origin: Vector3, vel: Vector3): void {
     origin.copy(this.lastShotOrigin)
     vel.copy(this.lastShotVel)
@@ -157,6 +221,11 @@ export class PlayerArms {
 
   update(delta: number): void {
     if (!this.proj.active) {
+      this.mesh.visible = false
+      return
+    }
+
+    if (this.hitscanMode) {
       this.mesh.visible = false
       return
     }
@@ -264,6 +333,7 @@ export class PlayerArms {
     this.proj.hitAudio = null
     this.proj.shotT = 0
     this.proj.sizeMul = 1
+    this.hitscanMode = false
     this.mesh.scale.setScalar(1)
     this.mesh.visible = false
     this.dealt = true
@@ -278,7 +348,9 @@ export class PlayerArms {
   }
 
   canDealHit(): boolean {
-    if (this.dealt || !this.proj.active || !this.proj.flying) return false
+    if (this.dealt || !this.proj.active) return false
+    if (this.hitscanMode) return true
+    if (!this.proj.flying) return false
     this.shoulderWorld(this._shoulderW)
     const travel = this._tmp.subVectors(this.proj.pos, this._shoulderW).length()
     return travel > gameConfig.punchMaxRange * 0.08
@@ -289,9 +361,9 @@ export class PlayerArms {
     this.resetProjectile()
   }
 
-  /** Live projectile (for bot / UI logic). */
+  /** Live projectile (for bot / UI logic). Includes head-scan until it resolves. */
   isProjectileActive(): boolean {
-    return this.proj.active && this.proj.flying
+    return this.proj.active && (this.proj.flying || this.hitscanMode)
   }
 
   /** Voice 0..1 for current shot; valid while projectile active. */

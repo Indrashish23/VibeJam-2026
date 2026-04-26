@@ -189,6 +189,24 @@ export class TerrainPhysics {
     return actor
   }
 
+  /**
+   * Snap a kinematic capsule to world feet (round reset / spawn). Runs a physics step so
+   * broadphase and character controllers don’t keep stale contact state from the prior pose.
+   */
+  warpCapsuleToFeet(
+    id: string,
+    feet: Vector3,
+    radius: number,
+    totalHeight: number,
+  ): void {
+    const actor = this.ensureActor(id, radius, totalHeight)
+    const cy = feet.y + colliderCenterY(actor.totalHeight)
+    actor.body.setTranslation({ x: feet.x, y: cy, z: feet.z }, true)
+    this.world.propagateModifiedBodyPositionsToColliders()
+    this.world.timestep = 1 / 60
+    this.world.step()
+  }
+
   moveCapsuleFromFeet(
     id: string,
     feet: Vector3,

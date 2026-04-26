@@ -205,6 +205,7 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
 
   const sectionPanels = new Map<string, HTMLElement>()
   const defaultSectionId = TWEAK_SECTIONS[0]?.id ?? ''
+  let projectileModeSel: HTMLSelectElement | null = null
   for (const section of TWEAK_SECTIONS) {
     const panel = document.createElement('div')
     panel.className = 'tweaks-section-panel'
@@ -216,6 +217,42 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
     }
     sectionPanels.set(section.id, panel)
     body.appendChild(panel)
+  }
+
+  const gameplayPanelEarly = sectionPanels.get('thePlayer')
+  if (gameplayPanelEarly) {
+    const wrap = document.createElement('div')
+    wrap.className = 'tweaks-row tweaks-row-select'
+    const name = document.createElement('span')
+    name.className = 'tweaks-name'
+    name.textContent = 'Projectile delivery'
+    name.title =
+      '0 = ballistic cube. 1 = instant head scan from mouth along aim. 2 = scan ray from camera (eye).'
+    const sel = document.createElement('select')
+    sel.className = 'tweaks-projectile-mode-select'
+    sel.title = name.title
+    sel.setAttribute('aria-label', 'Projectile delivery mode')
+    const modes: { v: number; label: string }[] = [
+      { v: 0, label: 'Ballistic projectile' },
+      { v: 1, label: 'Head scan (mouth ray)' },
+      { v: 2, label: 'Head scan (eye ray)' },
+    ]
+    for (const m of modes) {
+      const opt = document.createElement('option')
+      opt.value = String(m.v)
+      opt.textContent = m.label
+      sel.appendChild(opt)
+    }
+    sel.value = String(Math.max(0, Math.min(2, Math.round(gameConfig.voiceProjectileMode))))
+    sel.addEventListener('change', () => {
+      const v = Math.max(0, Math.min(2, Math.round(Number.parseFloat(sel.value))))
+      gameConfig.voiceProjectileMode = v
+      hooks.onConfigChanged?.()
+    })
+    projectileModeSel = sel
+    wrap.appendChild(name)
+    wrap.appendChild(sel)
+    gameplayPanelEarly.insertBefore(wrap, gameplayPanelEarly.firstChild)
   }
 
   if (hooks.onTriggerKnockbackDev) {
@@ -257,6 +294,11 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
       const v = gameConfig[row.key]
       row.range.value = String(v)
       row.num.value = String(v)
+    }
+    if (projectileModeSel) {
+      projectileModeSel.value = String(
+        Math.max(0, Math.min(2, Math.round(gameConfig.voiceProjectileMode))),
+      )
     }
     syncSceneFromConfig()
     hooks.onConfigChanged?.()

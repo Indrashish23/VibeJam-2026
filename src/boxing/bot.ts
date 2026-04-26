@@ -589,7 +589,13 @@ export class BotFighter {
     this.root.rotation.y = Math.atan2(dx, dz)
   }
 
-  applyKnockback(dirXZ: Vector3, strength: number, victimPercent = 0): void {
+  applyKnockback(
+    dirXZ: Vector3,
+    strength: number,
+    victimPercent = 0,
+    /** Normalized fist→body Y (from full impact vector before XZ flattening). */
+    aimUpN = 0,
+  ): void {
     if (dirXZ.lengthSq() < 1e-8) return
     dirXZ.normalize()
     this.hurtPhase = 'air'
@@ -601,8 +607,13 @@ export class BotFighter {
     this.knockXZ.addScaledVector(dirXZ, xzImpulse)
     const pct = Math.max(0, victimPercent)
     const pctN = Math.min(2.5, pct / 100)
+    const below = Math.max(0, aimUpN)
     /* Base pop plus extra lift that grows with launch percent (more consistent arc at high %). */
-    this.vy += strength * (0.1 + 0.045 * pctN) + 1.15 * pctN
+    this.vy +=
+      strength * (0.1 + 0.045 * pctN) +
+      1.15 * pctN +
+      strength * gameConfig.knockBotVertBoostMul +
+      strength * gameConfig.knockBotBelowAimMul * below
   }
 
   /** Cataclysm knock when victim crosses 150% launch — huge send-off. */
