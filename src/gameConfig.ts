@@ -448,7 +448,12 @@ export const defaultGameConfig = {
   landSfxVolumeMul: 1,
   /** 0 = off. Local only: one-shot when mic charge recording actually starts. */
   voiceRecordSfxEnabled: 1,
-  /** Dev level × (0–1) for `RecordingSound.mp3` (one-shot is then × 0.2); × SFX in Settings. */
+  /**
+   * Final record-start one-shot: `level ×` this × `voiceRecordSfxVolumeMul` × SFX settings.
+   * Default 0.2 tames the loud MP3.
+   */
+  voiceRecordSfxBaseMul: 0.2,
+  /** Dev level × (0–1) for `RecordingSound.mp3` on top of `voiceRecordSfxBaseMul`. */
   voiceRecordSfxVolumeMul: 0.85,
   /** 0 = off. Local only: one-shot when a voice **projectile** is launched (not dry-fire). */
   voiceReleaseSfxEnabled: 1,

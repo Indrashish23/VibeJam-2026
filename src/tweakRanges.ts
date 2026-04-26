@@ -225,6 +225,7 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   landSfxEnabled: { min: 0, max: 1, step: 1 },
   landSfxVolumeMul: { min: 0, max: 1, step: 0.1 },
   voiceRecordSfxEnabled: { min: 0, max: 1, step: 1 },
+  voiceRecordSfxBaseMul: { min: 0.05, max: 1, step: 0.02 },
   voiceRecordSfxVolumeMul: { min: 0, max: 1, step: 0.02 },
   voiceReleaseSfxEnabled: { min: 0, max: 1, step: 1 },
   voiceReleaseSfxVolumeMul: { min: 0, max: 1, step: 0.02 },
@@ -439,7 +440,8 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   landSfxEnabled: 'Land one-shot (0/1, local)',
   landSfxVolumeMul: 'Land: dev gain (× SFX chain)',
   voiceRecordSfxEnabled: 'Voice: record start SFX (0/1, local)',
-  voiceRecordSfxVolumeMul: 'Voice: record start level × (0–1) ×0.2 base',
+  voiceRecordSfxBaseMul: 'Voice: record one-shot base × (MP3)',
+  voiceRecordSfxVolumeMul: 'Voice: record start level × (0–1)',
   voiceReleaseSfxEnabled: 'Voice: “release” SFX on shot (0/1, local)',
   voiceReleaseSfxVolumeMul: 'Voice: release level × (0–1) for shot launch',
 }
@@ -571,9 +573,11 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   landSfxEnabled: '0 = no land thud. 1 = play LandingonGround.ogg when you land from air (local only).',
   landSfxVolumeMul: 'Dev gain for landing; multiplied by the SFX chain (Settings × Tweaks SFX).',
   voiceRecordSfxEnabled:
-    '0 = no sound when you start holding to charge a voice shot. 1 = play RecordingSound.ogg (local only, not sent over network).',
+    '0 = no sound when you start holding to charge a voice shot. 1 = play RecordingSound.mp3 (local only, not sent over network).',
+  voiceRecordSfxBaseMul:
+    'Scales the built-in loudness of RecordingSound.mp3 (0.2 ≈ 20% of the SFX-mixed “level” before capping to 1).',
   voiceRecordSfxVolumeMul:
-    'Gain for the record-start one-shot; multiplied by the SFX chain, then a fixed 0.2 (RecordingSound.mp3 is loud).',
+    'Gain for the record-start one-shot, after `voiceRecordSfxBaseMul` and the SFX chain in Settings / Tweaks.',
   voiceReleaseSfxEnabled:
     '0 = no one-shot. 1 = play ReleaseSound.ogg when a voice projectile is actually created (not dry-fires).',
   voiceReleaseSfxVolumeMul: 'Gain for that launch one-shot; multiplied by the SFX chain (Settings × Tweaks SFX).',
@@ -888,6 +892,7 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'landSfxEnabled',
       'landSfxVolumeMul',
       'voiceRecordSfxEnabled',
+      'voiceRecordSfxBaseMul',
       'voiceRecordSfxVolumeMul',
       'voiceReleaseSfxEnabled',
       'voiceReleaseSfxVolumeMul',
