@@ -32,7 +32,7 @@ import { RenderPixelatedPass } from 'three/addons/postprocessing/RenderPixelated
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js'
 import { gameConfig } from './gameConfig'
-import { isMapId, loadMap, type MapHandle, type MapId } from './maps'
+import { isMapId, loadMap, type MapHandle, type MapId, type SpawnSlot } from './maps'
 import { BotFighter, type BotMode } from './boxing/bot'
 import { PlayerArms } from './boxing/playerArms'
 import { VoiceChargeManager } from './audio/voiceCharge'
@@ -1082,11 +1082,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     voiceResumeCountdownActive = false
   }
 
-  function pvpExpectedSpawn(): { camZ: number; oppZ: number; oppRootY: number } {
-    const spacing = arenaSpacing()
-    const { camZ, opponentBotZ } = pvpSpawnZs(spacing)
-    const oppRootY = bot.getFootOffset() + 0.08
-    return { camZ, oppZ: opponentBotZ, oppRootY }
+  function pvpExpectedSpawn(): { cam: Vector3; camFeetY: number; opp: Vector3 } {
+    const slots = spawnSlots()
+    const cam = map.getPlayerSpawn(slots.player, eyeH())
+    const opp = map.getBotSpawn(slots.opponent, bot.getFootOffset())
+    return { cam, camFeetY: cam.y - eyeH(), opp }
   }
 
   /** Wait until local camera + replicated opponent capsule are near spawn (extends countdown). */
@@ -1096,14 +1096,15 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     const epsXZ = 2.6
     const epsY = 2.2
     const exp = pvpExpectedSpawn()
-    const expOpp = new Vector3(0, exp.oppRootY, exp.oppZ)
     while (performance.now() - t0 < maxWaitMs) {
       const camOk =
-        Math.abs(camera.position.x) < epsXZ &&
-        Math.abs(camera.position.z - exp.camZ) < epsXZ &&
-        Math.abs(feetY()) < 1.15
+        Math.abs(camera.position.x - exp.cam.x) < epsXZ &&
+        Math.abs(camera.position.z - exp.cam.z) < epsXZ &&
+        Math.abs(feetY() - exp.camFeetY) < epsY
       const opp = bot.root.position
-      const oppOk = opp.distanceTo(expOpp) < epsXZ && Math.abs(opp.y - exp.oppRootY) < epsY
+      const oppOk =
+        Math.hypot(opp.x - exp.opp.x, opp.z - exp.opp.z) < epsXZ &&
+        Math.abs(opp.y - exp.opp.y) < epsY
       if (camOk && oppOk) return
       await sleepMs(72)
     }
@@ -1244,14 +1245,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
     if (isOnline && lobby.mode === 'online') {
       spawnActors()
-      const spacing = arenaSpacing()
-      const { opponentBotZ } = pvpSpawnZs(spacing)
+      const { opponent } = spawnSlots()
       bot.dispose(scene)
       botMode = 'network'
-      bot = new BotFighter(scene, 'network', new Vector3(0, 0, opponentBotZ), {
+      bot = new BotFighter(scene, 'network', map.getBotSpawn(opponent, 0), {
         bodyColor: randomOpponentCapsuleColor(),
       })
-      bot.root.position.set(0, bot.getFootOffset() + 0.08, opponentBotZ)
+      bot.root.position.copy(map.getBotSpawn(opponent, bot.getFootOffset()))
       bot.networkTargetPos.copy(bot.root.position)
       bot.alignFacingToward(camera.position)
     }
@@ -1932,22 +1932,21 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let dashTiltDeg = 0
   let slideAnimUntilMs = 0
 
-  function arenaSpacing(): number {
-    const arenaHalf = Math.min(gameConfig.groundWidth, gameConfig.groundDepth) * 0.5 - 2.5
-    return Math.min(6.8, arenaHalf * 0.38)
-  }
-
   /** Effective eye height = base + live bias from PlayerCamera tweaks (clamped to a sane min). */
   function eyeH(): number {
     return Math.max(0.2, gameConfig.eyeHeight + gameConfig.pcCameraHeightBias)
   }
 
-  /** Host at +Z, guest at −Z (mirrored) so both players are not stacked on the same spawn. */
-  function pvpSpawnZs(spacing: number): { camZ: number; opponentBotZ: number } {
+  /** Default/offline/host use spawn A; online guests use spawn B, facing the opposite slot. */
+  function spawnSlots(): { player: SpawnSlot; opponent: SpawnSlot } {
     if (lobby.mode === 'online' && lobby.role === 'guest') {
-      return { camZ: -spacing, opponentBotZ: spacing }
+      return { player: 'b', opponent: 'a' }
     }
-    return { camZ: spacing, opponentBotZ: -spacing }
+    return { player: 'a', opponent: 'b' }
+  }
+
+  function yawFacing(from: Vector3, to: Vector3): number {
+    return Math.atan2(-(to.x - from.x), -(to.z - from.z))
   }
 
   /**
@@ -1987,18 +1986,16 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   function spawnActors(): void {
-    const spacing = arenaSpacing()
-    const { camZ, opponentBotZ } = pvpSpawnZs(spacing)
+    const slots = spawnSlots()
+    const playerSpawn = map.getPlayerSpawn(slots.player, eyeH())
+    const botSpawn = map.getBotSpawn(slots.opponent, bot.getFootOffset())
+    const yaw = yawFacing(playerSpawn, botSpawn)
 
-    const yaw =
-      lobby.mode === 'online' && lobby.role === 'guest' ? Math.PI : 0
-
-    camera.position.set(0, map.getSpawnY(eyeH()), camZ)
+    camera.position.copy(playerSpawn)
     camera.rotation.reorder('YXZ')
     camera.rotation.set(0, yaw, 0)
 
-    const oppRootY = map.getBotSpawnY(bot.getFootOffset())
-    bot.root.position.set(0, oppRootY, opponentBotZ)
+    bot.root.position.copy(botSpawn)
     bot.root.rotation.set(0, 0, 0)
     bot.resetRoundState()
     if (bot.mode === 'network') {
