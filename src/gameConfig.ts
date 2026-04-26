@@ -1,7 +1,7 @@
 /** Live-tunable gameplay values (`T` or `−` opens the dev panel). Mutate properties at runtime; defaults used for reset. */
 
 export const defaultGameConfig = {
-  moveSpeed: 100,
+  moveSpeed: 50,
   /** Legacy (unused): sprint removed; Shift now triggers dash. */
   sprintSpeedMul: 1.48,
   damping: 8,
