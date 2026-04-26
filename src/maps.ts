@@ -14,7 +14,7 @@ import {
   type BufferGeometry,
 } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
-import { addArena } from './arena'
+import { addArena, getArenaCollisionCuboids } from './arena'
 import { gameConfig } from './gameConfig'
 
 export type MapId = 'default' | 'island'
@@ -33,6 +33,11 @@ export type MapHandle = {
   id: MapId
   /** Meshes used to build static terrain colliders in Rapier. */
   collisionMeshes: Mesh[]
+  /**
+   * Optional fixed cuboids (half-extents, world-space centers) — preferred for the default arena
+   * instead of trimesh-from-box meshes.
+   */
+  rapierCuboids?: { center: Vector3; halfExtents: Vector3 }[]
   /** Returns true if `pos` should count as a ring-out (death/blast zone). */
   isBlastZone: (pos: Vector3) => boolean
   /** Camera world position for a spawn marker. */
@@ -81,7 +86,7 @@ function loadDefaultMap(_scene: Scene, hubRoot: Group): MapHandle {
   const container = new Group()
   container.name = 'map:default'
   hubRoot.add(container)
-  const ground = addArena(container)
+  addArena(container)
 
   function defaultFeetSpawn(slot: SpawnSlot): Vector3 {
     const arenaHalf = Math.min(gameConfig.groundWidth, gameConfig.groundDepth) * 0.5 - 2.5
@@ -91,7 +96,8 @@ function loadDefaultMap(_scene: Scene, hubRoot: Group): MapHandle {
 
   return {
     id: 'default',
-    collisionMeshes: [ground],
+    collisionMeshes: [],
+    rapierCuboids: getArenaCollisionCuboids(),
     isBlastZone(pos: Vector3): boolean {
       if (pos.y < gameConfig.blastY) return true
       const halfW = gameConfig.groundWidth / 2 + gameConfig.blastMargin

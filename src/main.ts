@@ -527,7 +527,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   /** Map handle is mutable: PvP guests swap to the host's chosen map at `hello`. */
   const terrainPhysics = await TerrainPhysics.create()
   let map: MapHandle = await loadMap(lobby.mapId, scene, hubRoot)
-  terrainPhysics.setTerrainMeshes(map.collisionMeshes)
+  terrainPhysics.setTerrainMeshes(map.collisionMeshes, map.rapierCuboids)
 
   scene.add(camera)
 
@@ -1957,7 +1957,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       try {
         const next = await loadMap(newId, scene, hubRoot)
         map = next
-        terrainPhysics.setTerrainMeshes(next.collisionMeshes)
+        terrainPhysics.setTerrainMeshes(next.collisionMeshes, next.rapierCuboids)
         old.dispose()
       } catch (err) {
         console.warn('[map] swap failed; keeping current map', err)

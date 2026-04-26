@@ -71,7 +71,10 @@ function meshToTrimesh(mesh: Mesh): { vertices: Float32Array; indices: Uint32Arr
 
 export class TerrainPhysics {
   private readonly world: RAPIER.World
+  /** Trimesh colliders created without an explicit rigid body (e.g. GLTF terrain). */
   private readonly terrainColliders: Collider[] = []
+  /** Fixed rigid bodies for explicit cuboid terrain (default arena). Removed via `removeRigidBody`. */
+  private readonly terrainFixedBodies: RigidBody[] = []
   private readonly terrainHandles = new Set<number>()
   private readonly actors = new Map<string, CharacterActor>()
 
@@ -95,6 +98,10 @@ export class TerrainPhysics {
   }
 
   clearTerrain(): void {
+    for (const body of this.terrainFixedBodies) {
+      this.world.removeRigidBody(body)
+    }
+    this.terrainFixedBodies.length = 0
     for (const collider of this.terrainColliders) {
       this.world.removeCollider(collider, false)
     }
@@ -102,8 +109,28 @@ export class TerrainPhysics {
     this.terrainHandles.clear()
   }
 
-  setTerrainMeshes(meshes: Mesh[]): void {
+  setTerrainMeshes(
+    meshes: Mesh[],
+    cuboids?: ReadonlyArray<{ center: Vector3; halfExtents: Vector3 }>,
+  ): void {
     this.clearTerrain()
+    if (cuboids) {
+      for (const c of cuboids) {
+        const body = this.world.createRigidBody(
+          RAPIER.RigidBodyDesc.fixed().setTranslation(c.center.x, c.center.y, c.center.z),
+        )
+        const collider = this.world.createCollider(
+          RAPIER.ColliderDesc.cuboid(
+            c.halfExtents.x,
+            c.halfExtents.y,
+            c.halfExtents.z,
+          ).setFriction(1),
+          body,
+        )
+        this.terrainFixedBodies.push(body)
+        this.terrainHandles.add(collider.handle)
+      }
+    }
     for (const mesh of meshes) {
       const tri = meshToTrimesh(mesh)
       if (!tri || tri.indices.length < 3) continue
