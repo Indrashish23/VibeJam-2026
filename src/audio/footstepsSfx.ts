@@ -1,12 +1,8 @@
 import { gameConfig } from '../gameConfig'
 import { getMasterSfxMul } from '../userSettingsStorage'
 
-const CLIPS: string[] = [2, 3, 4, 5, 6, 7].map(
-  (n) =>
-    new URL(
-      `../../Assets/SFX/Footsteps/Cat Running Sound Effect   Cat SFX  Running Cat #cat-${n}.wav`,
-      import.meta.url,
-    ).href,
+const CLIPS: string[] = [2, 3, 4, 5, 6, 7].map((n) =>
+  new URL(`../../Assets/SFX/Footsteps/footstep-cat-${n}.wav`, import.meta.url).href,
 )
 
 /**

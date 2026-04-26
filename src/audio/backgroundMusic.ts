@@ -2,7 +2,7 @@ import { gameConfig } from '../gameConfig'
 
 const TRACKS = [
   new URL(
-    '../../Assets/Music/The Dark Bean - imboredbutidontreallywantodoanything (breakcore).mp3',
+    '../../Assets/Music/The Dark Bean - imboredbutidontreallywanttodoanything (breakcore).mp3',
     import.meta.url,
   ).href,
   new URL(
