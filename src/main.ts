@@ -133,6 +133,8 @@ const matchCancelledOkBtn = document.getElementById('match-cancelled-ok') as HTM
 const hitFlashEl = document.getElementById('hit-flash') as HTMLDivElement | null
 const invulnShineEl = document.getElementById('invuln-shine') as HTMLDivElement | null
 const winGameSplashEl = document.getElementById('win-game-splash') as HTMLDivElement | null
+const winGameSplashTxtEl =
+  winGameSplashEl?.querySelector('.win-game-splash__txt') as HTMLDivElement | null
 const rematchSeqLayer = document.getElementById('rematch-sequence') as HTMLDivElement | null
 const rematchBlackSheet = document.getElementById('rematch-black-sheet') as HTMLDivElement | null
 const countdownOverlay = document.getElementById('countdown-overlay') as HTMLDivElement | null
@@ -388,6 +390,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   const pendingAttackerShotAudioById = new Map<string, AudioBuffer>()
   /** authDamage can arrive before async decode finishes — play clip once buffer exists. */
   const pendingVictimVoiceShotIds = new Set<string>()
+  const pendingVictimHitPosByShotId = new Map<string, Vector3>()
 
   const scene = new Scene()
   scene.background = new Color(
@@ -1083,6 +1086,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     pendingPeerShotAudioById.clear()
     pendingAttackerShotAudioById.clear()
     pendingVictimVoiceShotIds.clear()
+    pendingVictimHitPosByShotId.clear()
     spawnActors()
     syncHud()
   }
@@ -1144,6 +1148,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     try {
       if (iWonRound) seriesWinsSelf += 1
       else seriesWinsOpp += 1
+      if (iWonRound) await playWinGameSplashSequence()
       endMatch(iWonRound ? 'win' : 'lose')
     } finally {
       seriesTransitionActive = false
@@ -1550,7 +1555,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           const attackerClip = pendingAttackerShotAudioById.get(sid)
           if (attackerClip) {
             voice.resumeAudio()
-            voice.playBuffer(attackerClip)
+            voice.playBufferSpatialAt(attackerClip, bot.bodyCenter, camera)
             pendingAttackerShotAudioById.delete(sid)
           }
         }
@@ -1581,11 +1586,15 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           const clip = pendingPeerShotAudioById.get(sid)
           if (clip) {
             voice.resumeAudio()
-            voice.playBuffer(clip)
+            const hitPos = pendingVictimHitPosByShotId.get(sid) ?? knockFromWorld
+            if (hitPos) voice.playBufferSpatialAt(clip, hitPos, camera)
+            else voice.playBuffer(clip)
             pendingPeerShotAudioById.delete(sid)
             pendingVictimVoiceShotIds.delete(sid)
+            pendingVictimHitPosByShotId.delete(sid)
           } else {
             pendingVictimVoiceShotIds.add(sid)
+            if (knockFromWorld) pendingVictimHitPosByShotId.set(sid, knockFromWorld.clone())
           }
         }
       }
@@ -1869,7 +1878,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         pendingVictimVoiceShotIds.delete(data.shotId)
         pendingPeerShotAudioById.delete(data.shotId)
         voice.resumeAudio()
-        voice.playBuffer(buf)
+        const hitPos = pendingVictimHitPosByShotId.get(data.shotId)
+        if (hitPos) voice.playBufferSpatialAt(buf, hitPos, camera)
+        else voice.playBuffer(buf)
+        pendingVictimHitPosByShotId.delete(data.shotId)
       }
     } catch {
       debugMpLog('peer voiceShot decode/inject failed')
@@ -2370,11 +2382,33 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     winGameSplashEl.classList.add('win-game-splash--pulse')
   }
 
+  async function playWinGameSplashSequence(): Promise<void> {
+    if (!winGameSplashEl) return
+    showWinGameSplash()
+    await new Promise<void>((resolve) => {
+      let done = false
+      const finish = () => {
+        if (done) return
+        done = true
+        resolve()
+      }
+      const onEnd = () => {
+        winGameSplashTxtEl?.removeEventListener('animationend', onEnd)
+        finish()
+      }
+      winGameSplashTxtEl?.addEventListener('animationend', onEnd, { once: true })
+      window.setTimeout(() => {
+        winGameSplashTxtEl?.removeEventListener('animationend', onEnd)
+        finish()
+      }, 1300)
+    })
+    hideWinGameSplash()
+  }
+
   function updateWinFinisher(_delta: number): void {
     if (!winFinisher || winFinisher.phase !== 'launch') return
     if (map.isBlastZone(bot.root.position)) {
       winFinisher = { phase: 'flash', started: performance.now() }
-      showWinGameSplash()
       return
     }
     const elapse = performance.now() - winFinisher.started
@@ -2386,17 +2420,14 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       elapse > 200
     if (landed || elapse > 4200) {
       winFinisher = { phase: 'flash', started: performance.now() }
-      showWinGameSplash()
     }
   }
 
   function advanceWinFlashTimer(): void {
     if (!winFinisher || winFinisher.phase !== 'flash') return
-    if (performance.now() - winFinisher.started > 1120) {
-      winFinisher = null
-      hideWinGameSplash()
-      void concludeRoundElimination(true)
-    }
+    if (performance.now() - winFinisher.started <= 8) return
+    winFinisher = null
+    void concludeRoundElimination(true)
   }
 
   /**
@@ -2734,7 +2765,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         const shotT = arms.peekShotT()
         const hitAudio = arms.takeHitAudio()
         arms.markDealt()
-        voice.playBuffer(hitAudio)
+        voice.playBufferSpatialAt(hitAudio, bot.bodyCenter, camera)
         const botAimY = knockDirFromFistImpact(_fp, _knDir)
         const gain = percentGainFromCharge(shotT)
         const prevEnemyPct = enemyPercent

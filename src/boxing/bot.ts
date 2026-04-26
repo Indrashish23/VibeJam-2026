@@ -40,6 +40,7 @@ const BOT_GLB_RECORDING = new URL('../../Assets/MonkeyModel/RecordingSound.glb',
 const BOT_GLB_SHOOTING = new URL('../../Assets/MonkeyModel/ShootingSound.glb', import.meta.url).href
 
 export type BotMode = 'dummy' | 'smart' | 'network'
+type SmartBotState = 'chase' | 'flank' | 'retreat' | 'aim' | 'recover' | 'unstuck'
 
 export class BotFighter {
   readonly root = new Group()
@@ -58,9 +59,15 @@ export class BotFighter {
   private hurtFinisher = false
   private hurtAirSince = 0
 
+  private smartState: SmartBotState = 'chase'
+  private smartStateLeft = 0
   private smartStrafePickT = 0
+  private smartFlankSign = Math.random() < 0.5 ? -1 : 1
   private readonly smartMoveDir = new Vector3(0, 0, 1)
   private smartShotGapMs = 2500
+  private smartDesiredSpeed = 0
+  private smartStuckAcc = 0
+  private readonly smartUnstuckDir = new Vector3(1, 0, 0)
 
   mesh: Mesh
   private readonly bodyMat: MeshStandardMaterial
@@ -170,7 +177,7 @@ export class BotFighter {
     this.networkTargetPos.copy(this.root.position)
     scene.add(this.root)
 
-    this.smartShotGapMs = 2000 + Math.random() * 1000
+    this.smartShotGapMs = 1200 + Math.random() * 700
 
     void this.loadMonkeyVisual()
   }
@@ -369,8 +376,7 @@ export class BotFighter {
   private resolveLocalBase(): AvatarBaseClip {
     if (this.hurtPhase !== 'none') return 'hitreact'
     if (!this.grounded) return 'jumping'
-    const speedSq = this.velocity.x * this.velocity.x + this.velocity.z * this.velocity.z
-    return speedSq > 0.08 * 0.08 ? 'running' : 'idle'
+    return this.speedN > gameConfig.botSmartRunAnimThreshold ? 'running' : 'idle'
   }
 
   private updateMonkeyAnimation(delta: number): void {
@@ -477,9 +483,15 @@ export class BotFighter {
     this.velocity.set(0, 0, 0)
     this.knockXZ.set(0, 0, 0)
     this.vy = 0
+    this.smartState = 'chase'
+    this.smartStateLeft = 0
     this.smartStrafePickT = 0
-    this.smartShotGapMs = 2100 + Math.random() * 950
+    this.smartFlankSign = Math.random() < 0.5 ? -1 : 1
+    this.smartShotGapMs = 1200 + Math.random() * 700
     this.smartMoveDir.set(0, 0, 1)
+    this.smartDesiredSpeed = 0
+    this.smartStuckAcc = 0
+    this.smartUnstuckDir.set(1, 0, 0)
     this.hurtPhase = 'none'
     this.hurtRecoverLeft = 0
     this.hurtFinisher = false
@@ -587,6 +599,117 @@ export class BotFighter {
     const dz = target.z - this.root.position.z
     if (Math.abs(dx) + Math.abs(dz) < 1e-5) return
     this.root.rotation.y = Math.atan2(dx, dz)
+  }
+
+  private turnToward(target: Vector3, delta: number, maxRate: number): void {
+    const dx = target.x - this.root.position.x
+    const dz = target.z - this.root.position.z
+    if (Math.abs(dx) + Math.abs(dz) < 1e-5) return
+    const desired = Math.atan2(dx, dz)
+    let dy = desired - this.root.rotation.y
+    while (dy > Math.PI) dy -= Math.PI * 2
+    while (dy < -Math.PI) dy += Math.PI * 2
+    const step = Math.min(Math.abs(dy), Math.max(0.01, maxRate) * delta)
+    this.root.rotation.y += Math.sign(dy) * step
+  }
+
+  private setSmartState(next: SmartBotState, durationSec = 0): void {
+    this.smartState = next
+    this.smartStateLeft = Math.max(0, durationSec)
+  }
+
+  private updateSmartAi(delta: number, playerPos: Vector3, dist: number, toPx: number, toPz: number): void {
+    const safeDist = Math.max(1e-5, dist)
+    const rdx = toPx / safeDist
+    const rdz = toPz / safeDist
+    _rad.set(rdx, 0, rdz)
+    _tan.set(-rdz, 0, rdx)
+    if (this.smartStateLeft > 0) this.smartStateLeft = Math.max(0, this.smartStateLeft - delta)
+    this.smartShotGapMs -= delta * 1000
+    this.setRecordingTelegraph(false)
+    this.turnToward(playerPos, delta, gameConfig.botSmartTurnRate)
+
+    const prefer = gameConfig.botSmartPreferredRange
+    const ringBand = Math.max(0.4, gameConfig.botSmartRangeBand)
+    const retreatAt = gameConfig.botSmartRetreatRange
+    const attackMax = gameConfig.botPunchRange * gameConfig.botSmartAttackRangeMul
+    const canAttack = !this.projActive && this.smartShotGapMs <= 0 && dist <= attackMax && dist >= 0.32
+    const moveBase = gameConfig.moveSpeed * gameConfig.botSmartMoveSpeedMul
+
+    if (this.smartState === 'aim') {
+      this.setRecordingTelegraph(true)
+      this.velocity.set(0, 0, 0)
+      this.smartDesiredSpeed = 0
+      this.turnToward(playerPos, delta, gameConfig.botSmartAimTurnRate)
+      if (this.smartStateLeft <= 0) {
+        if (canAttack) {
+          const t = Math.max(0, Math.min(1, (dist - retreatAt) / Math.max(1, attackMax - retreatAt)))
+          const speedMul =
+            gameConfig.botSmartShotSpeedMinMul +
+            (1 - t) * (gameConfig.botSmartShotSpeedMaxMul - gameConfig.botSmartShotSpeedMinMul)
+          this.spawnProjectile(playerPos, speedMul)
+          this.smartShotGapMs = gameConfig.botSmartShotCooldownMs + Math.random() * 220
+          this.setSmartState('recover', gameConfig.botSmartRecoverMs / 1000)
+          return
+        }
+        this.setSmartState(dist < retreatAt ? 'retreat' : 'chase')
+      }
+      return
+    }
+
+    if (this.smartState === 'recover') {
+      this.velocity.set(0, 0, 0)
+      this.smartDesiredSpeed = 0
+      if (this.smartStateLeft <= 0) this.setSmartState(dist < retreatAt ? 'retreat' : 'chase')
+      return
+    }
+
+    if (this.smartState === 'unstuck') {
+      this.velocity.x = this.smartUnstuckDir.x * moveBase
+      this.velocity.z = this.smartUnstuckDir.z * moveBase
+      this.smartDesiredSpeed = moveBase
+      if (this.smartStateLeft <= 0) this.setSmartState('flank')
+      return
+    }
+
+    if (dist < retreatAt) {
+      this.setSmartState('retreat')
+    } else if (canAttack && dist >= prefer - ringBand * 0.45) {
+      this.setSmartState('aim', gameConfig.botSmartAimMs / 1000)
+      return
+    } else if (Math.abs(dist - prefer) <= ringBand) {
+      this.setSmartState('flank')
+    } else {
+      this.setSmartState('chase')
+    }
+
+    if (this.smartState === 'retreat') {
+      this.smartMoveDir.copy(_rad).multiplyScalar(-1)
+      if (dist > prefer + ringBand * 0.4) this.setSmartState('flank')
+    } else if (this.smartState === 'chase') {
+      this.smartMoveDir.copy(_rad)
+      if (dist > prefer + ringBand) {
+        this.smartMoveDir.addScaledVector(_tan, this.smartFlankSign * gameConfig.botSmartApproachFlankBias)
+      }
+      if (Math.abs(dist - prefer) <= ringBand) this.setSmartState('flank')
+    } else {
+      this.smartStrafePickT -= delta
+      if (this.smartStrafePickT <= 0) {
+        this.smartStrafePickT = 0.32 + Math.random() * 0.55
+        this.smartFlankSign = Math.random() < 0.5 ? -1 : 1
+      }
+      const inOut = (dist - prefer) / Math.max(1, prefer)
+      this.smartMoveDir
+        .copy(_tan)
+        .multiplyScalar(this.smartFlankSign)
+        .addScaledVector(_rad, Math.max(-0.55, Math.min(0.55, inOut * 0.7)))
+    }
+
+    if (this.smartMoveDir.lengthSq() < 1e-8) this.smartMoveDir.copy(_rad)
+    this.smartMoveDir.normalize()
+    this.velocity.x = this.smartMoveDir.x * moveBase
+    this.velocity.z = this.smartMoveDir.z * moveBase
+    this.smartDesiredSpeed = moveBase
   }
 
   applyKnockback(
@@ -846,59 +969,16 @@ export class BotFighter {
     const dist = Math.hypot(toPx, toPz) || 1
 
     if (canThink && this.mode === 'smart') {
-      this.faceToward(playerPos)
-      const rdx = toPx / dist
-      const rdz = toPz / dist
-      _rad.set(rdx, 0, rdz)
-      _tan.set(-rdz, 0, rdx)
-
-      const engage = gameConfig.botPunchRange * 1.22
-      if (dist > engage) {
-        const wobbleT = performance.now() * 0.0022
-        this.smartMoveDir
-          .copy(_rad)
-          .addScaledVector(_tan, Math.sin(wobbleT) * 0.35 + Math.cos(wobbleT * 0.7) * 0.14)
-        if (this.smartMoveDir.lengthSq() < 1e-8) this.smartMoveDir.copy(_rad)
-        this.smartMoveDir.normalize()
-        this.smartStrafePickT = Math.min(this.smartStrafePickT, 0.2)
-      } else {
-        this.smartStrafePickT -= delta
-        if (this.smartStrafePickT <= 0) {
-          this.smartStrafePickT = 0.38 + Math.random() * 0.72
-          const strafe = (Math.random() - 0.5) * 2
-          const inOut = (Math.random() - 0.5) * 2 * 0.45
-          this.smartMoveDir.copy(_tan).multiplyScalar(strafe).addScaledVector(_rad, inOut)
-          if (this.smartMoveDir.lengthSq() < 1e-8) this.smartMoveDir.copy(_tan)
-          this.smartMoveDir.normalize()
-        }
-      }
-
-      const spd = gameConfig.moveSpeed * delta * 0.48
-      this.velocity.x = (this.smartMoveDir.x * spd) / delta
-      this.velocity.z = (this.smartMoveDir.z * spd) / delta
-
-      this.smartShotGapMs -= delta * 1000
-
-      const range = gameConfig.botPunchRange
-      const commitDist = range * 1.85
-      const wantsShot =
-        !this.projActive &&
-        this.smartShotGapMs <= 0 &&
-        dist <= commitDist &&
-        dist >= 0.32
-
-      if (wantsShot) {
-        const speedMul =
-          gameConfig.voiceShotSpeedMinMul +
-          Math.random() * (gameConfig.voiceShotSpeedMaxMul - gameConfig.voiceShotSpeedMinMul) * 0.85
-        this.spawnProjectile(playerPos, speedMul)
-        this.smartShotGapMs = 1650 + Math.random() * 750
-      }
+      this.updateSmartAi(delta, playerPos, dist, toPx, toPz)
     } else if (canThink) {
       this.faceToward(playerPos)
+      this.setRecordingTelegraph(false)
       this.velocity.set(0, 0, 0)
+      this.smartDesiredSpeed = 0
     } else {
+      this.setRecordingTelegraph(false)
       this.velocity.set(0, 0, 0)
+      this.smartDesiredSpeed = 0
     }
 
     if (!canThink) {
@@ -909,6 +989,28 @@ export class BotFighter {
     this.root.position.z += (this.velocity.z + this.knockXZ.z) * delta
 
     this.resolveTerrainCollision(terrain, _moveStart, delta)
+
+    if (canThink && this.mode === 'smart' && this.smartDesiredSpeed > 0.1) {
+      const moved = Math.hypot(this.root.position.x - _moveStart.x, this.root.position.z - _moveStart.z)
+      const expect = this.smartDesiredSpeed * delta
+      if (moved < expect * gameConfig.botSmartStuckMoveRatio) {
+        this.smartStuckAcc += delta
+      } else {
+        this.smartStuckAcc = Math.max(0, this.smartStuckAcc - delta * 1.4)
+      }
+      if (this.smartStuckAcc >= gameConfig.botSmartStuckMs / 1000 && this.smartState !== 'aim') {
+        this.smartStuckAcc = 0
+        this.smartUnstuckDir
+          .copy(_tan)
+          .multiplyScalar(this.smartFlankSign)
+          .addScaledVector(_rad, -0.35)
+        if (this.smartUnstuckDir.lengthSq() < 1e-8) this.smartUnstuckDir.copy(_tan)
+        this.smartUnstuckDir.normalize()
+        this.setSmartState('unstuck', gameConfig.botSmartUnstuckMs / 1000)
+      }
+    } else {
+      this.smartStuckAcc = 0
+    }
 
     if (this.hurtPhase === 'air' && !this.hurtFinisher) {
       const elapsed = performance.now() - this.hurtAirSince

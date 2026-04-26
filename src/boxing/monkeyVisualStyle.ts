@@ -13,10 +13,14 @@ import {
 } from 'three'
 
 /** Hand-painted atlas; replaces embedded GLB base color on all monkey PBR materials. */
-const MONKEY_BASECOLOR_URL = new URL(
+const MONKEY_BASECOLOR_SRC = new URL(
   '../../Assets/MonkeyModel/low-poly+monkey+3d+model.glb_basecolor.JPEG',
   import.meta.url,
 ).href
+const MONKEY_BASECOLOR_URL =
+  import.meta.env.DEV
+    ? `${MONKEY_BASECOLOR_SRC}${MONKEY_BASECOLOR_SRC.includes('?') ? '&' : '?'}v=${encodeURIComponent(String(Math.floor(performance.timeOrigin)))}`
+    : MONKEY_BASECOLOR_SRC
 
 function isPbrMat(m: unknown): m is MeshStandardMaterial | MeshPhysicalMaterial {
   return m instanceof MeshStandardMaterial || m instanceof MeshPhysicalMaterial

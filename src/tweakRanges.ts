@@ -79,6 +79,23 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   botBodyRadius: { min: 0.3, max: 3, step: 0.05 },
   botPunchRange: { min: 2, max: 20, step: 0.2 },
   botHitRadius: { min: 0.5, max: 6, step: 0.05 },
+  botSmartPreferredRange: { min: 2, max: 24, step: 0.1 },
+  botSmartRangeBand: { min: 0.4, max: 6, step: 0.05 },
+  botSmartRetreatRange: { min: 1, max: 16, step: 0.1 },
+  botSmartMoveSpeedMul: { min: 0.1, max: 1.4, step: 0.02 },
+  botSmartApproachFlankBias: { min: 0, max: 1.5, step: 0.02 },
+  botSmartAttackRangeMul: { min: 1, max: 2.5, step: 0.02 },
+  botSmartAimMs: { min: 0, max: 2000, step: 20 },
+  botSmartRecoverMs: { min: 0, max: 2400, step: 20 },
+  botSmartShotCooldownMs: { min: 200, max: 4000, step: 20 },
+  botSmartTurnRate: { min: 1, max: 30, step: 0.2 },
+  botSmartAimTurnRate: { min: 1, max: 40, step: 0.2 },
+  botSmartShotSpeedMinMul: { min: 0.1, max: 2.5, step: 0.02 },
+  botSmartShotSpeedMaxMul: { min: 0.2, max: 3, step: 0.02 },
+  botSmartStuckMoveRatio: { min: 0.05, max: 0.9, step: 0.01 },
+  botSmartStuckMs: { min: 80, max: 1400, step: 10 },
+  botSmartUnstuckMs: { min: 80, max: 1500, step: 10 },
+  botSmartRunAnimThreshold: { min: 0.01, max: 0.8, step: 0.01 },
   winFinisherKnockXZ: { min: 20, max: CAP, step: 2 },
   winFinisherVy: { min: 8, max: CAP, step: 2 },
 
@@ -288,6 +305,23 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   botBodyRadius: 'Bot body radius',
   botPunchRange: 'Bot engage range',
   botHitRadius: 'Bot fist hit radius',
+  botSmartPreferredRange: 'Smart bot preferred range',
+  botSmartRangeBand: 'Smart bot ring band',
+  botSmartRetreatRange: 'Smart bot retreat range',
+  botSmartMoveSpeedMul: 'Smart bot move speed ×',
+  botSmartApproachFlankBias: 'Smart bot approach flank bias',
+  botSmartAttackRangeMul: 'Smart bot attack range ×',
+  botSmartAimMs: 'Smart bot aim wind-up (ms)',
+  botSmartRecoverMs: 'Smart bot post-fire recover (ms)',
+  botSmartShotCooldownMs: 'Smart bot shot cooldown (ms)',
+  botSmartTurnRate: 'Smart bot turn rate',
+  botSmartAimTurnRate: 'Smart bot aim turn rate',
+  botSmartShotSpeedMinMul: 'Smart bot shot speed min ×',
+  botSmartShotSpeedMaxMul: 'Smart bot shot speed max ×',
+  botSmartStuckMoveRatio: 'Smart bot stuck movement ratio',
+  botSmartStuckMs: 'Smart bot stuck detect (ms)',
+  botSmartUnstuckMs: 'Smart bot unstuck duration (ms)',
+  botSmartRunAnimThreshold: 'Smart bot run anim threshold',
   botKnockRecoverMs: 'Bot knock recover (ms)',
   cameraFov: 'Field of view',
   cameraNear: 'Near clip',
@@ -566,6 +600,40 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   botBodyRadius: 'Enemy capsule radius (bigger = easier to hit, harder to ring-out).',
   botPunchRange: 'Distance at which the smart bot tries to throw a fist.',
   botHitRadius: 'Hit detection radius on the bot’s projectile.',
+  botSmartPreferredRange:
+    'Smart bot target spacing from you before it prefers orbiting instead of charging straight in.',
+  botSmartRangeBand:
+    'Half-width of the preferred range band used to decide chase vs flank.',
+  botSmartRetreatRange:
+    'If the smart bot gets closer than this, it prioritizes backing out before re-engaging.',
+  botSmartMoveSpeedMul:
+    'Smart bot move speed multiplier relative to player moveSpeed.',
+  botSmartApproachFlankBias:
+    'How much tangent/side motion is blended in while approaching from long range.',
+  botSmartAttackRangeMul:
+    'Attack trigger window as a multiplier of botPunchRange.',
+  botSmartAimMs:
+    'How long smart bot holds aim/telegraph before firing.',
+  botSmartRecoverMs:
+    'How long smart bot pauses after firing before moving/aiming again.',
+  botSmartShotCooldownMs:
+    'Minimum delay between smart bot shots.',
+  botSmartTurnRate:
+    'Default smart bot yaw turn speed in rad/s.',
+  botSmartAimTurnRate:
+    'Smart bot yaw turn speed while in aim state (usually higher).',
+  botSmartShotSpeedMinMul:
+    'Smart bot shot speed multiplier floor.',
+  botSmartShotSpeedMaxMul:
+    'Smart bot shot speed multiplier cap.',
+  botSmartStuckMoveRatio:
+    'If actual movement falls below this fraction of desired movement, smart bot accumulates stuck time.',
+  botSmartStuckMs:
+    'Milliseconds below stuck ratio before forcing an escape direction.',
+  botSmartUnstuckMs:
+    'Milliseconds smart bot commits to an unstuck tangent move.',
+  botSmartRunAnimThreshold:
+    'SpeedN threshold where smart bot uses running animation instead of idle.',
 }
 
 /** Ordered tweak categories (every key appears exactly once). Use the Category dropdown in the panel. */
@@ -688,6 +756,23 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'botBodyRadius',
       'botPunchRange',
       'botHitRadius',
+      'botSmartPreferredRange',
+      'botSmartRangeBand',
+      'botSmartRetreatRange',
+      'botSmartMoveSpeedMul',
+      'botSmartApproachFlankBias',
+      'botSmartAttackRangeMul',
+      'botSmartAimMs',
+      'botSmartRecoverMs',
+      'botSmartShotCooldownMs',
+      'botSmartTurnRate',
+      'botSmartAimTurnRate',
+      'botSmartShotSpeedMinMul',
+      'botSmartShotSpeedMaxMul',
+      'botSmartStuckMoveRatio',
+      'botSmartStuckMs',
+      'botSmartUnstuckMs',
+      'botSmartRunAnimThreshold',
       'dummyTestFiresPerSec',
       'dummyTestShotSpeedMul',
       'botKnockRecoverMs',

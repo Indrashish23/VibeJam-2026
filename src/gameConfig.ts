@@ -182,6 +182,39 @@ export const defaultGameConfig = {
   botBodyRadius: 0.72,
   botPunchRange: 3.8,
   botHitRadius: 0.95,
+  /** Smart bot: preferred spacing around the player before switching to flanking. */
+  botSmartPreferredRange: 5.8,
+  /** Smart bot: half-band around preferred range considered "in ring". */
+  botSmartRangeBand: 1.25,
+  /** Smart bot: if closer than this, prioritize retreat. */
+  botSmartRetreatRange: 3.1,
+  /** Smart bot movement speed as multiplier of player move speed. */
+  botSmartMoveSpeedMul: 0.52,
+  /** Smart bot approach wobble/flank blend while closing distance. */
+  botSmartApproachFlankBias: 0.38,
+  /** Smart bot: attack window as multiplier of botPunchRange. */
+  botSmartAttackRangeMul: 1.75,
+  /** Smart bot: telegraph/aim wind-up before firing (ms). */
+  botSmartAimMs: 340,
+  /** Smart bot: cooldown after firing (ms). */
+  botSmartRecoverMs: 420,
+  /** Smart bot: minimum time between shots (ms). */
+  botSmartShotCooldownMs: 1550,
+  /** Smart bot: default turn speed (rad/s). */
+  botSmartTurnRate: 9.8,
+  /** Smart bot: faster turn speed while aiming (rad/s). */
+  botSmartAimTurnRate: 14,
+  /** Smart bot: shot speed range independent of player voice ranges. */
+  botSmartShotSpeedMinMul: 0.34,
+  botSmartShotSpeedMaxMul: 1.12,
+  /** Smart bot: mark as stuck if actual movement drops below expected ratio. */
+  botSmartStuckMoveRatio: 0.22,
+  /** Smart bot: time under stuck threshold before forcing escape (ms). */
+  botSmartStuckMs: 300,
+  /** Smart bot: duration of forced tangent escape (ms). */
+  botSmartUnstuckMs: 360,
+  /** Local bot animation: speedN threshold for running clip. */
+  botSmartRunAnimThreshold: 0.14,
   /** Winning hit: horizontal launch — fling off the stage (punch direction). */
   winFinisherKnockXZ: 208,
   /** Winning hit: small vertical pop — mostly flies back along punch line. */
