@@ -9,7 +9,9 @@ import {
   Group,
   LoopOnce,
   LoopRepeat,
+  Material,
   Mesh,
+  MeshPhysicalMaterial,
   MeshStandardMaterial,
   Object3D,
   Raycaster,
@@ -18,6 +20,7 @@ import {
 } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { gameConfig } from '../gameConfig'
+import { applyMonkeyFlatVertexPixelatedStyle } from './monkeyVisualStyle'
 import { PROJECTILE_R } from './playerArms'
 import {
   pickClipForSlot,
@@ -85,7 +88,7 @@ export class BotFighter {
   private monkeyShakeZ = 0
   private monkeyShakeRollZ = 0
   private monkeyFinishedHandler: ((ev: { action?: AnimationAction }) => void) | null = null
-  private readonly monkeyMaterials: { mat: MeshStandardMaterial; baseColor: Color }[] = []
+  private readonly monkeyMaterials: { mat: MeshStandardMaterial | MeshPhysicalMaterial; baseColor: Color }[] = []
   private victimInvulnFlashEnd = 0
   private readonly _flashWhite = new Color(0xffffff)
 
@@ -197,6 +200,7 @@ export class BotFighter {
       this.root.add(wrap)
       this.monkeyWrap = wrap
       this.monkeyRoot = sceneRoot
+      applyMonkeyFlatVertexPixelatedStyle(sceneRoot)
       sceneRoot.traverse((o) => {
         const mo = o as Mesh
         if (mo.isMesh) {
@@ -211,17 +215,17 @@ export class BotFighter {
       /* Collect material refs + their original colors so we can tint for the recording telegraph. */
       sceneRoot.traverse((o) => {
         const meshObj = o as Mesh
-        const m = meshObj.material as
-          | MeshStandardMaterial
-          | MeshStandardMaterial[]
-          | undefined
+        const m = meshObj.material as Material | Material[] | undefined
         if (!m) return
-        const mats = Array.isArray(m) ? m : [m]
+        const mats: Material[] = Array.isArray(m) ? m : [m]
         for (const mm of mats) {
-          if (mm && (mm as MeshStandardMaterial).color) {
+          if (
+            mm instanceof MeshStandardMaterial ||
+            mm instanceof MeshPhysicalMaterial
+          ) {
             this.monkeyMaterials.push({
-              mat: mm as MeshStandardMaterial,
-              baseColor: (mm as MeshStandardMaterial).color.clone(),
+              mat: mm,
+              baseColor: mm.color.clone(),
             })
           }
         }
@@ -455,10 +459,7 @@ export class BotFighter {
     if (this.monkeyRoot) {
       this.monkeyRoot.traverse((o) => {
         const meshObj = o as Mesh
-        const m = meshObj.material as
-          | MeshStandardMaterial
-          | MeshStandardMaterial[]
-          | undefined
+        const m = meshObj.material as Material | Material[] | undefined
         if (Array.isArray(m)) for (const mm of m) mm?.dispose?.()
         else m?.dispose?.()
         meshObj.geometry?.dispose?.()

@@ -12,6 +12,7 @@ import {
 } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { gameConfig } from '../gameConfig'
+import { applyMonkeyFlatVertexPixelatedStyle } from './monkeyVisualStyle'
 
 /** The capsule we want the monkey to fit into: feet on the floor, head ~ a tad above the camera. */
 function targetMonkeyHeight(): number {
@@ -128,6 +129,7 @@ export class LocalPlayerAvatar {
     this.mixer = mixer
     this.root.rotation.order = 'YXZ'
     this.root.add(modelRoot)
+    applyMonkeyFlatVertexPixelatedStyle(modelRoot)
     /* Capture bbox at native scale before any auto-fit, so we can cleanly anchor feet later. */
     modelRoot.updateMatrixWorld(true)
     const bbox = new Box3().setFromObject(modelRoot)

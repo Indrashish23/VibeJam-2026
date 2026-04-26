@@ -29,6 +29,7 @@ import {
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
 import { RenderPixelatedPass } from 'three/addons/postprocessing/RenderPixelatedPass.js'
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js'
 import { gameConfig } from './gameConfig'
 import { addArena, isBlastZone } from './arena'
@@ -49,6 +50,7 @@ import {
   createWebRtcGameChannel,
   type WebRtcGameApi,
 } from './net/webrtcGame'
+import { LowEndDitherShader } from './post/lowEndDitherShader'
 import { readStoredPlayerName, savePlayerName } from './playerName'
 import { setPartyKitHostSession, getPartyKitHost } from './net/partyKitHost'
 import {
@@ -59,7 +61,7 @@ import {
 /** Stunned FX SVGs live in `public/ui/` so Vercel/production resolves them without bundling `../Assets/`. */
 const stunnedEffectBgUrl = `${import.meta.env.BASE_URL}ui/StunnedEffectBg.svg`
 const stunnedStarUrl = `${import.meta.env.BASE_URL}ui/StunnedStar.svg`
-const skyboxEquirectUrl = `${import.meta.env.BASE_URL}skyboxes/fdfb9a9e-6d70-45a9-b505-3b7029a1ba4b.png`
+const skyboxEquirectUrl = `${import.meta.env.BASE_URL}skyboxes/vz_clear_ocean_back.png`
 
 /** Production without baked host: open once with `?pk=your-deployment.partykit.dev` (stored in session). */
 try {
@@ -424,6 +426,8 @@ function initGame(lobby: LobbyResult) {
   })
   composer.addPass(pixelPass)
   composer.addPass(new OutputPass())
+  /* After color space / tone mapping: cheap screen-space noise to reduce gradient banding. */
+  composer.addPass(new ShaderPass(LowEndDitherShader))
   composer.setSize(window.innerWidth, Math.max(window.innerHeight, 1))
 
   const controls = new PointerLockControls(camera, renderer.domElement)
