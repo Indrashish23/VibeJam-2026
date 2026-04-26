@@ -16,7 +16,7 @@ import {
   LineLoop,
   LineSegments,
   MathUtils,
-  Mesh,
+  Object3D,
   PerspectiveCamera,
   Raycaster,
   Scene,
@@ -29,7 +29,7 @@ import { RenderPixelatedPass } from 'three/addons/postprocessing/RenderPixelated
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js'
 import { gameConfig } from './gameConfig'
-import { addArena, isBlastZone } from './arena'
+import { isMapId, loadMap, type MapHandle, type MapId } from './maps'
 import { BotFighter, type BotMode } from './boxing/bot'
 import { PlayerArms } from './boxing/playerArms'
 import { VoiceChargeManager } from './audio/voiceCharge'
@@ -324,10 +324,10 @@ function runUsernameGate(): Promise<void> {
   })
 }
 
-function initGame(lobby: LobbyResult) {
+async function initGame(lobby: LobbyResult): Promise<void> {
   if (DEBUG_MP)
     debugMpLog(
-      `initGame role=${lobby.mode === 'online' ? lobby.role : 'offline'} mp=${lobby.mode}`,
+      `initGame role=${lobby.mode === 'online' ? lobby.role : 'offline'} mp=${lobby.mode} map=${lobby.mapId}`,
     )
 
   let tweaksPanelOpen = false
@@ -446,8 +446,13 @@ function initGame(lobby: LobbyResult) {
   scene.add(hubRoot)
   const skyDome = createProceduralSky(scene)
 
-  const ground = addArena(hubRoot)
-  const colliders: Mesh[] = [ground]
+  /**
+   * Map handle is mutable: PvP guests swap to the host's chosen map at `hello`.
+   * `colliders` re-points to the active map's collider list so all read sites
+   * stay correct without reassigning `map`.
+   */
+  let map: MapHandle = await loadMap(lobby.mapId, scene, hubRoot)
+  let colliders: Object3D[] = map.colliders
 
   scene.add(camera)
 
@@ -1381,6 +1386,10 @@ function initGame(lobby: LobbyResult) {
       const other: 'host' | 'guest' = lobby.role === 'host' ? 'guest' : 'host'
       if (data.role === other) {
         mpOpponentName = data.displayName.trim() || 'Player'
+        /* Host is authoritative on map: guest swaps to match the host's choice. */
+        if (lobby.mode === 'online' && lobby.role === 'guest' && isMapId(data.mapId)) {
+          void swapMap(data.mapId)
+        }
         scheduleMpBegin()
       }
       return
@@ -1862,6 +1871,41 @@ function initGame(lobby: LobbyResult) {
     return { camZ: spacing, opponentBotZ: -spacing }
   }
 
+  /**
+   * PvP guests run this when the host advertises a different map in `hello`.
+   * Disposes the active map, loads the new one, and respawns both fighters
+   * before the countdown gates real play.
+   */
+  let swapMapInFlight: Promise<void> | null = null
+  async function swapMap(newId: MapId): Promise<void> {
+    if (newId === map.id) return
+    if (swapMapInFlight) {
+      await swapMapInFlight
+      if (newId === map.id) return
+    }
+    const work = (async () => {
+      const old = map
+      try {
+        const next = await loadMap(newId, scene, hubRoot)
+        map = next
+        colliders = next.colliders
+        old.dispose()
+      } catch (err) {
+        console.warn('[map] swap failed; keeping current map', err)
+        return
+      }
+      spawnActors()
+      applySunShadowFrustum()
+      syncBlastBoundsLine()
+    })()
+    swapMapInFlight = work
+    try {
+      await work
+    } finally {
+      if (swapMapInFlight === work) swapMapInFlight = null
+    }
+  }
+
   function spawnActors(): void {
     const spacing = arenaSpacing()
     const { camZ, opponentBotZ } = pvpSpawnZs(spacing)
@@ -1869,11 +1913,11 @@ function initGame(lobby: LobbyResult) {
     const yaw =
       lobby.mode === 'online' && lobby.role === 'guest' ? Math.PI : 0
 
-    camera.position.set(0, eyeH(), camZ)
+    camera.position.set(0, map.getSpawnY(eyeH()), camZ)
     camera.rotation.reorder('YXZ')
     camera.rotation.set(0, yaw, 0)
 
-    const oppRootY = bot.getFootOffset() + 0.08
+    const oppRootY = map.getBotSpawnY(bot.getFootOffset())
     bot.root.position.set(0, oppRootY, opponentBotZ)
     bot.root.rotation.set(0, 0, 0)
     bot.resetRoundState()
@@ -1936,7 +1980,7 @@ function initGame(lobby: LobbyResult) {
 
   function updateWinFinisher(_delta: number): void {
     if (!winFinisher || winFinisher.phase !== 'launch') return
-    if (isBlastZone(bot.root.position)) {
+    if (map.isBlastZone(bot.root.position)) {
       winFinisher = { phase: 'flash', started: performance.now() }
       showWinGameSplash()
       return
@@ -2284,7 +2328,7 @@ function initGame(lobby: LobbyResult) {
       return
 
     if (winFinisher) {
-      if (isBlastZone(camera.position)) {
+      if (map.isBlastZone(camera.position)) {
         winFinisher = null
         hideWinGameSplash()
         void concludeRoundElimination(false)
@@ -2367,7 +2411,7 @@ function initGame(lobby: LobbyResult) {
 
     if (!authPvp()) {
       const listenAuth = isOnline && lobby.mode === 'online' && isAuthoritativeListenServer()
-      if (isBlastZone(camera.position)) {
+      if (map.isBlastZone(camera.position)) {
         if (lobbyDummyPractice) {
           applyRoundReset()
           return
@@ -2375,7 +2419,7 @@ function initGame(lobby: LobbyResult) {
         if (isPvp() && !listenAuth) sendMp({ type: 'youWin' })
         if (!listenAuth) void concludeRoundElimination(false)
       }
-      if (isBlastZone(bot.root.position)) {
+      if (map.isBlastZone(bot.root.position)) {
         if (lobbyDummyPractice) {
           applyRoundReset()
           return
@@ -2895,6 +2939,7 @@ function initGame(lobby: LobbyResult) {
             type: 'hello',
             displayName: displayPlayerName(),
             role: onlineLobby.role,
+            mapId: lobby.mode === 'online' ? lobby.mapId : 'default',
           }),
         )
         queueMicrotask(() => maybeStartPublicHostAnnounce())
@@ -3081,5 +3126,8 @@ runUsernameGate()
   .then(() => runLobbyGate(readStoredPlayerName()?.trim() || 'Angler'))
   .then((lobby) => {
     gameRoot.hidden = false
-    initGame(lobby)
+    return initGame(lobby)
+  })
+  .catch((err) => {
+    console.error('[vibejam] init failed', err)
   })

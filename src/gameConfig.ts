@@ -19,19 +19,19 @@ export const defaultGameConfig = {
   /** Pixel pass edge hint strength (subtle retro contour). */
   retroEdgeStrength: 0.12,
   /** Skybox base color channels (0–1) for the procedural sky dome. */
-  skyboxColorR: 0.102,
-  skyboxColorG: 0.137,
-  skyboxColorB: 0.188,
+  skyboxColorR: 0.14,
+  skyboxColorG: 0.58,
+  skyboxColorB: 0.43,
   /** Clouds: threshold where noise starts showing clouds (higher = fewer clouds). */
-  skyCloudCoverage: 0.5,
+  skyCloudCoverage: 0.52,
   /** Clouds: softness of cloud edges in the procedural mask. */
-  skyCloudSoftness: 0.16,
+  skyCloudSoftness: 0.04,
   /** Clouds: noise frequency scale (higher = smaller/more clouds). */
-  skyCloudScale: 1.35,
+  skyCloudScale: 2.9,
   /** Clouds: advection speed across the dome. */
   skyCloudSpeed: 0.022,
   /** Clouds: blend strength over the base sky color. */
-  skyCloudOpacity: 0.4,
+  skyCloudOpacity: 0.22,
 
   /** Fill light; keep low so the directional sun reads harsh against the skybox. */
   ambientIntensity: 0.22,

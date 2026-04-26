@@ -1,6 +1,7 @@
 import { readStoredPlayerName, savePlayerName } from './playerName'
 import { isMultiplayerTransportConfigured } from './net/transportConfig'
 import { PublicLobbyDirectoryClient, type PublicLobbyListing } from './net/publicLobbyDirectory'
+import { isMapId, MAP_DEFS, type MapId } from './maps'
 
 function randomRoomId(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
@@ -11,13 +12,34 @@ function randomRoomId(): string {
   return `vj-${s}`
 }
 
+const MAP_STORAGE_KEY = 'vibejam_lobby_map'
+
+function readStoredMapId(): MapId {
+  try {
+    const raw = sessionStorage.getItem(MAP_STORAGE_KEY)
+    if (raw && isMapId(raw)) return raw
+  } catch {
+    /* sessionStorage may be blocked; fall through. */
+  }
+  return 'default'
+}
+
+function saveStoredMapId(id: MapId): void {
+  try {
+    sessionStorage.setItem(MAP_STORAGE_KEY, id)
+  } catch {
+    /* ignore */
+  }
+}
+
 export type LobbyResult =
-  | { mode: 'offline' }
+  | { mode: 'offline'; mapId: MapId }
   | {
       mode: 'online'
       role: 'host' | 'guest'
       roomId: string
       shortCode: string
+      mapId: MapId
       startWithDummyPractice?: boolean
       /** `public` = listed in the browser room list; `private` = join by code only. */
       lobbyVisibility?: 'public' | 'private'
@@ -41,6 +63,7 @@ function wireLobbyDom(): {
   browserList: HTMLUListElement
   browserRefresh: HTMLButtonElement
   browserHint: HTMLElement
+  mapSelect: HTMLSelectElement
 } {
   return {
     overlay: document.getElementById('lobby-overlay') as HTMLDivElement,
@@ -58,7 +81,13 @@ function wireLobbyDom(): {
     browserList: document.getElementById('lobby-browser-list') as HTMLUListElement,
     browserRefresh: document.getElementById('lobby-browser-refresh') as HTMLButtonElement,
     browserHint: document.getElementById('lobby-browser-hint') as HTMLElement,
+    mapSelect: document.getElementById('lobby-map') as HTMLSelectElement,
   }
+}
+
+function selectedMapId(ui: ReturnType<typeof wireLobbyDom>): MapId {
+  const v = ui.mapSelect?.value
+  return isMapId(v) ? v : 'default'
 }
 
 function selectedLobbyVisibility(ui: ReturnType<typeof wireLobbyDom>): 'public' | 'private' {
@@ -135,6 +164,7 @@ export function runLobbyGate(initialDisplayName: string): Promise<LobbyResult> {
             roomId: row.roomId,
             shortCode: row.shortCode,
             listingHostName: row.hostName,
+            mapId: selectedMapId(ui),
           })
         })
         li.appendChild(btn)
@@ -158,6 +188,23 @@ export function runLobbyGate(initialDisplayName: string): Promise<LobbyResult> {
     ui.err.hidden = true
     ui.err.textContent = ''
     ui.visPublic.checked = true
+
+    if (ui.mapSelect) {
+      /* Repopulate options so the map registry is the single source of truth. */
+      if (ui.mapSelect.options.length !== MAP_DEFS.length) {
+        ui.mapSelect.replaceChildren()
+        for (const def of MAP_DEFS) {
+          const opt = document.createElement('option')
+          opt.value = def.id
+          opt.textContent = def.label
+          ui.mapSelect.appendChild(opt)
+        }
+      }
+      ui.mapSelect.value = readStoredMapId()
+      ui.mapSelect.addEventListener('change', () => {
+        saveStoredMapId(selectedMapId(ui))
+      })
+    }
 
     if (!onlineUnavailable()) {
       queueMicrotask(() => startBrowserClient())
@@ -189,7 +236,7 @@ export function runLobbyGate(initialDisplayName: string): Promise<LobbyResult> {
 
     ui.offline.onclick = () => {
       clearErr()
-      finish({ mode: 'offline' })
+      finish({ mode: 'offline', mapId: selectedMapId(ui) })
     }
 
     ui.create.onclick = () => {
@@ -206,6 +253,7 @@ export function runLobbyGate(initialDisplayName: string): Promise<LobbyResult> {
         roomId,
         shortCode,
         lobbyVisibility: selectedLobbyVisibility(ui),
+        mapId: selectedMapId(ui),
       })
     }
 
@@ -224,6 +272,7 @@ export function runLobbyGate(initialDisplayName: string): Promise<LobbyResult> {
         shortCode,
         startWithDummyPractice: true,
         lobbyVisibility: 'private',
+        mapId: selectedMapId(ui),
       })
     }
 
@@ -246,6 +295,7 @@ export function runLobbyGate(initialDisplayName: string): Promise<LobbyResult> {
         roomId,
         shortCode,
         lobbyVisibility: 'private',
+        mapId: selectedMapId(ui),
       })
     }
 
