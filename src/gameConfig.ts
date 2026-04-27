@@ -81,7 +81,7 @@ export const defaultGameConfig = {
    * Rotation lag follow rate (Unreal SpringArm `rotationLagSpeed`).
    * Per-frame slerp `t = clamp(rotLagSpeed * delta, 0, 1)`. Higher = snappier (less drag).
    */
-  fpCamRotLagSpeed: 17,
+  fpCamRotLagSpeed: 20,
   /**
    * Spring-arm camera **Y position** lag toggle.
    * Camera position lerps toward the player capsule's Y so jumping dips the camera and landing pops it up.
@@ -91,7 +91,7 @@ export const defaultGameConfig = {
    * Y-position lag follow rate (Unreal SpringArm `lagSpeed`).
    * Per-frame lerp `t = clamp(yLagSpeed * delta, 0, 1)`. Higher = snappier.
    */
-  fpCamYLagSpeed: 13,
+  fpCamYLagSpeed: 16,
   /**
    * Maximum allowed Y lag distance in meters (Unreal SpringArm `maxLagDistance`).
    * If `displayY` falls more than this behind the player capsule it snaps to the clamp.
@@ -100,21 +100,21 @@ export const defaultGameConfig = {
   /** Shared gravity for non-player simulations (bot / banana projectile arc). */
   gravity: 38,
   /** Upward-phase gravity while vy > 0 (jump ascent). */
-  jumpGravity: 28,
+  jumpGravity: 45,
   /** Downward-phase gravity while vy <= 0 (fall / fast descent). */
-  fallGravity: 55,
-  jumpForce: 14,
+  fallGravity: 70,
+  jumpForce: 40,
   /**
    * Variable-jump cut strength while jump is released and vy > 0.
    * Applied as `vy *= jumpCutMultiplier^(delta*60)`; lower = harder cut.
    */
-  jumpCutMultiplier: 0.45,
+  jumpCutMultiplier: 0.8,
   /** Time window after leaving ground where a jump still counts as grounded (seconds). */
   coyoteTime: 0.12,
   /** Time window to queue a jump press before landing (seconds). */
-  jumpBufferTime: 0.12,
+  jumpBufferTime: 0.1,
   /** Terminal downward speed clamp for player vy (negative = downward). */
-  maxFallSpeed: -40,
+  maxFallSpeed: -65,
   jumpCooldownMs: 480,
   /** How many extra mid-air jumps you get per landing cycle (1 = double jump). */
   airJumpsMax: 1,
