@@ -13,19 +13,19 @@ export const defaultGameConfig = {
   hideGameHud: 0,
 
   /** Screen-space charge wedge: inset from the right edge (rem). */
-  chargeHudRightRem: 1.25,
+  chargeHudRightRem: 7.5,
   /** Vertical offset from screen center (rem); positive moves the wedge down. */
-  chargeHudVerticalBiasRem: 0,
+  chargeHudVerticalBiasRem: 8,
   /** Max width of the wedge column (rem); pairs with viewport clamp in CSS. */
-  chargeHudWidthRem: 11.5,
+  chargeHudWidthRem: 12.6,
   /** Max height for the wedge (vh); capped in CSS with a rem ceiling. */
-  chargeHudMaxHeightVh: 72,
+  chargeHudMaxHeightVh: 53,
   /** Uniform scale of the wedge art (1 = authored size). */
-  chargeHudScale: 1,
+  chargeHudScale: 1.79,
   /** %/MAX label horizontal position (percent of wedge width from left). */
   chargeHudPctLabelLeftPct: 5,
   /** %/MAX label vertical position (percent from top of wedge). */
-  chargeHudPctLabelTopPct: 1.2,
+  chargeHudPctLabelTopPct: 4.6,
   /** Pistol instruction overlay: distance from top of wedge (% height). */
   chargeHudPistolOverlayTopPct: 44,
   /** Pistol overlay width as percent of wedge width. */
@@ -38,9 +38,9 @@ export const defaultGameConfig = {
   /** Uniform scale for `#hud-viewport` (launch % + charge wedge cluster); 1 = default. */
   uiHudMasterScale: 1,
   /** Scale only the launch-percent HUD block (inside master viewport scale). */
-  percentHudScale: 1,
+  percentHudScale: 1.15,
   /** Tweaks panel window UI scale (slider rows stay usable when shrunk). */
-  tweaksPanelUiScale: 1,
+  tweaksPanelUiScale: 0.81,
   /** When 1 and Tweaks (T) is open, drag launch % + charge wedge anywhere on screen (positions persist per browser tab). */
   hudDragLayoutEnabled: 0,
 

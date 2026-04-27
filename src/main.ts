@@ -41,12 +41,12 @@ import { BotFighter, type BotMode } from './boxing/bot'
 import { PlayerArms } from './boxing/playerArms'
 import { VoiceChargeManager, audioBufferSliceToWavBlob } from './audio/voiceCharge'
 import { playLocalVoiceRecordReleaseSfx, playLocalVoiceRecordStartSfx } from './audio/voiceRecordUiSfx'
-import { mountTweaksPanel } from './tweaksPanel'
 import {
+  mountTweaksPanel,
   attachHudOverlayDrag,
   resetGameplayHudLayout,
   restoreHudElementPosition,
-} from './hudLayout'
+} from './tweaksPanel'
 import {
   startTutorial,
   isTutorialPending,

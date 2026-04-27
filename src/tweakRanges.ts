@@ -166,7 +166,7 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   cameraFar: { min: 100, max: CAP, step: 10 },
   hideGameHud: { min: 0, max: 1, step: 1 },
   chargeHudRightRem: { min: 0, max: 8, step: 0.05 },
-  chargeHudVerticalBiasRem: { min: -8, max: 8, step: 0.05 },
+  chargeHudVerticalBiasRem: { min: -20, max: 20, step: 0.05 },
   chargeHudWidthRem: { min: 4, max: 30, step: 0.1 },
   chargeHudMaxHeightVh: { min: 20, max: 100, step: 1 },
   chargeHudScale: { min: 0.35, max: 2.2, step: 0.01 },
