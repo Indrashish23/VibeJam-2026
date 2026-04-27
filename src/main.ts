@@ -532,6 +532,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   function appendTextChatLine(sender: string, message: string): void {
     if (!textChatLogEl) return
+    if (textChatWrapEl) textChatWrapEl.hidden = false
     const line = document.createElement('p')
     line.className = 'text-chat-line'
     line.textContent = `${sender}: ${message}`
@@ -544,10 +545,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   function closeTextChat(restorePointerLock = true): void {
     textChatOpen = false
-    if (textChatWrapEl) textChatWrapEl.hidden = true
     if (textChatInputEl) {
+      textChatInputEl.hidden = true
       textChatInputEl.blur()
       textChatInputEl.value = ''
+    }
+    if (textChatWrapEl && textChatLogEl) {
+      textChatWrapEl.hidden = textChatLogEl.childElementCount <= 0
     }
     if (restorePointerLock) tryPointerLock()
   }
@@ -558,6 +562,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (multiplayerBlocksPlay() || leaveMatchDialogOpen || tweaksPanelOpen || rematchSequenceActive) return
     textChatOpen = true
     textChatWrapEl.hidden = false
+    textChatInputEl.hidden = false
     clearMovementKeys()
     try {
       controls.unlock()
@@ -571,7 +576,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (lobby.mode !== 'online') return
     const msg = raw.trim().replace(/\s+/g, ' ').slice(0, 180)
     if (!msg) return
-    appendTextChatLine('You', msg)
+    appendTextChatLine(displayPlayerName(), msg)
     sendGameTraffic({
       type: 'textChat',
       fromRole: lobby.role,
