@@ -622,6 +622,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   const celUniforms = celOutlinePass.uniforms as Record<string, { value: unknown }>
   celUniforms.resolution.value = [window.innerWidth, Math.max(window.innerHeight, 1)]
   function syncCelOutlineConfig(): void {
+    celOutlinePass.enabled = gameConfig.celShadeEnabled >= 0.5
+    if (!celOutlinePass.enabled) return
     celUniforms.levels.value = Math.max(2, Math.round(gameConfig.celShadeLevels))
     celUniforms.edgeThreshold.value = Math.max(0.001, gameConfig.celOutlineThreshold)
     celUniforms.edgeSoftness.value = Math.max(0.001, gameConfig.celOutlineSoftness)

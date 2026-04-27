@@ -166,6 +166,7 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   cameraFar: { min: 100, max: CAP, step: 10 },
   retroPixelScale: { min: 1, max: 8, step: 0.05 },
   retroEdgeStrength: { min: 0, max: 1, step: 0.01 },
+  celShadeEnabled: { min: 0, max: 1, step: 1 },
   celShadeLevels: { min: 2, max: 12, step: 1 },
   celOutlineThreshold: { min: 0.02, max: 0.6, step: 0.01 },
   celOutlineSoftness: { min: 0.01, max: 0.4, step: 0.01 },
@@ -357,6 +358,7 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   cameraFar: 'Far clip',
   retroPixelScale: 'Retro pixel scale',
   retroEdgeStrength: 'Retro edge strength',
+  celShadeEnabled: 'Cel shading (toon + outline)',
   celShadeLevels: 'Cel shade bands',
   celOutlineThreshold: 'Cel outline threshold',
   celOutlineSoftness: 'Cel outline softness',
@@ -465,6 +467,7 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   cameraFar: 'Far clipping plane; how far the world is still drawn.',
   retroPixelScale: 'Chunk size of the pixel post-process pass (higher = more retro/chunkier).',
   retroEdgeStrength: 'Edge accent strength in the pixel pass (subtle contour lines).',
+  celShadeEnabled: 'When 0, the cel/toon outline post-pass is skipped (pixel pass still runs).',
   celShadeLevels: 'How many color bands the cel post-pass uses (lower = flatter toon look).',
   celOutlineThreshold:
     'Contrast needed before the cel post-pass paints black outlines (lower = more edges outlined).',
@@ -942,6 +945,7 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
     keys: [
       'retroPixelScale',
       'retroEdgeStrength',
+      'celShadeEnabled',
       'celShadeLevels',
       'celOutlineThreshold',
       'celOutlineSoftness',
