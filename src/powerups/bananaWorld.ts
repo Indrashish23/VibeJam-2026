@@ -229,14 +229,18 @@ export class BananaWorld {
 
   attachHandToCamera(camera: PerspectiveCamera): void {
     this.handGroup.removeFromParent()
-    const g = this.handGroup
-    g.position.set(
+    this.syncHandPoseFromConfig()
+    camera.add(this.handGroup)
+    void this.loadBananaTemplate().then(() => this.ensureHandBananaClone())
+  }
+
+  /** Re-apply camera-local offset from Tweaks every frame so live edits work. */
+  syncHandPoseFromConfig(): void {
+    this.handGroup.position.set(
       gameConfig.bananaHandLocalX,
       gameConfig.bananaHandLocalY,
       gameConfig.bananaHandLocalZ,
     )
-    camera.add(g)
-    void this.loadBananaTemplate().then(() => this.ensureHandBananaClone())
   }
 
   clear(): void {

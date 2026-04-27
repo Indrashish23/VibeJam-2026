@@ -5,6 +5,7 @@ import {
   MathUtils,
   Mesh,
   PerspectiveCamera,
+  Quaternion,
   Vector3,
 } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
@@ -17,6 +18,10 @@ const BASE_EXTENT = 0.36
 const _eRest = new Euler(0, 0, 0, 'YXZ')
 const _ePull = new Euler(0, 0, 0, 'YXZ')
 const _eShake = new Euler(0, 0, 0, 'YXZ')
+const _qRest = new Quaternion()
+const _qPull = new Quaternion()
+const _qCur = new Quaternion()
+const _qShake = new Quaternion()
 const _tmpPos = new Vector3()
 const _tmpPull = new Vector3()
 
@@ -133,9 +138,10 @@ export class MegaphoneFpProp {
       MathUtils.degToRad(megaphonePullRollDeg),
       'YXZ',
     )
-    this.root.rotation.x = MathUtils.lerp(_eRest.x, _ePull.x, t)
-    this.root.rotation.y = MathUtils.lerp(_eRest.y, _ePull.y, t)
-    this.root.rotation.z = MathUtils.lerp(_eRest.z, _ePull.z, t)
+    _qRest.setFromEuler(_eRest)
+    _qPull.setFromEuler(_ePull)
+    _qCur.slerpQuaternions(_qRest, _qPull, t)
+    this.root.quaternion.copy(_qCur)
 
     /* Shake: only while charging and at/above min fire charge. */
     const minF = Math.min(0.999, Math.max(0.01, voiceMinChargeToFire))
@@ -163,9 +169,8 @@ export class MegaphoneFpProp {
       Math.sin(w * twoPi * (f1 + f2) * 0.31) * rd * 0.18,
       'YXZ',
     )
-    this.root.rotation.x += _eShake.x
-    this.root.rotation.y += _eShake.y
-    this.root.rotation.z += _eShake.z
+    _qShake.setFromEuler(_eShake)
+    this.root.quaternion.multiply(_qShake)
   }
 
   dispose(): void {

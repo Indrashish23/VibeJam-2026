@@ -20,8 +20,8 @@ type SfxKind = 'footstep' | 'jump' | 'land' | 'shoot'
 const FOOTSTEP_URLS: string[] = [2, 3, 4, 5, 6, 7].map(
   (n) => new URL(`../../Assets/SFX/Footsteps/footstep-cat-${n}.wav`, import.meta.url).href,
 )
-const JUMP_URL = new URL('../../Assets/SFX/Footsteps/JumpSound.ogg', import.meta.url).href
-const LAND_URL = new URL('../../Assets/SFX/Footsteps/LandingonGround.ogg', import.meta.url).href
+const JUMP_URL = new URL('../../Assets/SFX/JumpSound.ogg', import.meta.url).href
+const LAND_URL = new URL('../../Assets/SFX/LandingonGround.ogg', import.meta.url).href
 const RELEASE_URL = new URL('../../Assets/SFX/ThrowSound.ogg', import.meta.url).href
 
 let ctx: AudioContext | null = null

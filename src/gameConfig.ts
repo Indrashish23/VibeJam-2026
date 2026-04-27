@@ -421,6 +421,14 @@ export const defaultGameConfig = {
   bananaSlipSfxEnabled: 1,
   /** Gain × for slip one-shot (× SFX chain). */
   bananaSlipSfxVolumeMul: 0.55,
+  /** 0/1: camera Z-roll wobble when **you** slip on a peel (local view). Tweaks → Animations. */
+  bananaSlipCamRollEnabled: 1,
+  /** Peak roll (deg, YXZ); sign = barrel direction. */
+  bananaSlipCamRollPeakDeg: 13,
+  /** Seconds to snap from 0 → peak (small = snappy). */
+  bananaSlipCamRollSnapSec: 0.038,
+  /** Seconds to ease roll back to 0 after peak. */
+  bananaSlipCamRollRecoverSec: 0.3,
   /** Initial throw speed (world; × physics frame feel). */
   bananaThrowSpeed: 32,
   /** Max throw distance on XZ from throw start. */

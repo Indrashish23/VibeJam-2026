@@ -4,7 +4,7 @@ import { postProcessVoiceDecodeBuffer } from './voiceBufferPostProcess'
 import { gameConfig } from '../gameConfig'
 import { getSfxChainMul } from './sfxChain'
 
-const IMPACT_HIT_URL = new URL('../../Assets/SFX/Footsteps/ImpactSound.mp3', import.meta.url).href
+const IMPACT_HIT_URL = new URL('../../Assets/SFX/ImpactSound.mp3', import.meta.url).href
 
 const _listenerPos = new Vector3()
 const _listenerFwd = new Vector3()

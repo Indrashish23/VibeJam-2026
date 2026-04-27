@@ -1,8 +1,8 @@
 import { gameConfig } from '../gameConfig'
 import { getSfxChainMul } from './sfxChain'
 
-const JUMP = new URL('../../Assets/SFX/Footsteps/JumpSound.ogg', import.meta.url).href
-const LAND = new URL('../../Assets/SFX/Footsteps/LandingonGround.ogg', import.meta.url).href
+const JUMP = new URL('../../Assets/SFX/JumpSound.ogg', import.meta.url).href
+const LAND = new URL('../../Assets/SFX/LandingonGround.ogg', import.meta.url).href
 const SLIP = new URL('../../Assets/SFX/slip_sound.ogg', import.meta.url).href
 
 function playLocal(enabled: number, devMul: number, url: string): void {

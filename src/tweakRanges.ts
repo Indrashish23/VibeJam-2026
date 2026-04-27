@@ -207,6 +207,10 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   bananaSlipMs: { min: 200, max: 8000, step: 50 },
   bananaSlipSfxEnabled: { min: 0, max: 1, step: 1 },
   bananaSlipSfxVolumeMul: { min: 0, max: 1, step: 0.02 },
+  bananaSlipCamRollEnabled: { min: 0, max: 1, step: 1 },
+  bananaSlipCamRollPeakDeg: { min: -40, max: 40, step: 1 },
+  bananaSlipCamRollSnapSec: { min: 0.012, max: 0.45, step: 0.002 },
+  bananaSlipCamRollRecoverSec: { min: 0.05, max: 1.4, step: 0.02 },
   bananaThrowSpeed: { min: 4, max: 120, step: 1 },
   bananaThrowMaxRange: { min: 5, max: 120, step: 1 },
   bananaThrowUpMul: { min: 0.1, max: 3, step: 0.02 },
@@ -448,6 +452,10 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   bananaSlipMs: 'Banana: slip stun (ms, still hittable)',
   bananaSlipSfxEnabled: 'Banana: slip SFX (0/1, you only)',
   bananaSlipSfxVolumeMul: 'Banana: slip SFX level ×',
+  bananaSlipCamRollEnabled: 'Banana slip: camera roll (0/1)',
+  bananaSlipCamRollPeakDeg: 'Banana slip: roll peak ° (sign = direction)',
+  bananaSlipCamRollSnapSec: 'Banana slip: roll snap-in (s)',
+  bananaSlipCamRollRecoverSec: 'Banana slip: roll recover (s)',
   bananaThrowSpeed: 'Banana: throw speed',
   bananaThrowMaxRange: 'Banana: max throw XZ range',
   bananaThrowUpMul: 'Banana: throw arc (up) ×',
@@ -610,6 +618,12 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   bananaSlipMs: 'Movement stun on peel; you are still vulnerable to other hits.',
   bananaSlipSfxEnabled: '0 = silent. 1 = play slip_sound.ogg when your character slips (local; not other player).',
   bananaSlipSfxVolumeMul: 'Gain for the slip one-shot; × SFX chain in Settings / Tweaks.',
+  bananaSlipCamRollEnabled:
+    '0 = no twist. 1 = snappy camera barrel-roll on local Z (YXZ) when you slip, then ease back.',
+  bananaSlipCamRollPeakDeg:
+    'Maximum roll angle in degrees; flip sign to tilt the view the other way (camera-local barrel).',
+  bananaSlipCamRollSnapSec: 'Linear ramp from 0 → peak; lower = snappier slip “kick”.',
+  bananaSlipCamRollRecoverSec: 'Quadratic ease from peak → 0 after the snap.',
   bananaPeelRadius: 'Horizontal distance from feet to a peel to trigger a slip.',
   bananaPeelYTolerance: 'Vertical tolerance on peel contact (sloped stages / island).',
   bananaThrowSpeed: 'Initial speed of the thrown banana arc.',
@@ -659,7 +673,8 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
     'Extra SFX master in Tweaks (0–1). Chained as Settings SFX × this for footsteps, voice UI, jump, land, etc.',
   jumpSfxEnabled: '0 = no jump one-shot. 1 = play JumpSound.ogg when you jump (ground or air, local only).',
   jumpSfxVolumeMul: 'Dev gain for jump; multiplied by the SFX chain (Settings × Tweaks SFX).',
-  landSfxEnabled: '0 = no land thud. 1 = play LandingonGround.ogg when you land from air (local only).',
+  landSfxEnabled:
+    '0 = no land thud. 1 = play `Assets/SFX/LandingonGround.ogg` when you land from air (local only).',
   landSfxVolumeMul: 'Dev gain for landing; multiplied by the SFX chain (Settings × Tweaks SFX).',
   voiceRecordSfxEnabled:
     '0 = no sound when you start holding to charge a voice shot. 1 = play RecordingSound.mp3 (local only, not sent over network).',
@@ -1136,6 +1151,16 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'bananaHandLocalX',
       'bananaHandLocalY',
       'bananaHandLocalZ',
+    ],
+  },
+  {
+    id: 'animations',
+    title: 'Animations',
+    keys: [
+      'bananaSlipCamRollEnabled',
+      'bananaSlipCamRollPeakDeg',
+      'bananaSlipCamRollSnapSec',
+      'bananaSlipCamRollRecoverSec',
     ],
   },
   {

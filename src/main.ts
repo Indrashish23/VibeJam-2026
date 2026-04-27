@@ -9,6 +9,7 @@ import {
   Clock,
   Color,
   DirectionalLight,
+  Euler,
   EdgesGeometry,
   Group,
   BufferGeometry,
@@ -914,6 +915,53 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let pvpBananaInventory: { host: 0 | 1; guest: 0 | 1 } = { host: 0, guest: 0 }
   let playerBananaSlipUntil = 0
   let nextBananaPeelId = 1
+  let bananaSlipCamRollStartMs = 0
+  let bananaSlipCamRollPlaying = false
+  const _slipEuler = new Euler(0, 0, 0, 'YXZ')
+
+  function startBananaSlipCamRoll(): void {
+    if (gameConfig.bananaSlipCamRollEnabled < 0.5) return
+    bananaSlipCamRollStartMs = performance.now()
+    bananaSlipCamRollPlaying = true
+  }
+
+  function resetBananaSlipCamRoll(): void {
+    bananaSlipCamRollPlaying = false
+    _slipEuler.setFromQuaternion(camera.quaternion, 'YXZ')
+    if (Math.abs(_slipEuler.z) < 1e-7) return
+    _slipEuler.z = 0
+    camera.quaternion.setFromEuler(_slipEuler)
+  }
+
+  function applyBananaSlipCamRoll(): void {
+    if (gameConfig.bananaSlipCamRollEnabled < 0.5) {
+      if (bananaSlipCamRollPlaying) resetBananaSlipCamRoll()
+      return
+    }
+    if (!bananaSlipCamRollPlaying) return
+
+    const now = performance.now()
+    const elapsed = (now - bananaSlipCamRollStartMs) / 1000
+    const snap = Math.max(0.012, gameConfig.bananaSlipCamRollSnapSec)
+    const rec = Math.max(0.04, gameConfig.bananaSlipCamRollRecoverSec)
+    const peak = MathUtils.degToRad(gameConfig.bananaSlipCamRollPeakDeg)
+
+    let zOff = 0
+    if (elapsed < snap) {
+      zOff = peak * (elapsed / snap)
+    } else if (elapsed < snap + rec) {
+      const u = (elapsed - snap) / rec
+      const easeOut = 1 - (1 - u) * (1 - u)
+      zOff = peak * (1 - easeOut)
+    } else {
+      bananaSlipCamRollPlaying = false
+      zOff = 0
+    }
+
+    _slipEuler.setFromQuaternion(camera.quaternion, 'YXZ')
+    _slipEuler.z = zOff
+    camera.quaternion.setFromEuler(_slipEuler)
+  }
   function pvpHostBroadcastAndApply(msg: Record<string, unknown>): void {
     if (rtcGame) rtcGame.sendGameJson(msg)
     else sendMp(msg)
@@ -941,6 +989,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   async function initBananaRound(): Promise<void> {
     const n = Math.max(0, Math.round(gameConfig.bananaPickupCount))
     playerBananaSlipUntil = 0
+    resetBananaSlipCamRoll()
     localHasBanana = false
     pvpBananaInventory = { host: 0, guest: 0 }
     nextBananaPeelId = 1
@@ -984,6 +1033,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       playerBananaSlipUntil = performance.now() + Math.max(0, durationMs)
       triggerStunnedHitOverlay()
       playBananaSlipOneShot()
+      startBananaSlipCamRoll()
     } else {
       bot.applyBananaSlipMs(durationMs)
     }
@@ -3110,6 +3160,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     bot.alignFacingToward(camera.position)
 
     dashTiltDeg = 0
+    resetBananaSlipCamRoll()
     slideAnimUntilMs = 0
     gameRoot.classList.remove('game-root--dash-tilt')
     gameRoot.style.transform = ''
@@ -3706,6 +3757,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
               playerBananaSlipUntil = performance.now() + gameConfig.bananaSlipMs
               triggerStunnedHitOverlay()
               playBananaSlipOneShot()
+              startBananaSlipCamRoll()
               bananaWorld.removePeelById(pl.id)
             } else if (
               !bot.isBananaSlipNow() &&
@@ -4302,6 +4354,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       charging: megaphoneCanCharge && (chargingLmb || chargingRmb),
       charge01: voiceChargeSmoothed,
     })
+    bananaWorld.syncHandPoseFromConfig()
 
     const dashSpd = dashVel.length()
     dashTiltDeg *= Math.exp(-13.5 * delta)
@@ -4421,6 +4474,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       }
     }
 
+    applyBananaSlipCamRoll()
     composer.render()
   }
 
