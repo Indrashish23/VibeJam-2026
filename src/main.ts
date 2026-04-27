@@ -259,9 +259,13 @@ function mpDebugLogSend(obj: Record<string, unknown>): void {
   if (ty === 'pose') return
   if (ty === 'voiceShot') {
     mpDiagCounters.sendVoiceShotOk++
+    debugMpLog('send voiceShot (trajectory)')
+    return
+  }
+  if (ty === 'voiceShotAudio') {
     const ab = obj.audioB64
     const n = typeof ab === 'string' ? ab.length : 0
-    debugMpLog(`send voiceShot b64~${n}`)
+    debugMpLog(`send voiceShotAudio b64~${n}`)
     return
   }
   let len = 0
@@ -1890,8 +1894,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     const ty = data.type as string | undefined
 
     if (DEBUG_MP) {
-      if (ty === 'voiceShot' && typeof data.audioB64 === 'string') {
-        debugMpLog(`recv voiceShot b64~${data.audioB64.length}`)
+      if (ty === 'voiceShot') {
+        const n = typeof data.audioB64 === 'string' ? data.audioB64.length : 0
+        debugMpLog(n ? `recv voiceShot b64~${n}` : 'recv voiceShot (trajectory)')
+      } else if (ty === 'voiceShotAudio' && typeof data.audioB64 === 'string') {
+        debugMpLog(`recv voiceShotAudio b64~${data.audioB64.length}`)
       } else if (ty === 'authDamage') {
         debugMpLog(
           `recv authDamage victim=${String(data.victimRole)} agg=${String(data.aggressorRole)}`,
@@ -2203,8 +2210,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       typeof data.oz === 'number' &&
       typeof data.vx === 'number' &&
       typeof data.vy === 'number' &&
-      typeof data.vz === 'number' &&
-      typeof data.audioB64 === 'string'
+      typeof data.vz === 'number'
     ) {
       mpDiagCounters.recvVoiceShotMsg++
       const fromRole =
@@ -2213,6 +2219,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         browserHost.processVoiceShot(fromRole, data)
       }
       if (fromRole && fromRole !== lobby.role) {
+        const b64 = typeof data.audioB64 === 'string' ? data.audioB64 : undefined
         void handlePeerVoiceShot({
           shotId: data.shotId,
           ox: data.ox,
@@ -2222,10 +2229,20 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           vy: data.vy,
           vz: data.vz,
           mime: typeof data.mime === 'string' ? data.mime : 'audio/webm',
-          audioB64: data.audioB64,
+          audioB64: b64,
           shotScale: typeof data.shotScale === 'number' ? data.shotScale : 1,
         })
       }
+      return
+    }
+
+    if (
+      ty === 'voiceShotAudio' &&
+      typeof data.shotId === 'string' &&
+      typeof data.audioB64 === 'string' &&
+      typeof data.mime === 'string'
+    ) {
+      void handlePeerVoiceShotAudio(data.shotId, data.mime, data.audioB64)
       return
     }
 
@@ -2375,6 +2392,43 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     flashIntensity = Math.max(flashIntensity, gameConfig.pvpAggressorHitFlash)
   }
 
+  /** Extra pose packet so the authority sees you where you are the frame you fire. */
+  function flushPoseForNetwork(): void {
+    if (!isPvp()) return
+    const fy = camera.position.y - eyeH()
+    sendGameTraffic({
+      type: 'pose',
+      x: camera.position.x,
+      z: camera.position.z,
+      fy,
+      ry: camera.rotation.y,
+      recording: chargingLmb || chargingRmb,
+      animBase: deriveLocalAnimBase(),
+      animOneShot: localAnimOneShot,
+      animEpoch: localAnimEpoch,
+      speedN: Math.min(
+        1,
+        Math.hypot(velocity.x, velocity.z) / Math.max(0.5, gameConfig.moveSpeed),
+      ),
+    })
+    poseSendAcc = 0
+  }
+
+  function tryPlayVictimPendingShot(shotId: string, buf: AudioBuffer | null): void {
+    if (!pendingVictimVoiceShotIds.has(shotId)) return
+    const hitPos = pendingVictimHitPosByShotId.get(shotId)
+    pendingVictimVoiceShotIds.delete(shotId)
+    pendingPeerShotAudioById.delete(shotId)
+    pendingVictimHitPosByShotId.delete(shotId)
+    voice.resumeAudio()
+    if (buf) {
+      if (hitPos) voice.playBufferSpatialAt(buf, hitPos, camera, { victimHitReceive: true })
+      else voice.playBuffer(buf)
+    } else {
+      voice.playFallbackHitSound()
+    }
+  }
+
   async function handlePeerVoiceShot(data: {
     shotId: string
     ox: number
@@ -2384,48 +2438,69 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     vy: number
     vz: number
     mime: string
-    audioB64: string
+    audioB64?: string | undefined
     shotScale: number
   }): Promise<void> {
     if (seenVoiceShotIds.has(data.shotId)) return
     seenVoiceShotIds.add(data.shotId)
     if (seenVoiceShotIds.size > 200) seenVoiceShotIds.clear()
+
+    const o = new Vector3(data.ox, data.oy, data.oz)
+    const v = new Vector3(data.vx, data.vy, data.vz)
+    const hasB64 = typeof data.audioB64 === 'string' && data.audioB64.length > 0
+    let buf: AudioBuffer | null = null
+
+    if (hasB64) {
+      try {
+        const blob = base64ToBlob(data.audioB64!, data.mime)
+        buf = await voice.decodeRecording(blob)
+        if (buf) {
+          pendingPeerShotAudioById.set(data.shotId, buf)
+          if (pendingPeerShotAudioById.size > 120) {
+            const first = pendingPeerShotAudioById.keys().next().value as string | undefined
+            if (first) pendingPeerShotAudioById.delete(first)
+          }
+        }
+      } catch {
+        debugMpLog('peer voiceShot decode/inject failed')
+        bot.injectWorldProjectile(o, v, null, data.shotScale)
+        tryPlayVictimPendingShot(data.shotId, null)
+        return
+      }
+    }
+
+    bot.injectWorldProjectile(o, v, buf, data.shotScale)
+    if (hasB64) {
+      if (buf) tryPlayVictimPendingShot(data.shotId, buf)
+      else tryPlayVictimPendingShot(data.shotId, null)
+    }
+  }
+
+  async function handlePeerVoiceShotAudio(
+    shotId: string,
+    mime: string,
+    audioB64: string,
+  ): Promise<void> {
+    if (!seenVoiceShotIds.has(shotId)) return
+    let buf: AudioBuffer | null = null
     try {
-      const blob = base64ToBlob(data.audioB64, data.mime)
-      const buf = await voice.decodeRecording(blob)
+      const blob = base64ToBlob(audioB64, mime)
+      buf = await voice.decodeRecording(blob)
       if (buf) {
-        pendingPeerShotAudioById.set(data.shotId, buf)
+        pendingPeerShotAudioById.set(shotId, buf)
         if (pendingPeerShotAudioById.size > 120) {
           const first = pendingPeerShotAudioById.keys().next().value as string | undefined
           if (first) pendingPeerShotAudioById.delete(first)
         }
       }
-      const o = new Vector3(data.ox, data.oy, data.oz)
-      const v = new Vector3(data.vx, data.vy, data.vz)
-      bot.injectWorldProjectile(o, v, buf, data.shotScale)
-      if (buf && pendingVictimVoiceShotIds.has(data.shotId)) {
-        pendingVictimVoiceShotIds.delete(data.shotId)
-        pendingPeerShotAudioById.delete(data.shotId)
-        voice.resumeAudio()
-        const hitPos = pendingVictimHitPosByShotId.get(data.shotId)
-        if (hitPos) voice.playBufferSpatialAt(buf, hitPos, camera, { victimHitReceive: true })
-        else voice.playBuffer(buf)
-        pendingVictimHitPosByShotId.delete(data.shotId)
-      } else if (!buf && pendingVictimVoiceShotIds.has(data.shotId)) {
-        pendingVictimVoiceShotIds.delete(data.shotId)
-        pendingVictimHitPosByShotId.delete(data.shotId)
-        voice.resumeAudio()
-        voice.playFallbackHitSound()
-      }
     } catch {
-      if (pendingVictimVoiceShotIds.has(data.shotId)) {
-        pendingVictimVoiceShotIds.delete(data.shotId)
-        pendingVictimHitPosByShotId.delete(data.shotId)
-        voice.resumeAudio()
-        voice.playFallbackHitSound()
-      }
-      debugMpLog('peer voiceShot decode/inject failed')
+      debugMpLog('peer voiceShotAudio decode failed')
+      tryPlayVictimPendingShot(shotId, null)
+      return
     }
+    bot.attachReplicatedProjectileAudio(buf)
+    if (buf) tryPlayVictimPendingShot(shotId, buf)
+    else tryPlayVictimPendingShot(shotId, null)
   }
 
   async function releaseVoiceShot(): Promise<void> {
@@ -2498,9 +2573,17 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       const o = new Vector3()
       const v = new Vector3()
       arms.copyLastShotWorld(o, v)
+      const mime = blob.type || 'audio/webm'
       try {
-        const audioB64 = await blobToBase64(blob)
-        const payload: Record<string, unknown> = {
+        if (buf) {
+          pendingAttackerShotAudioById.set(shotId, buf)
+          if (pendingAttackerShotAudioById.size > 240) {
+            const first = pendingAttackerShotAudioById.keys().next().value as string | undefined
+            if (first) pendingAttackerShotAudioById.delete(first)
+          }
+        }
+        flushPoseForNetwork()
+        const payloadLead: Record<string, unknown> = {
           type: 'voiceShot',
           shotId,
           ox: o.x,
@@ -2511,21 +2594,22 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           vz: v.z,
           chargeT: raw,
           shotScale: sizeMul,
-          mime: blob.type || 'audio/webm',
-          audioB64,
+          mime,
           fromRole: lobby.role,
         }
-        if (buf) {
-          pendingAttackerShotAudioById.set(shotId, buf)
-          if (pendingAttackerShotAudioById.size > 240) {
-            const first = pendingAttackerShotAudioById.keys().next().value as string | undefined
-            if (first) pendingAttackerShotAudioById.delete(first)
-          }
-        }
-        sendGameTraffic(payload)
+        sendGameTraffic(payloadLead)
         if (lobby.role === 'host' && browserHost) {
-          browserHost.processVoiceShot('host', payload)
+          browserHost.processVoiceShot('host', payloadLead)
         }
+        void blobToBase64(blob).then(
+          (audioB64) => {
+            sendGameTraffic({ type: 'voiceShotAudio', shotId, mime, audioB64 })
+          },
+          () => {
+            mpDiagCounters.voiceShotSendFail++
+            debugMpLog('local voiceShot audio encode failed (clip size?)')
+          },
+        )
       } catch {
         mpDiagCounters.voiceShotSendFail++
         debugMpLog('local voiceShot build/send failed (clip size?)')
@@ -2695,10 +2779,15 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       const v = new Vector3()
       arms.copyLastShotWorld(o, v)
       try {
-        /* snippetBuf is already a self-contained slice — encode the whole thing. */
         const wavBlob = audioBufferSliceToWavBlob(snippetBuf, 0, snippetBuf.duration)
-        const audioB64 = await blobToBase64(wavBlob)
-        const payload: Record<string, unknown> = {
+        const mime = 'audio/wav'
+        pendingAttackerShotAudioById.set(shotId, snippetBuf)
+        if (pendingAttackerShotAudioById.size > 240) {
+          const first = pendingAttackerShotAudioById.keys().next().value as string | undefined
+          if (first) pendingAttackerShotAudioById.delete(first)
+        }
+        flushPoseForNetwork()
+        const payloadLead: Record<string, unknown> = {
           type: 'voiceShot',
           shotId,
           ox: o.x,
@@ -2709,19 +2798,22 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           vz: v.z,
           chargeT: t,
           shotScale: sizeMul,
-          mime: 'audio/wav',
-          audioB64,
+          mime,
           fromRole: lobby.role,
         }
-        pendingAttackerShotAudioById.set(shotId, snippetBuf)
-        if (pendingAttackerShotAudioById.size > 240) {
-          const first = pendingAttackerShotAudioById.keys().next().value as string | undefined
-          if (first) pendingAttackerShotAudioById.delete(first)
-        }
-        sendGameTraffic(payload)
+        sendGameTraffic(payloadLead)
         if (lobby.role === 'host' && browserHost) {
-          browserHost.processVoiceShot('host', payload)
+          browserHost.processVoiceShot('host', payloadLead)
         }
+        void blobToBase64(wavBlob).then(
+          (audioB64) => {
+            sendGameTraffic({ type: 'voiceShotAudio', shotId, mime, audioB64 })
+          },
+          () => {
+            mpDiagCounters.voiceShotSendFail++
+            debugMpLog('pistol voiceShot audio encode failed (slice encode?)')
+          },
+        )
       } catch {
         mpDiagCounters.voiceShotSendFail++
         debugMpLog('pistol voiceShot build/send failed (slice encode?)')
@@ -3961,8 +4053,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         })
       }
       poseSendAcc += delta
-      if (poseSendAcc >= 0.05) {
-        poseSendAcc -= 0.05
+      const poseIv = Math.max(1 / 120, gameConfig.pvpPoseSendIntervalSec)
+      if (poseSendAcc >= poseIv) {
+        poseSendAcc -= poseIv
         const speedN = Math.min(
           1,
           Math.hypot(velocity.x, velocity.z) / Math.max(0.5, gameConfig.moveSpeed),

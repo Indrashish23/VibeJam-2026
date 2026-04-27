@@ -71,6 +71,8 @@ export class PlayerArms {
   private readonly lastShotVel = new Vector3()
 
   private readonly _tmp = new Vector3()
+  /** Scratch for `getProjectileContactPoint` (avoid per-hit `target.clone()` alloc). */
+  private readonly _cpScratch = new Vector3()
   private readonly _meshQuat = new Quaternion()
 
   constructor(camera: PerspectiveCamera, scene: Scene) {
@@ -390,7 +392,10 @@ export class PlayerArms {
       out.copy(this.proj.pos)
       return
     }
-    const t = Math.max(0, Math.min(1, target.clone().sub(this.proj.prevPos).dot(this._tmp) / lenSq))
+    const t = Math.max(
+      0,
+      Math.min(1, this._cpScratch.copy(target).sub(this.proj.prevPos).dot(this._tmp) / lenSq),
+    )
     out.copy(this.proj.prevPos).addScaledVector(this._tmp, t)
   }
 

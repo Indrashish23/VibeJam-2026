@@ -445,6 +445,12 @@ export class BotFighter {
   /**
    * Opponent voice shot replicated in world space (same ballistic integration as local arms).
    */
+  /** Late-bind decoded peer voice to the current replicated projectile (follow-up `voiceShotAudio`). */
+  attachReplicatedProjectileAudio(voiceClip: AudioBuffer | null): void {
+    if (!this.projActive || !this.projFlying) return
+    this.projHitAudio = voiceClip
+  }
+
   injectWorldProjectile(
     worldOrigin: Vector3,
     velWorld: Vector3,

@@ -250,6 +250,12 @@ export const defaultGameConfig = {
   voiceShotAmmoMax: 0,
 
   /**
+   * Online PvP: minimum seconds between outgoing pose sync packets. Lower = snappier authoritative
+   * hit checks vs moving targets (more traffic). Default ~30 Hz.
+   */
+  pvpPoseSendIntervalSec: 1 / 30,
+
+  /**
    * Experimental pistol/magazine mode toggle. When 1, RMB-hold-to-shout fills the magazine
    * (`voiceMagazineSize` rounds), and LMB clicks fire one pre-loaded snippet per click without
    * recharging. Recharge is only allowed when the magazine is empty. 0 = legacy charge-and-release.

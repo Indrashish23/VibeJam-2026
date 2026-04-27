@@ -59,6 +59,7 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   pvpAggressorHitShake: { min: 0, max: 1, step: 0.02 },
   pvpAggressorHitFlash: { min: 0, max: 1, step: 0.02 },
   pvpAuthComboKnockMul: { min: 0.25, max: 1.15, step: 0.02 },
+  pvpPoseSendIntervalSec: { min: 1 / 60, max: 0.12, step: 1 / 240 },
   dashImpulse: { min: 0, max: 160, step: 1 },
   dashVelocityMul: { min: 0.25, max: 2, step: 0.05 },
   dashDecay: { min: 4, max: 28, step: 0.4 },
@@ -281,6 +282,7 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   pvpAggressorHitShake: 'PvP landed shake',
   pvpAggressorHitFlash: 'PvP landed flash',
   pvpAuthComboKnockMul: 'PvP combo knock ×',
+  pvpPoseSendIntervalSec: 'PvP pose send interval (s)',
   winFinisherKnockXZ: 'Finisher knock XZ',
   winFinisherVy: 'Finisher knock Y',
   voiceShotSpeedMinMul: 'Voice shot speed min ×',
@@ -620,6 +622,8 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   pvpAggressorHitShake: 'Online: camera shake when your authoritative shot is confirmed on the peer.',
   pvpAggressorHitFlash: 'Online: flash opacity when your authoritative shot is confirmed.',
   pvpAuthComboKnockMul: 'Online: knock scale when the opponent is already hurt (stops infinite stunlock).',
+  pvpPoseSendIntervalSec:
+    'Online: seconds between your pose packets to the peer / host. Lower = tighter hit validation when both move (more bandwidth).',
 
   dashImpulse: 'Approximate world-units traveled by Shift dash before it fully decays.',
   dashVelocityMul: 'Additional multiplier on Shift dash distance target.',
@@ -802,6 +806,7 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'pvpAggressorHitShake',
       'pvpAggressorHitFlash',
       'pvpAuthComboKnockMul',
+      'pvpPoseSendIntervalSec',
       'winFinisherKnockXZ',
       'winFinisherVy',
     ],
