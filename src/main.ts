@@ -101,6 +101,7 @@ const stunnedStarUrl = `${import.meta.env.BASE_URL}ui/StunnedStar.svg`
 const chargeBarEmptyUrl = `${import.meta.env.BASE_URL}ui/ChargeBarEmpty.svg`
 const chargeBarTopUrl = `${import.meta.env.BASE_URL}ui/ChargeBarTop.svg`
 const chargeBarFillMaskUrl = `${import.meta.env.BASE_URL}ui/ChargeBarFillMask.svg`
+const chargeBarMaxUrl = `${import.meta.env.BASE_URL}ui/ui_chargebar_max.svg`
 
 /** Production without baked host: open once with `?pk=your-deployment.partykit.dev` (stored in session). */
 try {
@@ -187,9 +188,8 @@ const chargeBarWrap = document.getElementById('charge-bar-wrap') as HTMLDivEleme
 const chargeBarFill = document.getElementById('charge-bar-fill') as HTMLDivElement | null
 const chargeBarMinMark = document.getElementById('charge-bar-min') as HTMLDivElement | null
 const chargeBarStatus = document.getElementById('charge-bar-status') as HTMLDivElement | null
-const chargeBarPctEl = document.getElementById('charge-bar-pct') as HTMLSpanElement | null
-const chargePistolOverlay = document.getElementById('charge-pistol-overlay') as HTMLDivElement | null
-const chargePistolText = document.getElementById('charge-pistol-text') as HTMLParagraphElement | null
+const chargeWedgeEl = document.getElementById('charge-wedge') as HTMLDivElement | null
+const chargeWedgeMaxImg = document.getElementById('charge-wedge-max-img') as HTMLImageElement | null
 const chargeWedgeEmptyImg = document.querySelector(
   '.charge-wedge__empty',
 ) as HTMLImageElement | null
@@ -197,6 +197,7 @@ const chargeWedgeTopImg = document.querySelector('.charge-wedge__top') as HTMLIm
 
 if (chargeWedgeEmptyImg) chargeWedgeEmptyImg.src = chargeBarEmptyUrl
 if (chargeWedgeTopImg) chargeWedgeTopImg.src = chargeBarTopUrl
+if (chargeWedgeMaxImg) chargeWedgeMaxImg.src = chargeBarMaxUrl
 if (chargeBarWrap) {
   chargeBarWrap.style.setProperty('--charge-fill-mask', `url('${chargeBarFillMaskUrl}')`)
   chargeBarWrap.style.setProperty('--charge-pct', '0%')
@@ -225,6 +226,8 @@ function syncChargeHudLayout(): void {
   chargeBarWrap.style.setProperty('--charge-hud-pistol-w', `${g.chargeHudPistolOverlayWidthPct}%`)
   chargeBarWrap.style.setProperty('--charge-hud-ammo-gap', `${g.chargeHudAmmoPopGapRem}rem`)
   chargeBarWrap.style.setProperty('--charge-hud-ammo-y', `${g.chargeHudAmmoPopTopPct}%`)
+  chargeBarWrap.style.setProperty('--charge-hud-min-left', `${g.chargeHudMinMarkLeftPct}%`)
+  chargeBarWrap.style.setProperty('--charge-hud-min-right', `${g.chargeHudMinMarkRightPct}%`)
 }
 
 function syncUiHudChrome(): void {
@@ -3355,51 +3358,39 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (percentFoeEl)
       percentFoeEl.textContent = `${Math.round(Math.min(999, Math.max(0, enemyPercent)))}%`
     if (chargeBarMinMark) {
-      chargeBarMinMark.style.left = ''
       chargeBarMinMark.style.bottom = `${Math.max(0, Math.min(1, gameConfig.voiceMinChargeToFire)) * 100}%`
     }
     updateChargeStatusUi(voiceChargeSmoothed)
   }
 
   function updateChargeStatusUi(charge: number): void {
-    if (!chargeBarWrap || !chargeBarStatus) return
+    if (!chargeBarWrap || !chargeWedgeEl) return
+    if (chargeBarStatus) chargeBarStatus.textContent = ''
     if (pistolModeOn()) {
       const left = pistolAmmoLeft()
       const cap = pistolMagSize()
       const ready = left > 0 && !voiceInputBlocked && !multiplayerBlocksPlay() && !chargingRmb
-      const charging = chargingRmb && !voiceInputBlocked
-      const label = charging
-        ? 'Shout to Load'
-        : ready
-          ? `Click LMB to Fire (${left}/${cap})`
-          : 'Hold RMB to Shout-Load Ammo'
-      chargeBarStatus.textContent = label
-      chargeBarStatus.classList.toggle('charge-bar-label--ready', ready)
-      chargeBarStatus.classList.toggle('charge-bar-label--prompt', !ready)
-      chargeBarStatus.classList.toggle('shimmer', ready)
       chargeBarWrap.classList.toggle('charge-bar-wrap--ready', ready)
       chargeBarWrap.classList.add('charge-bar-wrap--pistol')
-      if (chargePistolText) chargePistolText.textContent = label
-      if (chargePistolOverlay) {
-        chargePistolOverlay.hidden = false
-        chargePistolOverlay.removeAttribute('hidden')
-      }
       if (chargeBarMinMark) chargeBarMinMark.style.display = 'none'
+      chargeWedgeEl.setAttribute(
+        'aria-label',
+        ready
+          ? `Magazine, ${left} of ${cap} rounds, ready to fire`
+          : `Magazine, ${left} of ${cap} rounds`,
+      )
       return
     }
     chargeBarWrap.classList.remove('charge-bar-wrap--pistol')
-    if (chargePistolOverlay) {
-      chargePistolOverlay.hidden = true
-      chargePistolOverlay.setAttribute('hidden', '')
-    }
     if (chargeBarMinMark) chargeBarMinMark.style.display = ''
     const min = Math.max(0.01, Math.min(1, gameConfig.voiceMinChargeToFire))
     const ready = charge >= min && !voiceInputBlocked && !multiplayerBlocksPlay()
-    chargeBarStatus.textContent = ready ? 'Ready to Shoot' : 'Make Sound to Charge'
-    chargeBarStatus.classList.toggle('charge-bar-label--ready', ready)
-    chargeBarStatus.classList.toggle('charge-bar-label--prompt', !ready)
-    chargeBarStatus.classList.toggle('shimmer', ready)
     chargeBarWrap.classList.toggle('charge-bar-wrap--ready', ready)
+    const pct = Math.round(Math.min(100, Math.max(0, charge * 100)))
+    chargeWedgeEl.setAttribute(
+      'aria-label',
+      ready ? `Weapon charge ${pct} percent, ready to fire` : `Weapon charge ${pct} percent`,
+    )
   }
 
   let dashTiltDeg = 0
@@ -4765,15 +4756,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         const showMax = !pistolOn && voiceChargeSmoothed >= 1
         chargeBarFill.classList.toggle('charge-wedge__fill-inner--max', showMax)
       }
-      if (chargeBarPctEl) {
-        if (pistolOn) {
-          const cap = pistolMagSize()
-          const left = pistolAmmoLeft()
-          chargeBarPctEl.textContent = `${left}/${cap}`
-        } else {
-          const v = Math.min(100, Math.round(voiceChargeSmoothed * 100))
-          chargeBarPctEl.textContent = voiceChargeSmoothed >= 1 ? 'MAX' : `${v}%`
-        }
+      if (chargeWedgeEl) {
+        const atMax = !pistolOn && voiceChargeSmoothed >= 1
+        chargeWedgeEl.classList.toggle('charge-wedge--at-max', atMax)
       }
     }
     if (chargeBarWrap) {
@@ -5193,6 +5178,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         'chargeHudPistolOverlayWidthPct',
         'chargeHudAmmoPopGapRem',
         'chargeHudAmmoPopTopPct',
+        'chargeHudMinMarkLeftPct',
+        'chargeHudMinMarkRightPct',
       ],
       syncVisualsFromConfig: () => {
         skyDome.syncFromConfig()

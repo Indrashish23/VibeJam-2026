@@ -34,6 +34,10 @@ export const defaultGameConfig = {
   chargeHudAmmoPopGapRem: 0.35,
   /** Ammo +1 feedback: vertical anchor (% from top of #charge-bar-wrap). */
   chargeHudAmmoPopTopPct: 38,
+  /** Min-fire horizontal rule: inset from wedge left (%). Lower extends line toward the left edge. */
+  chargeHudMinMarkLeftPct: 4,
+  /** Min-fire horizontal rule: inset from wedge right (%). */
+  chargeHudMinMarkRightPct: 8,
 
   /** Uniform scale for `#hud-viewport` (launch % + charge wedge cluster); 1 = default. */
   uiHudMasterScale: 1,

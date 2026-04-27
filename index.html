@@ -288,7 +288,7 @@
         <div id="charge-bar-wrap" class="charge-bar-wrap" style="--charge-pct: 0%">
         <div id="ammo-feedback" class="ammo-feedback" hidden aria-hidden="true">+1</div>
         <div id="ammo-count" class="ammo-count" hidden>0/10</div>
-        <div class="charge-wedge" role="group" aria-label="Weapon charge">
+        <div id="charge-wedge" class="charge-wedge" role="group" aria-label="Weapon charge">
           <img class="charge-wedge__layer charge-wedge__empty" alt="" decoding="async" />
           <div class="charge-wedge__fill-zone">
             <div id="charge-bar-fill" class="charge-wedge__fill-inner"></div>
@@ -296,19 +296,20 @@
           </div>
           <div class="charge-wedge__chrome">
             <img class="charge-wedge__layer charge-wedge__top" alt="" decoding="async" />
-            <span id="charge-bar-pct" class="charge-wedge__pct" aria-hidden="true">0%</span>
+            <span id="charge-bar-pct" class="charge-wedge__pct" aria-hidden="true"></span>
           </div>
-          <div id="charge-pistol-overlay" class="charge-wedge__pistol-overlay" hidden>
-            <p id="charge-pistol-text" class="charge-wedge__pistol-text"></p>
-          </div>
+          <img
+            id="charge-wedge-max-img"
+            class="charge-wedge__layer charge-wedge__max-art"
+            alt=""
+            decoding="async"
+          />
         </div>
         <span
           id="charge-bar-status"
           class="charge-bar-status charge-bar-label charge-bar-label--prompt"
-          aria-live="polite"
-        >
-          Make Sound to Charge
-        </span>
+          aria-hidden="true"
+        ></span>
         </div>
       </div>
       <div id="mic-blocked-overlay" class="mic-blocked-overlay" hidden>

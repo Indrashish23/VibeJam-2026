@@ -176,6 +176,8 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   chargeHudPistolOverlayWidthPct: { min: 30, max: 100, step: 0.5 },
   chargeHudAmmoPopGapRem: { min: 0, max: 4, step: 0.02 },
   chargeHudAmmoPopTopPct: { min: 0, max: 100, step: 0.5 },
+  chargeHudMinMarkLeftPct: { min: 0, max: 45, step: 0.5 },
+  chargeHudMinMarkRightPct: { min: 0, max: 45, step: 0.5 },
   uiHudMasterScale: { min: 0.25, max: 2.5, step: 0.02 },
   percentHudScale: { min: 0.25, max: 3, step: 0.02 },
   tweaksPanelUiScale: { min: 0.45, max: 1.6, step: 0.02 },
@@ -464,6 +466,8 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   chargeHudPistolOverlayWidthPct: 'Pistol hint overlay: width (%)',
   chargeHudAmmoPopGapRem: 'Ammo +1 pop: gap from wedge (rem)',
   chargeHudAmmoPopTopPct: 'Ammo +1 pop: vertical % in HUD',
+  chargeHudMinMarkLeftPct: 'Min-fire line: inset from left (%)',
+  chargeHudMinMarkRightPct: 'Min-fire line: inset from right (%)',
   uiHudMasterScale: 'UI: master scale (launch % + charge cluster)',
   percentHudScale: 'UI: launch % block scale (× master)',
   tweaksPanelUiScale: 'Tweaks (T) panel size',
@@ -669,6 +673,10 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   chargeHudPistolOverlayWidthPct: 'Width of the pistol instruction overlay vs wedge width.',
   chargeHudAmmoPopGapRem: 'Space between the wedge and the floating +1 ammo feedback.',
   chargeHudAmmoPopTopPct: 'Vertical anchor for the +1 ammo pop relative to the charge HUD stack.',
+  chargeHudMinMarkLeftPct:
+    'Horizontal minimum-fire marker line: distance from the wedge’s left inner edge (percent). Lower values extend the line further toward the left.',
+  chargeHudMinMarkRightPct:
+    'Horizontal minimum-fire marker line: distance from the wedge’s right inner edge (percent). Adjust together with left inset to skew the line.',
   uiHudMasterScale:
     'Uniform zoom for the HUD viewport that wraps launch percentages and the charge wedge (crosshair separate).',
   percentHudScale: 'Extra zoom applied only to the You / Opponent launch-percent card.',
@@ -1375,6 +1383,8 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'chargeHudPistolOverlayWidthPct',
       'chargeHudAmmoPopGapRem',
       'chargeHudAmmoPopTopPct',
+      'chargeHudMinMarkLeftPct',
+      'chargeHudMinMarkRightPct',
     ],
   },
   {
