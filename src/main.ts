@@ -93,6 +93,9 @@ import {
 /** Stunned FX SVGs live in `public/ui/` so Vercel/production resolves them without bundling `../Assets/`. */
 const stunnedEffectBgUrl = `${import.meta.env.BASE_URL}ui/StunnedEffectBg.svg`
 const stunnedStarUrl = `${import.meta.env.BASE_URL}ui/StunnedStar.svg`
+const chargeBarEmptyUrl = `${import.meta.env.BASE_URL}ui/ChargeBarEmpty.svg`
+const chargeBarTopUrl = `${import.meta.env.BASE_URL}ui/ChargeBarTop.svg`
+const chargeBarFillMaskUrl = `${import.meta.env.BASE_URL}ui/ChargeBarFillMask.svg`
 
 /** Production without baked host: open once with `?pk=your-deployment.partykit.dev` (stored in session). */
 try {
@@ -177,6 +180,43 @@ const chargeBarWrap = document.getElementById('charge-bar-wrap') as HTMLDivEleme
 const chargeBarFill = document.getElementById('charge-bar-fill') as HTMLDivElement | null
 const chargeBarMinMark = document.getElementById('charge-bar-min') as HTMLDivElement | null
 const chargeBarStatus = document.getElementById('charge-bar-status') as HTMLDivElement | null
+const chargeBarPctEl = document.getElementById('charge-bar-pct') as HTMLSpanElement | null
+const chargePistolOverlay = document.getElementById('charge-pistol-overlay') as HTMLDivElement | null
+const chargePistolText = document.getElementById('charge-pistol-text') as HTMLParagraphElement | null
+const chargeWedgeEmptyImg = document.querySelector(
+  '.charge-wedge__empty',
+) as HTMLImageElement | null
+const chargeWedgeTopImg = document.querySelector('.charge-wedge__top') as HTMLImageElement | null
+
+if (chargeWedgeEmptyImg) chargeWedgeEmptyImg.src = chargeBarEmptyUrl
+if (chargeWedgeTopImg) chargeWedgeTopImg.src = chargeBarTopUrl
+if (chargeBarWrap) {
+  chargeBarWrap.style.setProperty('--charge-fill-mask', `url('${chargeBarFillMaskUrl}')`)
+  chargeBarWrap.style.setProperty('--charge-pct', '0%')
+  syncChargeHudLayout()
+}
+
+function setChargeBarDisplayPct(pct0to100: number): void {
+  if (!chargeBarWrap) return
+  const c = Math.max(0, Math.min(100, pct0to100))
+  chargeBarWrap.style.setProperty('--charge-pct', `${c}%`)
+}
+
+function syncChargeHudLayout(): void {
+  if (!chargeBarWrap) return
+  const g = gameConfig
+  chargeBarWrap.style.setProperty('--charge-hud-right', `${g.chargeHudRightRem}rem`)
+  chargeBarWrap.style.setProperty('--charge-hud-bias', `${g.chargeHudVerticalBiasRem}rem`)
+  chargeBarWrap.style.setProperty('--charge-hud-width', `${g.chargeHudWidthRem}rem`)
+  chargeBarWrap.style.setProperty('--charge-hud-max-h', `${g.chargeHudMaxHeightVh}vh`)
+  chargeBarWrap.style.setProperty('--charge-hud-scale', String(g.chargeHudScale))
+  chargeBarWrap.style.setProperty('--charge-hud-pct-left', `${g.chargeHudPctLabelLeftPct}%`)
+  chargeBarWrap.style.setProperty('--charge-hud-pct-top', `${g.chargeHudPctLabelTopPct}%`)
+  chargeBarWrap.style.setProperty('--charge-hud-pistol-top', `${g.chargeHudPistolOverlayTopPct}%`)
+  chargeBarWrap.style.setProperty('--charge-hud-pistol-w', `${g.chargeHudPistolOverlayWidthPct}%`)
+  chargeBarWrap.style.setProperty('--charge-hud-ammo-gap', `${g.chargeHudAmmoPopGapRem}rem`)
+  chargeBarWrap.style.setProperty('--charge-hud-ammo-y', `${g.chargeHudAmmoPopTopPct}%`)
+}
 const ammoCountEl = document.getElementById('ammo-count') as HTMLDivElement | null
 const ammoFeedbackEl = document.getElementById('ammo-feedback') as HTMLDivElement | null
 const micBlockedOverlay = document.getElementById('mic-blocked-overlay') as HTMLDivElement | null
@@ -978,6 +1018,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   const bananaWorld = new BananaWorld(scene)
   bananaWorld.attachHandToCamera(camera)
+  bananaWorld.attachOpponentBananaToRoot(bot.root)
   const megaphoneFp = new MegaphoneFpProp()
   megaphoneFp.attachToCamera(camera)
   const _bLand = new Vector3()
@@ -1167,6 +1208,21 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     bananaWorld.handGroup.visible = getMyBananaHeld() && !isPlayerBananaSlipNow()
   }
 
+  /** Peer monkey holds the banana mesh when their inventory has one (hidden during banana slip). */
+  function syncOpponentBananaHandVis(): void {
+    if (!isPvp() || mpPhase !== 'live' || bot.mode !== 'network') {
+      bananaWorld.opponentBananaGroup.visible = false
+      return
+    }
+    const opp = myPvpRole() === 'host' ? 'guest' : 'host'
+    const theyHold = pvpBananaInventory[opp] > 0
+    bananaWorld.opponentBananaGroup.visible = theyHold && !bot.isBananaSlipNow()
+  }
+
+  function rebindOpponentBananaAttachment(): void {
+    bananaWorld.attachOpponentBananaToRoot(bot.root)
+  }
+
   async function initBananaRound(): Promise<void> {
     const n = Math.max(0, Math.round(gameConfig.bananaPickupCount))
     playerBananaSlipUntil = 0
@@ -1181,6 +1237,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     nextBananaPeelId = 1
     bananaWorld.clear()
     bananaWorld.handGroup.visible = false
+    bananaWorld.opponentBananaGroup.visible = false
     if (n <= 0) return
     if (!isPvp()) {
       await bananaWorld.respawnLocal(map, terrainPhysics, n)
@@ -1193,7 +1250,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   function applyBananaInit(pickups: { id: string; x: number; y: number; z: number }[]): void {
-    void bananaWorld.applyInitPickups(pickups)
+    void bananaWorld.applyInitPickups(pickups, terrainPhysics)
   }
 
   /**
@@ -1244,6 +1301,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     pvpBananaInventory[who] = 1
     bananaWorld.removePickupById(pickupId)
     syncBananaHandVis()
+    syncOpponentBananaHandVis()
   }
 
   function applyBananaAuthPeel(peelId: string, x: number, y: number, z: number): void {
@@ -1269,6 +1327,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       bot.applyBananaSlipMs(durationMs)
     }
     bananaWorld.removePeelById(peelId)
+    syncBananaHandVis()
+    syncOpponentBananaHandVis()
   }
 
   function processHostBananaPickup(
@@ -1330,6 +1390,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     pvpBananaInventory[fromRole] = 0
     applyBananaAuthPeel(peelId, x, y, z)
     syncBananaHandVis()
+    syncOpponentBananaHandVis()
   }
 
   function hostCheckBananaSlips(): void {
@@ -1816,6 +1877,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       if (bot.mode !== 'dummy') {
         bot.dispose(scene)
         bot = new BotFighter(scene, 'dummy', botStart)
+        rebindOpponentBananaAttachment()
       } else {
         bot.root.position.copy(botStart)
       }
@@ -1841,6 +1903,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           debugRoomSaved.botMode,
           new Vector3(debugRoomSaved.botX, debugRoomSaved.botY, debugRoomSaved.botZ),
         )
+        rebindOpponentBananaAttachment()
       } else {
         bot.root.position.set(debugRoomSaved.botX, debugRoomSaved.botY, debugRoomSaved.botZ)
       }
@@ -1856,7 +1919,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     clearPistolState()
     voice.resetChargeMeter()
     voiceChargeSmoothed = 0
-    if (chargeBarFill) chargeBarFill.style.width = '0%'
+    setChargeBarDisplayPct(0)
     if (chargeBarWrap) chargeBarWrap.classList.remove('charge-bar-wrap--overload')
     if (chargeBarWrap) chargeBarWrap.classList.remove('charge-bar-wrap--ready')
     updateChargeStatusUi(0)
@@ -2045,6 +2108,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       bot.root.position.copy(map.getBotSpawn(opponent, bot.getFootOffset()))
       bot.networkTargetPos.copy(bot.root.position)
       bot.alignFacingToward(camera.position)
+      rebindOpponentBananaAttachment()
       warpRapierCapsulesToCurrentActors()
     }
 
@@ -2976,7 +3040,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       voice.stopVoiceClipPlayback()
       voice.resetChargeMeter()
       voiceChargeSmoothed = 0
-      if (chargeBarFill) chargeBarFill.style.width = '0%'
+      setChargeBarDisplayPct(0)
       if (chargeBarWrap) chargeBarWrap.classList.remove('charge-bar-wrap--overload')
       if (chargeBarWrap) chargeBarWrap.classList.remove('charge-bar-wrap--ready')
       if (voiceDownBoostReady && camera.rotation.x <= -gameConfig.voiceLookdownPitchMin) {
@@ -3082,7 +3146,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (ammo <= 0) {
       voice.resetChargeMeter()
       voiceChargeSmoothed = 0
-      if (chargeBarFill) chargeBarFill.style.width = '0%'
+      setChargeBarDisplayPct(0)
       if (chargeBarWrap) chargeBarWrap.classList.remove('charge-bar-wrap--ready')
       if (chargeBarWrap) chargeBarWrap.classList.remove('charge-bar-wrap--overload')
       return
@@ -3097,7 +3161,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       /* Decode failed or clip too short — refund charge so the player can retry. */
       voice.resetChargeMeter()
       voiceChargeSmoothed = 0
-      if (chargeBarFill) chargeBarFill.style.width = '0%'
+      setChargeBarDisplayPct(0)
       return
     }
     const slotDur = buf.duration / ammo
@@ -3258,7 +3322,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (percentFoeEl)
       percentFoeEl.textContent = `${Math.round(Math.min(999, Math.max(0, enemyPercent)))}%`
     if (chargeBarMinMark) {
-      chargeBarMinMark.style.left = `${Math.max(0, Math.min(1, gameConfig.voiceMinChargeToFire)) * 100}%`
+      chargeBarMinMark.style.left = ''
+      chargeBarMinMark.style.bottom = `${Math.max(0, Math.min(1, gameConfig.voiceMinChargeToFire)) * 100}%`
     }
     updateChargeStatusUi(voiceChargeSmoothed)
   }
@@ -3280,8 +3345,19 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       chargeBarStatus.classList.toggle('charge-bar-label--prompt', !ready)
       chargeBarStatus.classList.toggle('shimmer', ready)
       chargeBarWrap.classList.toggle('charge-bar-wrap--ready', ready)
+      chargeBarWrap.classList.add('charge-bar-wrap--pistol')
+      if (chargePistolText) chargePistolText.textContent = label
+      if (chargePistolOverlay) {
+        chargePistolOverlay.hidden = false
+        chargePistolOverlay.removeAttribute('hidden')
+      }
       if (chargeBarMinMark) chargeBarMinMark.style.display = 'none'
       return
+    }
+    chargeBarWrap.classList.remove('charge-bar-wrap--pistol')
+    if (chargePistolOverlay) {
+      chargePistolOverlay.hidden = true
+      chargePistolOverlay.setAttribute('hidden', '')
     }
     if (chargeBarMinMark) chargeBarMinMark.style.display = ''
     const min = Math.max(0.01, Math.min(1, gameConfig.voiceMinChargeToFire))
@@ -3681,6 +3757,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     bot.dispose(scene)
     botMode = mode
     bot = new BotFighter(scene, botMode, new Vector3(0, 1.45, -gameConfig.groundDepth / 2 + 12))
+    rebindOpponentBananaAttachment()
     applyLightingModeToScene(
       gameConfig.lightingUnlitMode >= 0.5,
       gameConfig.lightingUnlitSelfModel >= 0.5,
@@ -4622,7 +4699,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       voiceChargeSmoothed = 0
       void voice.finishChargeRecording()
       setLocalVoipRecordingBlocked(false)
-      if (chargeBarFill) chargeBarFill.style.width = '0%'
+      setChargeBarDisplayPct(0)
       bot.setRecordingTelegraph(false)
     }
 
@@ -4643,14 +4720,28 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         ammoCountEl.hidden = true
       }
     }
-    if (chargeBarFill) {
+    {
       let pct = Math.min(150, voiceChargeSmoothed * 100)
       if (pistolOn && !chargingRmb) {
         const cap = pistolMagSize()
         const left = pistolAmmoLeft()
         pct = (left / cap) * 100
       }
-      chargeBarFill.style.width = `${pct}%`
+      setChargeBarDisplayPct(pct)
+      if (chargeBarFill) {
+        const showMax = !pistolOn && voiceChargeSmoothed >= 1
+        chargeBarFill.classList.toggle('charge-wedge__fill-inner--max', showMax)
+      }
+      if (chargeBarPctEl) {
+        if (pistolOn) {
+          const cap = pistolMagSize()
+          const left = pistolAmmoLeft()
+          chargeBarPctEl.textContent = `${left}/${cap}`
+        } else {
+          const v = Math.min(100, Math.round(voiceChargeSmoothed * 100))
+          chargeBarPctEl.textContent = voiceChargeSmoothed >= 1 ? 'MAX' : `${v}%`
+        }
+      }
     }
     if (chargeBarWrap) {
       const overload = !pistolOn && voiceChargeSmoothed >= gameConfig.voiceOverloadThreshold
@@ -4689,6 +4780,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           hostCheckBananaSlips()
         }
         syncBananaHandVis()
+        syncOpponentBananaHandVis()
       } else if (rematchSequenceActive && !matchOutcome) {
         const playerProjActive = arms.isProjectileActive()
         arms.update(delta)
@@ -4792,6 +4884,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       idleWeaponSway,
     })
     bananaWorld.syncHandPoseFromConfig()
+    bananaWorld.syncOpponentBananaPoseFromConfig()
     bananaWorld.applyHandPresentationSway(idleWeaponSway)
 
     applyFpCameraPresentation(delta, fpWalk)
@@ -5050,7 +5143,20 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       camera,
       ambient,
       sun,
-      keysThatSkipRoundReset: ['hideGameHud'],
+      keysThatSkipRoundReset: [
+        'hideGameHud',
+        'chargeHudRightRem',
+        'chargeHudVerticalBiasRem',
+        'chargeHudWidthRem',
+        'chargeHudMaxHeightVh',
+        'chargeHudScale',
+        'chargeHudPctLabelLeftPct',
+        'chargeHudPctLabelTopPct',
+        'chargeHudPistolOverlayTopPct',
+        'chargeHudPistolOverlayWidthPct',
+        'chargeHudAmmoPopGapRem',
+        'chargeHudAmmoPopTopPct',
+      ],
       syncVisualsFromConfig: () => {
         skyDome.syncFromConfig()
         applyLightingModeToScene(
@@ -5059,6 +5165,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           gameConfig.lightingUnlitEnemyModel >= 0.5,
         )
         syncGameHudVisibility()
+        syncChargeHudLayout()
       },
       onToggle(open) {
         tweaksPanelOpen = open

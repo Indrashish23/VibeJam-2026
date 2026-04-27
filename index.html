@@ -5,6 +5,12 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Vibe Jam — Voice FPS Arena</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Krona+One&display=swap"
+      rel="stylesheet"
+    />
   </head>
   <body>
     <div id="user-settings-wrap" class="user-settings-wrap">
@@ -278,16 +284,30 @@
           <span id="percent-foe" class="percent-hud__value">0%</span>
         </div>
       </div>
-      <div id="charge-bar-wrap" class="charge-bar-wrap">
+      <div id="charge-bar-wrap" class="charge-bar-wrap" style="--charge-pct: 0%">
         <div id="ammo-feedback" class="ammo-feedback" hidden aria-hidden="true">+1</div>
         <div id="ammo-count" class="ammo-count" hidden>0/10</div>
-        <div id="charge-bar-status" class="charge-bar-label charge-bar-label--prompt">
+        <div class="charge-wedge" role="group" aria-label="Weapon charge">
+          <img class="charge-wedge__layer charge-wedge__empty" alt="" decoding="async" />
+          <div class="charge-wedge__fill-zone">
+            <div id="charge-bar-fill" class="charge-wedge__fill-inner"></div>
+            <span id="charge-bar-min" class="charge-bar-min" title="Minimum to fire"></span>
+          </div>
+          <div class="charge-wedge__chrome">
+            <img class="charge-wedge__layer charge-wedge__top" alt="" decoding="async" />
+            <span id="charge-bar-pct" class="charge-wedge__pct" aria-hidden="true">0%</span>
+          </div>
+          <div id="charge-pistol-overlay" class="charge-wedge__pistol-overlay" hidden>
+            <p id="charge-pistol-text" class="charge-wedge__pistol-text"></p>
+          </div>
+        </div>
+        <span
+          id="charge-bar-status"
+          class="charge-bar-status charge-bar-label charge-bar-label--prompt"
+          aria-live="polite"
+        >
           Make Sound to Charge
-        </div>
-        <div class="charge-bar-track">
-          <div id="charge-bar-fill" class="charge-bar-fill"></div>
-          <span id="charge-bar-min" class="charge-bar-min" title="Minimum to fire"></span>
-        </div>
+        </span>
       </div>
       <div id="mic-blocked-overlay" class="mic-blocked-overlay" hidden>
         <div class="mic-blocked-card">

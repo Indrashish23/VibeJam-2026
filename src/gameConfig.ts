@@ -12,6 +12,29 @@ export const defaultGameConfig = {
   /** 1 = hide gameplay HUD overlays (percent, charge bar, crosshair, mp code/toast); Tweaks stays usable. */
   hideGameHud: 0,
 
+  /** Screen-space charge wedge: inset from the right edge (rem). */
+  chargeHudRightRem: 1.25,
+  /** Vertical offset from screen center (rem); positive moves the wedge down. */
+  chargeHudVerticalBiasRem: 0,
+  /** Max width of the wedge column (rem); pairs with viewport clamp in CSS. */
+  chargeHudWidthRem: 11.5,
+  /** Max height for the wedge (vh); capped in CSS with a rem ceiling. */
+  chargeHudMaxHeightVh: 72,
+  /** Uniform scale of the wedge art (1 = authored size). */
+  chargeHudScale: 1,
+  /** %/MAX label horizontal position (percent of wedge width from left). */
+  chargeHudPctLabelLeftPct: 5,
+  /** %/MAX label vertical position (percent from top of wedge). */
+  chargeHudPctLabelTopPct: 1.2,
+  /** Pistol instruction overlay: distance from top of wedge (% height). */
+  chargeHudPistolOverlayTopPct: 44,
+  /** Pistol overlay width as percent of wedge width. */
+  chargeHudPistolOverlayWidthPct: 58,
+  /** Ammo +1 feedback: gap left of wedge (rem). */
+  chargeHudAmmoPopGapRem: 0.35,
+  /** Ammo +1 feedback: vertical anchor (% from top of #charge-bar-wrap). */
+  chargeHudAmmoPopTopPct: 38,
+
   cameraFov: 75,
   cameraNear: 0.1,
   cameraFar: 650,
@@ -511,6 +534,11 @@ export const defaultGameConfig = {
   bananaHandLocalX: -0.42,
   bananaHandLocalY: -0.4,
   bananaHandLocalZ: -0.52,
+  /** PvP: third-person banana on peer avatar root (same scale as FP hand banana). */
+  bananaOpponentLocalX: 0.34,
+  bananaOpponentLocalY: 0.04,
+  bananaOpponentLocalZ: 0.39,
+  bananaOpponentRotYDeg: -22,
 
   /**
    * FP megaphone (`MegaPhone.glb`): camera-local rest pose, pull pose while charging, shake.

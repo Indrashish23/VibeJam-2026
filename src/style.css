@@ -1027,13 +1027,147 @@ body {
 }
 
 .charge-bar-wrap {
+  --charge-pct: 0%;
+  --charge-fill-mask: none;
+  --charge-hud-right: 1.25rem;
+  --charge-hud-bias: 0rem;
+  --charge-hud-width: 11.5rem;
+  --charge-hud-max-h: 72vh;
+  --charge-hud-scale: 1;
+  --charge-hud-pct-left: 5%;
+  --charge-hud-pct-top: 1.2%;
+  --charge-hud-pistol-top: 44%;
+  --charge-hud-pistol-w: 58%;
+  --charge-hud-ammo-gap: 0.35rem;
+  --charge-hud-ammo-y: 38%;
   position: absolute;
-  bottom: 1.25rem;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(20rem, calc(100vw - 4rem));
+  right: var(--charge-hud-right);
+  top: calc(50% + var(--charge-hud-bias));
+  transform: translateY(-50%);
+  width: min(var(--charge-hud-width), 28vw);
+  max-width: 100%;
   z-index: 50;
   pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
+}
+
+.charge-wedge {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 603 / 824;
+  max-height: min(var(--charge-hud-max-h), 28rem);
+  flex: 0 0 auto;
+  transform: scale(var(--charge-hud-scale));
+  transform-origin: right center;
+}
+
+.charge-wedge__layer {
+  display: block;
+  pointer-events: none;
+}
+
+.charge-wedge__empty {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  z-index: 0;
+}
+
+.charge-wedge__fill-zone {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.charge-wedge__fill-inner {
+  position: absolute;
+  inset: 0;
+  -webkit-mask-image: var(--charge-fill-mask);
+  mask-image: var(--charge-fill-mask);
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  clip-path: inset(calc(100% - var(--charge-pct, 0%)) 0 0 0);
+  background: linear-gradient(0deg, #f59e0b 0%, #fbbf24 45%, #fde68a 100%);
+  box-shadow: 0 0 18px rgba(251, 191, 36, 0.4);
+  transition: clip-path 0.05s linear;
+  will-change: clip-path;
+}
+
+.charge-wedge__fill-inner--max {
+  background: linear-gradient(0deg, #c9a227 0%, #f0c674 35%, #e8a598 70%, #f0c0c8 100%);
+  box-shadow: 0 0 22px rgba(240, 198, 116, 0.5);
+}
+
+.charge-wedge__chrome {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.charge-wedge__top {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+
+.charge-wedge__pct {
+  position: absolute;
+  z-index: 3;
+  left: var(--charge-hud-pct-left);
+  top: var(--charge-hud-pct-top);
+  width: 38%;
+  text-align: center;
+  font-family: 'Krona One', system-ui, sans-serif;
+  font-size: clamp(0.7rem, 2.3vw, 0.95rem);
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+  color: #fff;
+  text-shadow:
+    0 0 2px rgba(0, 0, 0, 0.9),
+    0 1px 2px rgba(0, 0, 0, 0.85);
+  pointer-events: none;
+}
+
+.charge-wedge__pistol-overlay {
+  position: absolute;
+  z-index: 4;
+  right: 0;
+  top: var(--charge-hud-pistol-top);
+  width: var(--charge-hud-pistol-w);
+  min-height: 3.1rem;
+  padding: 0.35rem 0.4rem 0.35rem 0.3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(21, 36, 4, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  transform: skewY(-2deg);
+}
+
+.charge-wedge__pistol-text {
+  margin: 0;
+  font-family: 'Krona One', system-ui, sans-serif;
+  font-size: clamp(0.45rem, 1.45vw, 0.6rem);
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  text-align: center;
+  text-transform: none;
+  color: #f8fafc;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
 
 .ammo-count {
@@ -1042,8 +1176,8 @@ body {
   font-weight: 800;
   letter-spacing: 0.04em;
   color: #fde68a;
-  text-align: center;
-  margin-bottom: 0.18rem;
+  text-align: right;
+  margin-bottom: 0;
   line-height: 1;
   text-shadow:
     -1px -1px 0 rgba(0, 0, 0, 0.85),
@@ -1075,9 +1209,9 @@ body {
 
 .ammo-feedback {
   position: absolute;
-  left: 50%;
-  bottom: calc(100% - 0.6rem);
-  transform: translate(calc(-50% + 4.6rem), 0);
+  right: calc(100% + var(--charge-hud-ammo-gap));
+  top: var(--charge-hud-ammo-y);
+  transform: translate(0, -50%);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 18pt;
   font-weight: 800;
@@ -1101,20 +1235,32 @@ body {
 @keyframes ammo-feedback-pop {
   0% {
     opacity: 0;
-    transform: translate(calc(-50% + 4.6rem), 0.4rem) scale(0.7);
+    transform: translate(0, 0.4rem) scale(0.7);
   }
   18% {
     opacity: 1;
-    transform: translate(calc(-50% + 4.6rem), -0.15rem) scale(1.18);
+    transform: translate(0, -0.15rem) scale(1.18);
   }
   60% {
     opacity: 0.95;
-    transform: translate(calc(-50% + 4.6rem), -0.95rem) scale(1);
+    transform: translate(0, -0.95rem) scale(1);
   }
   100% {
     opacity: 0;
-    transform: translate(calc(-50% + 4.6rem), -1.7rem) scale(0.92);
+    transform: translate(0, -1.7rem) scale(0.92);
   }
+}
+
+.charge-bar-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }
 
 .charge-bar-label {
@@ -1145,46 +1291,31 @@ body {
   animation: charge-label-vibrate 0.26s ease-in-out infinite;
 }
 
-.charge-bar-track {
-  position: relative;
-  height: 1.1rem;
-  border-radius: 999px;
-  background: rgba(15, 23, 42, 0.92);
-  border: 2px solid rgba(148, 163, 184, 0.35);
-  overflow: hidden;
-  box-shadow:
-    inset 0 2px 8px rgba(0, 0, 0, 0.45),
-    0 4px 18px rgba(0, 0, 0, 0.35);
-}
-
-.charge-bar-fill {
-  height: 100%;
-  width: 0%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #38bdf8 0%, #fb923c 52%, #ef4444 100%);
-  box-shadow: 0 0 14px rgba(251, 146, 60, 0.45);
-  transition: width 0.05s linear;
-}
-
 .charge-bar-min {
   position: absolute;
-  top: -4px;
-  bottom: -4px;
-  width: 3px;
-  margin-left: -1.5px;
-  background: rgba(248, 250, 252, 0.95);
-  border-radius: 2px;
-  box-shadow: 0 0 6px rgba(255, 255, 255, 0.6);
+  left: 8%;
+  right: 8%;
+  height: 0;
+  border-top: 2px solid rgba(248, 250, 252, 0.95);
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.5);
   pointer-events: none;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+  border-radius: 0;
+  transform: translateY(1px);
 }
 
-.charge-bar-wrap--overload .charge-bar-track {
+.charge-bar-wrap--overload .charge-wedge__fill-zone {
   animation: charge-bar-shake-inner 0.1s ease-in-out infinite;
 }
 
-.charge-bar-wrap--ready .charge-bar-track {
+.charge-bar-wrap--ready .charge-wedge__fill-zone {
   animation: charge-bar-ready-pulse 0.34s ease-in-out infinite;
-  border-color: rgba(251, 191, 36, 0.9);
+  filter: drop-shadow(0 0 4px rgba(251, 191, 36, 0.45));
 }
 
 @keyframes charge-bar-shake-inner {
