@@ -24,7 +24,18 @@ const PORT = Number(process.env.PVP_LISTEN_PORT || 8765)
 
 let bananaRelaxedTrustWarned = false
 
-/** @typedef {{ peers: Set<import('ws').WebSocket>, poses: { host: object | null, guest: object | null }, percent: { host: number, guest: number }, shots: Set<string>, ended: boolean }} Room */
+/**
+ * @typedef {{
+ *   peers: Set<import('ws').WebSocket>
+ *   poses: { host: object | null, guest: object | null }
+ *   percent: { host: number, guest: number }
+ *   shots: Set<string>
+ *   ended: boolean
+ *   stocks: { host: number, guest: number }
+ *   ringOutPending: 'host' | 'guest' | null
+ *   respawnInvulnUntil: { host: number, guest: number }
+ * }} Room
+ */
 
 /** @type {Map<string, Room>} */
 const rooms = new Map()
@@ -32,12 +43,16 @@ const rooms = new Map()
 function getOrCreateRoom(roomId) {
   let r = rooms.get(roomId)
   if (!r) {
+    const n = Math.max(1, Math.round(COMBAT.startStocks))
     r = {
       peers: new Set(),
       poses: { host: null, guest: null },
       percent: { host: 0, guest: 0 },
       shots: new Set(),
       ended: false,
+      stocks: { host: n, guest: n },
+      ringOutPending: null,
+      respawnInvulnUntil: { host: 0, guest: 0 },
     }
     rooms.set(roomId, r)
   }
@@ -100,16 +115,29 @@ function validateRingOut(roomId, r) {
   if (r.ended) return
   const roles = /** @type {const} */ (['host', 'guest'])
   for (const role of roles) {
+    if (r.ringOutPending === role) continue
     const pose = r.poses[role]
     if (pose && checkFeetEliminated(pose)) {
-      r.ended = true
-      const winner = role === 'host' ? 'guest' : 'host'
-      const payload = JSON.stringify({
-        type: 'authMatchEnd',
-        winnerRole: winner,
-        reason: 'ring',
+      r.stocks[role] = Math.max(0, r.stocks[role] - 1)
+      if (r.stocks[role] <= 0) {
+        r.ended = true
+        const winner = role === 'host' ? 'guest' : 'host'
+        const payload = JSON.stringify({
+          type: 'authMatchEnd',
+          winnerRole: winner,
+          reason: 'ring',
+        })
+        broadcastAll(roomId, payload)
+        return
+      }
+      r.ringOutPending = role
+      const ko = JSON.stringify({
+        type: 'authStockKO',
+        victimRole: role,
+        stocksHost: r.stocks.host,
+        stocksGuest: r.stocks.guest,
       })
-      broadcastAll(roomId, payload)
+      broadcastAll(roomId, ko)
       return
     }
   }
@@ -122,6 +150,8 @@ function validateVoiceShot(roomId, ws, raw, data) {
   if (aggressor !== 'host' && aggressor !== 'guest') return
 
   const victim = aggressor === 'host' ? 'guest' : 'host'
+  if (Date.now() < (r.respawnInvulnUntil[victim] || 0)) return
+
   let oppPose = r.poses[victim]
   if (!oppPose) oppPose = defaultPose(victim)
 
@@ -234,6 +264,17 @@ wss.on('connection', (ws, req) => {
       ws._vjRole = parsed.role === 'host' || parsed.role === 'guest' ? parsed.role : undefined
     }
 
+    if (t === 'authRespawn' && ws._vjRole === 'host') {
+      const vr = parsed.victimRole
+      if (vr === 'host' || vr === 'guest') {
+        if (r.ringOutPending === vr) r.ringOutPending = null
+        const msRaw = parsed.invulnMs
+        const ms =
+          typeof msRaw === 'number' && Number.isFinite(msRaw) ? Math.min(120_000, Math.max(0, msRaw)) : 2000
+        r.respawnInvulnUntil[vr] = Date.now() + ms
+      }
+    }
+
     if (t === 'pose' && ws._vjRole && typeof parsed.x === 'number' && typeof parsed.z === 'number') {
       const role = ws._vjRole
       r.poses[role] = {
@@ -250,6 +291,10 @@ wss.on('connection', (ws, req) => {
       r.ended = false
       r.percent = { host: 0, guest: 0 }
       r.shots.clear()
+      const n = Math.max(1, Math.round(COMBAT.startStocks))
+      r.stocks = { host: n, guest: n }
+      r.ringOutPending = null
+      r.respawnInvulnUntil = { host: 0, guest: 0 }
       return
     }
 

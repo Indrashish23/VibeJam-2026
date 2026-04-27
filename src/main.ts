@@ -38,6 +38,7 @@ import { PointerLockControls } from 'three/addons/controls/PointerLockControls.j
 import { gameConfig } from './gameConfig'
 import { applyPlayerRecordToHud, bumpPlayerRecord } from './playerRecord'
 import { isMapId, loadMap, type MapHandle, type MapId, type SpawnSlot } from './maps'
+import { pickGroundedRespawnFoot } from './spawnRespawn'
 import { BotFighter, type BotMode } from './boxing/bot'
 import { PlayerArms } from './boxing/playerArms'
 import { VoiceChargeManager, audioBufferSliceToWavBlob } from './audio/voiceCharge'
@@ -187,6 +188,10 @@ const dashScanEl = document.getElementById('dash-scanlines') as HTMLDivElement |
 const jumpVfxEl = document.getElementById('jump-vfx') as HTMLDivElement | null
 const hudViewportEl = document.getElementById('hud-viewport') as HTMLDivElement | null
 const percentHudEl = document.getElementById('percent-hud') as HTMLDivElement | null
+const stockStripYouEl = document.getElementById('stock-strip-you') as HTMLDivElement | null
+const stockStripFoeEl = document.getElementById('stock-strip-foe') as HTMLDivElement | null
+const koAnnounceOverlayEl = document.getElementById('ko-announce-overlay') as HTMLDivElement | null
+const koAnnounceNameEl = document.getElementById('ko-announce-name') as HTMLParagraphElement | null
 const chargeBarWrap = document.getElementById('charge-bar-wrap') as HTMLDivElement | null
 const chargeBarFill = document.getElementById('charge-bar-fill') as HTMLDivElement | null
 const chargeBarMinMark = document.getElementById('charge-bar-min') as HTMLDivElement | null
@@ -1372,6 +1377,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     durationMs: number,
     peelId: string,
   ): void {
+    const isVictimMe = victimRole === myPvpRole()
+    if (performance.now() < (isVictimMe ? respawnInvulnUntilYou : respawnInvulnUntilFoe)) return
     if (victimRole === myPvpRole()) {
       playerBananaSlipUntil = performance.now() + Math.max(0, durationMs)
       triggerStunnedHitOverlay()
@@ -1472,6 +1479,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           _bFeet.set(bot.root.position.x, bot.root.position.y - fo, bot.root.position.z)
         }
         if (!feetOnPeel(_bFeet, { x: peel.x, y: peel.y, z: peel.z, id: peel.id }, pr, yt)) continue
+        const victimMe = role === myPvpRole()
+        if (performance.now() < (victimMe ? respawnInvulnUntilYou : respawnInvulnUntilFoe)) continue
         pvpHostBroadcastAndApply({ type: 'bananaAuthSlip', victimRole: role, ms: d, peelId: peel.id })
         continue nextPeel
       }
@@ -1549,10 +1558,15 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let playerPercent = 0
   let enemyPercent = 0
   let matchOutcome: null | 'win' | 'lose' = null
-  /** Match stats for HUD/debug; PvP now ends on first ring-out. */
-  let seriesWinsSelf = 0
-  let seriesWinsOpp = 0
   let seriesTransitionActive = false
+  /** Per-fighter stocks (you = local role, foe = bot / opponent avatar). */
+  let stocksYou = Math.max(1, Math.round(gameConfig.startStocks))
+  let stocksFoe = Math.max(1, Math.round(gameConfig.startStocks))
+  let respawnInvulnUntilYou = 0
+  let respawnInvulnUntilFoe = 0
+  /** Offline: ring-out victim is mid-KO pipeline (prevents duplicate KOs while still in blast). */
+  let offlineBlastKoPending: null | 'you' | 'foe' = null
+  const hostKoRespawnTimers = new Map<'host' | 'guest', ReturnType<typeof setTimeout>>()
   let victimWhiteFlashUntil = 0
 
   const playerKnock = new Vector3()
@@ -1992,8 +2006,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     matchOutcome = null
     winFinisher = null
     hideWinGameSplash()
-    seriesWinsSelf = 0
-    seriesWinsOpp = 0
+    resetMatchStockState()
     playerPercent = 0
     enemyPercent = 0
     playerHurt = 'none'
@@ -2065,10 +2078,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     seriesTransitionActive = true
     const epochAtStart = pvpMatchEpoch
     try {
-      if (iWonRound) {
-        seriesWinsSelf += 1
-        tutorialBotRingouts += 1
-      } else seriesWinsOpp += 1
+      if (iWonRound) tutorialBotRingouts += 1
       if (iWonRound) await playWinGameSplashSequence()
       if (epochAtStart !== pvpMatchEpoch) return
       endMatch(iWonRound ? 'win' : 'lose')
@@ -2151,8 +2161,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     stopPublicHostAnnounce()
     lobbyDummyPractice = false
     mpSeqStarted = true
-    seriesWinsSelf = 0
-    seriesWinsOpp = 0
+    resetMatchStockState()
 
     if (isOnline && lobby.mode === 'online') {
       spawnActors()
@@ -2251,7 +2260,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (matchRematchIncomingEl) matchRematchIncomingEl.hidden = true
     if (matchRematchPrimaryActionsEl) matchRematchPrimaryActionsEl.hidden = false
     if (matchRematchBtnEl) matchRematchBtnEl.hidden = false
-    if (matchCloseBtnEl) matchCloseBtnEl.hidden = false
+    if (matchCloseBtnEl) {
+      matchCloseBtnEl.hidden = isPvp()
+    }
     if (matchRematchStatusEl) {
       matchRematchStatusEl.hidden = true
       matchRematchStatusEl.textContent = ''
@@ -2480,6 +2491,29 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         }
         scheduleMpBegin()
       }
+      return
+    }
+
+    if (ty === 'authStockKO' && lobby.mode === 'online') {
+      const sh = data.stocksHost
+      const sg = data.stocksGuest
+      if (typeof sh === 'number' && typeof sg === 'number' && Number.isFinite(sh) && Number.isFinite(sg)) {
+        applyNetworkStocksFromPayload(sh, sg)
+      }
+      const vr =
+        data.victimRole === 'host' || data.victimRole === 'guest' ? data.victimRole : undefined
+      if (vr) {
+        showKoAnnouncement(vr === lobby.role ? displayPlayerName() : opponentHudName())
+        animateKoStockLoss(vr === lobby.role ? 'you' : 'foe')
+        if (lobby.role === 'host') {
+          scheduleAuthRespawnHost(vr)
+        }
+      }
+      return
+    }
+
+    if (ty === 'authRespawn' && lobby.mode === 'online') {
+      applyAuthRespawnPayload(data)
       return
     }
 
@@ -2802,15 +2836,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       return
     }
 
-    if (ty === 'youLose') {
-      if (!matchOutcome && !seriesTransitionActive) void concludeRoundElimination(false)
-      return
-    }
-
-    if (ty === 'youWin') {
-      if (!matchOutcome && !seriesTransitionActive) void concludeRoundElimination(true)
-      return
-    }
   }
 
   function onMpSocketMessage(ev: MessageEvent): void {
@@ -3386,6 +3411,243 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       chargeBarMinMark.style.bottom = `${Math.max(0, Math.min(1, gameConfig.voiceMinChargeToFire)) * 100}%`
     }
     updateChargeStatusUi(voiceChargeSmoothed)
+    syncStocksHud()
+  }
+
+  function resetMatchStockState(): void {
+    const n = Math.max(1, Math.round(gameConfig.startStocks))
+    stocksYou = n
+    stocksFoe = n
+    respawnInvulnUntilYou = 0
+    respawnInvulnUntilFoe = 0
+    offlineBlastKoPending = null
+    for (const t of hostKoRespawnTimers.values()) window.clearTimeout(t)
+    hostKoRespawnTimers.clear()
+    syncStocksHud()
+  }
+
+  function applyNetworkStocksFromPayload(stocksHost: number, stocksGuest: number): void {
+    if (lobby.mode !== 'online') return
+    if (lobby.role === 'host') {
+      stocksYou = stocksHost
+      stocksFoe = stocksGuest
+    } else {
+      stocksYou = stocksGuest
+      stocksFoe = stocksHost
+    }
+    syncStocksHud()
+  }
+
+  function fillStockStrip(
+    el: HTMLDivElement | null,
+    filled: number,
+    cap: number,
+    playLastLost: boolean,
+  ): void {
+    if (!el) return
+    el.replaceChildren()
+    for (let i = 0; i < cap; i++) {
+      const pip = document.createElement('span')
+      pip.className = 'stock-pip'
+      const on = i < filled
+      if (on) pip.classList.add('stock-pip--on')
+      else if (playLastLost && i === filled) pip.classList.add('stock-pip--lost-pop')
+      el.appendChild(pip)
+    }
+  }
+
+  function syncStocksHud(): void {
+    const cap = Math.max(1, Math.round(gameConfig.startStocks))
+    fillStockStrip(stockStripYouEl, stocksYou, cap, false)
+    fillStockStrip(stockStripFoeEl, stocksFoe, cap, false)
+  }
+
+  function animateKoStockLoss(who: 'you' | 'foe'): void {
+    const cap = Math.max(1, Math.round(gameConfig.startStocks))
+    if (who === 'you') fillStockStrip(stockStripYouEl, stocksYou, cap, true)
+    else fillStockStrip(stockStripFoeEl, stocksFoe, cap, true)
+  }
+
+  function spawnSlotForRole(roleNet: 'host' | 'guest'): SpawnSlot {
+    const slots = spawnSlots()
+    if (lobby.mode !== 'online') return slots.player
+    return roleNet === lobby.role ? slots.player : slots.opponent
+  }
+
+  function showKoAnnouncement(displayName: string): void {
+    if (!koAnnounceOverlayEl || !koAnnounceNameEl) return
+    koAnnounceNameEl.textContent = displayName.toUpperCase()
+    koAnnounceOverlayEl.hidden = false
+    koAnnounceOverlayEl.classList.remove('ko-announce-overlay--visible')
+    void koAnnounceOverlayEl.offsetWidth
+    koAnnounceOverlayEl.classList.add('ko-announce-overlay--visible')
+  }
+
+  function hideKoAnnouncementDeferred(): void {
+    if (!koAnnounceOverlayEl) return
+    koAnnounceOverlayEl.classList.remove('ko-announce-overlay--visible')
+    window.setTimeout(() => {
+      if (koAnnounceOverlayEl) koAnnounceOverlayEl.hidden = true
+    }, 380)
+  }
+
+  function scheduleAuthRespawnHost(victimRole: 'host' | 'guest'): void {
+    const prev = hostKoRespawnTimers.get(victimRole)
+    if (prev != null) window.clearTimeout(prev)
+    const tid = window.setTimeout(() => {
+      hostKoRespawnTimers.delete(victimRole)
+      computeAndEmitAuthRespawn(victimRole)
+    }, gameConfig.koAnnounceHoldMs)
+    hostKoRespawnTimers.set(victimRole, tid)
+  }
+
+  function computeAndEmitAuthRespawn(victimRole: 'host' | 'guest'): void {
+    if (lobby.mode !== 'online' || lobby.role !== 'host') return
+    const slot = spawnSlotForRole(victimRole)
+    const candidates = map.getRespawnFootCandidates(slot)
+    let feet = pickGroundedRespawnFoot(terrainPhysics, map, candidates)
+    if (!feet) {
+      feet = new Vector3().copy(map.getPlayerSpawn(slot, 0))
+    }
+    const slots = spawnSlots()
+    let ry: number
+    const victimIsLocal = victimRole === lobby.role
+    if (victimIsLocal) {
+      const oppSpawn = map.getBotSpawn(slots.opponent, bot.getFootOffset())
+      const camPt = new Vector3(feet.x, feet.y + eyeH(), feet.z)
+      ry = yawFacing(camPt, oppSpawn)
+    } else {
+      const botPt = new Vector3(feet.x, feet.y + bot.getFootOffset(), feet.z)
+      const camSpawn = map.getPlayerSpawn(slots.player, eyeH())
+      ry = yawFacing(botPt, camSpawn)
+    }
+    const invulnMs = gameConfig.respawnInvulnMs
+    const payload: Record<string, unknown> = {
+      type: 'authRespawn',
+      victimRole,
+      x: feet.x,
+      fy: feet.y,
+      z: feet.z,
+      ry,
+      invulnMs,
+    }
+    sendGameTraffic(payload)
+    dispatchPeerGamePayload(payload)
+  }
+
+  function applyAuthRespawnPayload(data: Record<string, unknown>): void {
+    const vr = data.victimRole === 'host' || data.victimRole === 'guest' ? data.victimRole : undefined
+    if (!vr || lobby.mode !== 'online') return
+    const x = typeof data.x === 'number' ? data.x : 0
+    const fy = typeof data.fy === 'number' ? data.fy : 0
+    const z = typeof data.z === 'number' ? data.z : 0
+    const ry = typeof data.ry === 'number' ? data.ry : 0
+    const invulnMs =
+      typeof data.invulnMs === 'number' && Number.isFinite(data.invulnMs)
+        ? Math.max(0, data.invulnMs)
+        : gameConfig.respawnInvulnMs
+
+    const victimIsYou = vr === lobby.role
+    const until = performance.now() + invulnMs
+    const untilAuth = Date.now() + invulnMs
+
+    if (victimIsYou) {
+      playerPercent = 0
+      respawnInvulnUntilYou = until
+      camera.position.set(x, fy + eyeH(), z)
+      camera.rotation.reorder('YXZ')
+      camera.rotation.set(0, ry, 0)
+      vy = 0
+      playerKnock.set(0, 0, 0)
+      dashVel.set(0, 0, 0)
+      playerHurt = 'none'
+      playerHurtRecoverLeft = 0
+      hideStunnedFxOverlay()
+    } else {
+      enemyPercent = 0
+      respawnInvulnUntilFoe = until
+      bot.resetRoundState()
+      bot.root.position.set(x, fy + bot.getFootOffset(), z)
+      bot.root.rotation.set(0, ry, 0)
+      if (bot.mode === 'network') {
+        bot.networkTargetPos.copy(bot.root.position)
+      }
+      bot.alignFacingToward(camera.position)
+      bot.beginRespawnMeshFlash(invulnMs)
+    }
+    browserHost?.notifyRespawnApplied(vr)
+    browserHost?.setRespawnInvulnUntil(vr, untilAuth)
+    syncHud()
+    warpRapierCapsulesToCurrentActors()
+  }
+
+  function triggerOfflineRingStockKo(victim: 'you' | 'foe'): void {
+    if (seriesTransitionActive || matchOutcome || offlineBlastKoPending) return
+
+    if (victim === 'you') stocksYou = Math.max(0, stocksYou - 1)
+    else stocksFoe = Math.max(0, stocksFoe - 1)
+
+    syncStocksHud()
+
+    const remaining = victim === 'you' ? stocksYou : stocksFoe
+
+    if (remaining <= 0) {
+      winFinisher = null
+      hideWinGameSplash()
+      void concludeRoundElimination(victim === 'foe')
+      return
+    }
+
+    offlineBlastKoPending = victim
+    showKoAnnouncement(victim === 'you' ? displayPlayerName() : opponentHudName())
+    animateKoStockLoss(victim)
+
+    window.setTimeout(() => {
+      hideKoAnnouncementDeferred()
+      applyOfflineRespawnFeet(victim)
+      offlineBlastKoPending = null
+    }, gameConfig.koAnnounceHoldMs)
+  }
+
+  function applyOfflineRespawnFeet(victim: 'you' | 'foe'): void {
+    const slots = spawnSlots()
+    const slot = victim === 'you' ? slots.player : slots.opponent
+    const candidates = map.getRespawnFootCandidates(slot)
+    let feet = pickGroundedRespawnFoot(terrainPhysics, map, candidates)
+    if (!feet) {
+      feet = new Vector3().copy(map.getPlayerSpawn(slot, 0))
+    }
+
+    const invulnMs = gameConfig.respawnInvulnMs
+    const until = performance.now() + invulnMs
+
+    if (victim === 'you') {
+      playerPercent = 0
+      respawnInvulnUntilYou = until
+      camera.position.set(feet.x, feet.y + eyeH(), feet.z)
+      const oppSpawn = map.getBotSpawn(slots.opponent, bot.getFootOffset())
+      const yaw = yawFacing(camera.position, oppSpawn)
+      camera.rotation.reorder('YXZ')
+      camera.rotation.set(0, yaw, 0)
+      vy = 0
+      playerKnock.set(0, 0, 0)
+      dashVel.set(0, 0, 0)
+      playerHurt = 'none'
+      playerHurtRecoverLeft = 0
+      hideStunnedFxOverlay()
+    } else {
+      enemyPercent = 0
+      respawnInvulnUntilFoe = until
+      bot.resetRoundState()
+      bot.root.position.set(feet.x, feet.y + bot.getFootOffset(), feet.z)
+      bot.alignFacingToward(camera.position)
+      if (bot.mode === 'network') {
+        bot.networkTargetPos.copy(bot.root.position)
+      }
+      bot.beginRespawnMeshFlash(invulnMs)
+    }
+    syncHud()
+    warpRapierCapsulesToCurrentActors()
   }
 
   function updateChargeStatusUi(charge: number): void {
@@ -3659,7 +3921,20 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (!winFinisher || winFinisher.phase !== 'flash') return
     if (performance.now() - winFinisher.started <= 8) return
     winFinisher = null
-    void concludeRoundElimination(true)
+    stocksFoe = Math.max(0, stocksFoe - 1)
+    syncStocksHud()
+    if (stocksFoe <= 0) {
+      void concludeRoundElimination(true)
+      return
+    }
+    offlineBlastKoPending = 'foe'
+    showKoAnnouncement(opponentHudName())
+    animateKoStockLoss('foe')
+    window.setTimeout(() => {
+      hideKoAnnouncementDeferred()
+      applyOfflineRespawnFeet('foe')
+      offlineBlastKoPending = null
+    }, gameConfig.koAnnounceHoldMs)
   }
 
   /**
@@ -3715,8 +3990,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       pendingOutgoingRematchId = null
       pendingIncomingRematchId = null
       matchOutcome = null
-      seriesWinsSelf = 0
-      seriesWinsOpp = 0
+      resetMatchStockState()
       hideMatchEndAndRematchUiFully()
       chargingLmb = false
       clearPistolState()
@@ -3795,8 +4069,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (matchEndSub) {
       matchEndSub.textContent =
         outcome === 'win'
-          ? 'Opponent got launched out of bounds. Rematch to play again.'
-          : 'You were launched out of bounds. Rematch to play again.'
+          ? 'Opponent ran out of stocks. Hit Rematch for another round.'
+          : 'You ran out of stocks. Rematch to try again.'
     }
     if (isOnline && lobby.mode === 'online') {
       showMatchEndRematchControlsDefault()
@@ -3999,7 +4273,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       if (map.isBlastZone(camera.position)) {
         winFinisher = null
         hideWinGameSplash()
-        void concludeRoundElimination(false)
+        triggerOfflineRingStockKo('you')
         return
       }
       arms.update(delta)
@@ -4015,7 +4289,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     bot.update(delta, camera.position, terrainPhysics, playerProjActive)
 
     /* Player projectile vs bot — dedicated listen server validates shots when authPvp() */
-    if (arms.canDealHit() && !authPvp()) {
+    const localInvulnShoot = performance.now() >= respawnInvulnUntilYou
+    if (arms.canDealHit() && localInvulnShoot && !authPvp()) {
       if (arms.isHeadscan()) {
         arms.getHeadscanContactPoint(bot.bodyCenter, _fp)
       } else {
@@ -4069,9 +4344,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
 
     /* Bot projectile vs player */
-    if (bot.canDealHit(camera.position) && !authPvp()) {
+    const foeInvulnShoot = performance.now() >= respawnInvulnUntilFoe
+    if (bot.canDealHit(camera.position) && foeInvulnShoot && !authPvp()) {
       const now = performance.now()
       if (
+        now < respawnInvulnUntilYou ||
         now < playerInvulnUntil ||
         playerHurt === 'air' ||
         playerHurt === 'recover'
@@ -4155,7 +4432,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
                 { x: pl.x, y: pl.y, z: pl.z, id: pl.id },
                 prad,
                 yt,
-              )
+              ) &&
+              performance.now() >= respawnInvulnUntilYou
             ) {
               playerBananaSlipUntil = performance.now() + gameConfig.bananaSlipMs
               triggerStunnedHitOverlay()
@@ -4164,7 +4442,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
               bananaWorld.removePeelById(pl.id)
             } else if (
               !bot.isBananaSlipNow() &&
-              feetOnPeel(bf3, { x: pl.x, y: pl.y, z: pl.z, id: pl.id }, prad, yt)
+              feetOnPeel(bf3, { x: pl.x, y: pl.y, z: pl.z, id: pl.id }, prad, yt) &&
+              performance.now() >= respawnInvulnUntilFoe
             ) {
               bot.applyBananaSlipMs(gameConfig.bananaSlipMs)
               bananaWorld.removePeelById(pl.id)
@@ -4184,21 +4463,24 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
     if (!authPvp()) {
       const listenAuth = isOnline && lobby.mode === 'online' && isAuthoritativeListenServer()
-      if (map.isBlastZone(camera.position)) {
-        if (lobbyDummyPractice) {
-          applyRoundReset()
+      if (!listenAuth) {
+        if (map.isBlastZone(camera.position)) {
+          if (offlineBlastKoPending === 'you') return
+          if (lobbyDummyPractice) {
+            applyRoundReset()
+            return
+          }
+          triggerOfflineRingStockKo('you')
           return
         }
-        if (isPvp() && !listenAuth) sendMp({ type: 'youWin' })
-        if (!listenAuth) void concludeRoundElimination(false)
-      }
-      if (map.isBlastZone(bot.root.position)) {
-        if (lobbyDummyPractice) {
-          applyRoundReset()
-          return
+        if (map.isBlastZone(bot.root.position)) {
+          if (offlineBlastKoPending === 'foe') return
+          if (lobbyDummyPractice) {
+            applyRoundReset()
+            return
+          }
+          triggerOfflineRingStockKo('foe')
         }
-        if (isPvp() && !listenAuth) sendMp({ type: 'youLose' })
-        if (!listenAuth) void concludeRoundElimination(true)
       }
     }
   }
@@ -4961,7 +5243,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       charging: megaphoneCanCharge && (chargingLmb || chargingRmb),
       charge01: voiceChargeSmoothed,
       idleWeaponSway,
+      respawnFlashPulse: performance.now() < respawnInvulnUntilYou,
     })
+    gameRoot.classList.toggle('game-root--respawn-invuln', performance.now() < respawnInvulnUntilYou)
     bananaWorld.syncHandPoseFromConfig()
     bananaWorld.syncOpponentBananaPoseFromConfig()
     bananaWorld.applyHandPresentationSway(idleWeaponSway)

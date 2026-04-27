@@ -35,6 +35,8 @@ export type MegaphoneUpdateOpts = {
    * @default true
    */
   idleWeaponSway?: boolean
+  /** Blink FP megaphone visibility during respawn invulnerability (`respawnFlashHz`). */
+  respawnFlashPulse?: boolean
 }
 
 /**
@@ -115,6 +117,7 @@ export class MegaphoneFpProp {
       megaphonePullSmoothSec,
       voiceMinChargeToFire,
       fpWeaponSwayMul,
+      respawnFlashHz,
     } = gameConfig
 
     this.visualRoot.scale.setScalar(Math.max(0.05, megaphoneScaleMul))
@@ -206,6 +209,14 @@ export class MegaphoneFpProp {
       )
       _qShake.setFromEuler(_eShake)
       this.root.quaternion.multiply(_qShake)
+    }
+
+    const hz = Math.max(1, respawnFlashHz)
+    if (opts.respawnFlashPulse) {
+      const phase = Math.floor((performance.now() / 1000) * hz)
+      this.visualRoot.visible = phase % 2 === 0
+    } else {
+      this.visualRoot.visible = true
     }
   }
 

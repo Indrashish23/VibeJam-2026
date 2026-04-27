@@ -288,6 +288,15 @@ export const defaultGameConfig = {
   showBlastBounds: 0,
   /** Fall below this Y on blast zone (death plane). */
   blastY: -38,
+
+  /** Stocks per fighter at match start / after rematch reset (Smash-style ring-outs). */
+  startStocks: 2,
+  /** Hold KO name + stock HUD punch animation before teleport respawn (ms). */
+  koAnnounceHoldMs: 1000,
+  /** Invulnerability after respawn — no incoming/outgoing combat (ms). */
+  respawnInvulnMs: 2000,
+  /** Enemy mesh flash cadence during respawn invuln (blinks per second). */
+  respawnFlashHz: 10,
   botBodyRadius: 0.72,
   botPunchRange: 3.8,
   botHitRadius: 0.95,

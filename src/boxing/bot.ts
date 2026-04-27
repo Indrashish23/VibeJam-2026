@@ -96,6 +96,7 @@ export class BotFighter {
   private readonly monkeyMaterials: { mat: MeshStandardMaterial | MeshPhysicalMaterial; baseColor: Color }[] = []
   private victimInvulnFlashEnd = 0
   private readonly _flashWhite = new Color(0xffffff)
+  private respawnMeshFlashUntil = 0
   /** Banana slip: no locomotion/attack until this time. */
   bananaSlipUntil = 0
 
@@ -534,6 +535,7 @@ export class BotFighter {
       mat.color.copy(baseColor)
     }
     this.clearProjectile()
+    this.respawnMeshFlashUntil = 0
   }
 
   setRecordingTelegraph(active: boolean): void {
@@ -543,6 +545,25 @@ export class BotFighter {
   /** Brief white tint (invuln / got hit feedback) on the visible bot mesh. */
   flashVictimInvuln(ms: number): void {
     this.victimInvulnFlashEnd = performance.now() + Math.max(80, ms)
+  }
+
+  /** Post-respawn invulnerability: toggle visible mesh opacity cadence (`respawnFlashHz`). */
+  beginRespawnMeshFlash(durationMs: number): void {
+    this.respawnMeshFlashUntil = performance.now() + Math.max(0, durationMs)
+  }
+
+  private applyRespawnMeshFlash(): void {
+    const now = performance.now()
+    if (now >= this.respawnMeshFlashUntil) {
+      if (this.monkeyWrap) this.monkeyWrap.visible = true
+      else this.mesh.visible = true
+      return
+    }
+    const hz = Math.max(1, gameConfig.respawnFlashHz)
+    const phase = Math.floor((now / 1000) * hz)
+    const vis = phase % 2 === 0
+    if (this.monkeyWrap) this.monkeyWrap.visible = vis
+    else this.mesh.visible = vis
   }
 
   private applyVictimInvulnFlash(): void {
@@ -948,6 +969,7 @@ export class BotFighter {
         this.projMesh.scale.setScalar(this.projSizeMul)
         this.projMesh.visible = true
       }
+      this.applyRespawnMeshFlash()
       return
     }
 
@@ -1049,6 +1071,7 @@ export class BotFighter {
       this.projMesh.position.copy(this.projPos)
       this.projMesh.visible = true
     }
+    this.applyRespawnMeshFlash()
   }
 
   canDealHit(playerPos: Vector3): boolean {

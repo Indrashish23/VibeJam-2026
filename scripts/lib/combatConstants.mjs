@@ -21,6 +21,8 @@ export const COMBAT = {
   feetFromCenterApprox: 0.85,
   blastMargin: 12,
   blastY: -12,
+  /** Stocks per fighter at match begin / after series reset — mirror `gameConfig.startStocks`. */
+  startStocks: 2,
   groundWidth: 52,
   groundDepth: 52,
 }

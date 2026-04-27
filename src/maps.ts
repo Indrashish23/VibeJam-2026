@@ -51,6 +51,11 @@ export type MapHandle = {
   getPlayerSpawn: (slot: SpawnSlot, eyeHeight: number) => Vector3
   /** Bot root world position for a spawn marker. */
   getBotSpawn: (slot: SpawnSlot, footOffset: number) => Vector3
+  /**
+   * Foot-space spawn candidates for respawn raycasts (Y may be approximate for GLTF maps).
+   * Combined with {@link pickGroundedRespawnFoot} + TerrainPhysics for grounded picks.
+   */
+  getRespawnFootCandidates: (slot: SpawnSlot) => Vector3[]
   /** Remove the map's geometry from the scene and dispose its GPU resources. */
   dispose: () => void
 }
@@ -274,6 +279,22 @@ function collectGltfArenaData(root: Group, collisionPolicy: GltfCollisionPolicy)
   return { collisionMeshes, spawnA, spawnB, looseSpawns }
 }
 
+function dedupeSpawnPoints(points: readonly Vector3[], eps: number): Vector3[] {
+  const epsSq = eps * eps
+  const out: Vector3[] = []
+  for (const p of points) {
+    let dup = false
+    for (const q of out) {
+      if (p.distanceToSquared(q) < epsSq) {
+        dup = true
+        break
+      }
+    }
+    if (!dup) out.push(p.clone())
+  }
+  return out
+}
+
 function disposeObject3D(root: Object3D): void {
   root.traverse((node) => {
     const mesh = node as Mesh
@@ -317,6 +338,27 @@ function loadDefaultMap(_scene: Scene, hubRoot: Group): MapHandle {
     getBotSpawn(slot: SpawnSlot, footOffset: number): Vector3 {
       const feet = defaultFeetSpawn(slot)
       return new Vector3(feet.x, feet.y + footOffset + 0.08, feet.z)
+    },
+    getRespawnFootCandidates(slot: SpawnSlot): Vector3[] {
+      const arenaHalf = Math.min(gameConfig.groundWidth, gameConfig.groundDepth) * 0.5 - 2.5
+      const spacing = Math.min(6.8, arenaHalf * 0.38)
+      const wx = gameConfig.groundWidth * 0.32
+      const dz = gameConfig.groundDepth * 0.32
+      const list = [
+        defaultFeetSpawn(slot),
+        defaultFeetSpawn(slot === 'a' ? 'b' : 'a'),
+        new Vector3(wx, 0, spacing * 0.4),
+        new Vector3(-wx, 0, spacing * 0.4),
+        new Vector3(wx * 0.62, 0, -spacing * 0.48),
+        new Vector3(-wx * 0.62, 0, -spacing * 0.48),
+        new Vector3(0, 0, spacing * 1.15),
+        new Vector3(0, 0, -spacing * 1.15),
+        new Vector3(spacing * 0.52, 0, 0),
+        new Vector3(-spacing * 0.52, 0, 0),
+        new Vector3(wx * 0.35, 0, dz * 0.35),
+        new Vector3(-wx * 0.35, 0, -dz * 0.35),
+      ]
+      return dedupeSpawnPoints(list, 0.85)
     },
     dispose() {
       hubRoot.remove(container)
@@ -373,6 +415,12 @@ async function loadIslandMap(_scene: Scene, hubRoot: Group): Promise<MapHandle> 
   const fallbackA = new Vector3(0, dropTopY, 6.8)
   const fallbackB = new Vector3(0, dropTopY, -6.8)
 
+  const islandRespawnPool: Vector3[] = []
+  if (spawnA) islandRespawnPool.push(spawnA.clone())
+  if (spawnB) islandRespawnPool.push(spawnB.clone())
+  for (const ls of looseSpawns) islandRespawnPool.push(ls.clone())
+  islandRespawnPool.push(fallbackA.clone(), fallbackB.clone())
+
   function feetSpawn(slot: SpawnSlot): Vector3 {
     return (slot === 'a' ? spawnA : spawnB)?.clone() ?? (slot === 'a' ? fallbackA : fallbackB).clone()
   }
@@ -392,6 +440,11 @@ async function loadIslandMap(_scene: Scene, hubRoot: Group): Promise<MapHandle> 
       const feet = feetSpawn(slot)
       feet.y += footOffset
       return feet
+    },
+    getRespawnFootCandidates(slot: SpawnSlot): Vector3[] {
+      const opp: SpawnSlot = slot === 'a' ? 'b' : 'a'
+      const merged = [feetSpawn(slot), feetSpawn(opp), ...islandRespawnPool.map((v) => v.clone())]
+      return dedupeSpawnPoints(merged, 1.6)
     },
     dispose() {
       hubRoot.remove(container)
@@ -449,6 +502,12 @@ async function loadGodotExportMap(_scene: Scene, hubRoot: Group): Promise<MapHan
   const fallbackA = new Vector3(0, dropTopY, 6.8)
   const fallbackB = new Vector3(0, dropTopY, -6.8)
 
+  const godotRespawnPool: Vector3[] = []
+  if (spawnA) godotRespawnPool.push(spawnA.clone())
+  if (spawnB) godotRespawnPool.push(spawnB.clone())
+  for (const ls of looseSpawns) godotRespawnPool.push(ls.clone())
+  godotRespawnPool.push(fallbackA.clone(), fallbackB.clone())
+
   function feetSpawn(slot: SpawnSlot): Vector3 {
     return (slot === 'a' ? spawnA : spawnB)?.clone() ?? (slot === 'a' ? fallbackA : fallbackB).clone()
   }
@@ -468,6 +527,11 @@ async function loadGodotExportMap(_scene: Scene, hubRoot: Group): Promise<MapHan
       const feet = feetSpawn(slot)
       feet.y += footOffset
       return feet
+    },
+    getRespawnFootCandidates(slot: SpawnSlot): Vector3[] {
+      const opp: SpawnSlot = slot === 'a' ? 'b' : 'a'
+      const merged = [feetSpawn(slot), feetSpawn(opp), ...godotRespawnPool.map((v) => v.clone())]
+      return dedupeSpawnPoints(merged, 1.6)
     },
     dispose() {
       hubRoot.remove(container)

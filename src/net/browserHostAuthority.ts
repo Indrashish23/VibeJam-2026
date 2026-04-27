@@ -31,6 +31,15 @@ function startingPercent(): { host: number; guest: number } {
   return { host: 0, guest: 0 }
 }
 
+function stockCountAtStart(): number {
+  return Math.max(1, Math.round(gameConfig.startStocks))
+}
+
+function startingStocks(): { host: number; guest: number } {
+  const n = stockCountAtStart()
+  return { host: n, guest: n }
+}
+
 export function createBrowserHostAuthority(broadcast: AuthBroadcast) {
   const poses: { host: PoseLite | null; guest: PoseLite | null } = {
     host: null,
@@ -39,19 +48,34 @@ export function createBrowserHostAuthority(broadcast: AuthBroadcast) {
   let percent = startingPercent()
   const shots = new Set<string>()
   let ended = false
+  let stocks = startingStocks()
+  let ringOutPending: 'host' | 'guest' | null = null
+  const respawnInvulnUntil: { host: number; guest: number } = { host: 0, guest: 0 }
 
   function ringCheck(): void {
     if (ended) return
     const roles = ['host', 'guest'] as const
     for (const role of roles) {
+      if (ringOutPending === role) continue
       const p = poses[role]
       if (p && checkFeetEliminated(p)) {
-        ended = true
-        const winner = role === 'host' ? 'guest' : 'host'
+        stocks[role] = Math.max(0, stocks[role] - 1)
+        if (stocks[role] <= 0) {
+          ended = true
+          const winner = role === 'host' ? 'guest' : 'host'
+          broadcast({
+            type: 'authMatchEnd',
+            winnerRole: winner,
+            reason: 'ring',
+          })
+          return
+        }
+        ringOutPending = role
         broadcast({
-          type: 'authMatchEnd',
-          winnerRole: winner,
-          reason: 'ring',
+          type: 'authStockKO',
+          victimRole: role,
+          stocksHost: stocks.host,
+          stocksGuest: stocks.guest,
         })
         return
       }
@@ -68,10 +92,22 @@ export function createBrowserHostAuthority(broadcast: AuthBroadcast) {
       return poses[role]
     },
 
+    /** Called after both peers apply respawn teleport — clears ring-out latch while pose catches up. */
+    notifyRespawnApplied(role: 'host' | 'guest'): void {
+      if (ringOutPending === role) ringOutPending = null
+    },
+
+    /** Host + guests apply this when executing `authRespawn` so authoritative shots respect window. */
+    setRespawnInvulnUntil(role: 'host' | 'guest', untilMs: number): void {
+      respawnInvulnUntil[role] = untilMs
+    },
+
     /** @returns whether a new hit was scored (caller may show aggressor FX; host does not echo authDamage back). */
     processVoiceShot(fromRole: 'host' | 'guest', data: Record<string, unknown>): boolean {
       if (ended) return false
       const victim: 'host' | 'guest' = fromRole === 'host' ? 'guest' : 'host'
+      if (Date.now() < respawnInvulnUntil[victim]) return false
+
       let oppPose = poses[victim]
       if (!oppPose) oppPose = defaultPose(victim)
 
@@ -133,6 +169,10 @@ export function createBrowserHostAuthority(broadcast: AuthBroadcast) {
       percent = startingPercent()
       shots.clear()
       ended = false
+      stocks = startingStocks()
+      ringOutPending = null
+      respawnInvulnUntil.host = 0
+      respawnInvulnUntil.guest = 0
     },
   }
 }

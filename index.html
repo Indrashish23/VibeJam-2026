@@ -274,6 +274,15 @@
         <p id="countdown-title" class="countdown-title" hidden>Match begins in</p>
         <span id="countdown-num" class="countdown-num">3</span>
       </div>
+      <div
+        id="ko-announce-overlay"
+        class="ko-announce-overlay"
+        hidden
+        aria-live="assertive"
+        aria-atomic="true"
+      >
+        <p id="ko-announce-name" class="ko-announce-name"></p>
+      </div>
       <div id="hud-viewport" class="hud-viewport">
         <div id="percent-hud" class="percent-hud" aria-label="Launch percent">
           <div id="player-record-hud" class="player-record-hud" aria-label="Career record">
@@ -292,10 +301,12 @@
             <span id="percent-label-you" class="percent-hud__label">You</span>
             <span id="percent-you" class="percent-hud__value">0%</span>
           </div>
+          <div id="stock-strip-you" class="stock-strip stock-strip--you" aria-hidden="true"></div>
           <div class="percent-hud__row percent-hud__row--foe">
             <span id="percent-label-foe" class="percent-hud__label">Opponent</span>
             <span id="percent-foe" class="percent-hud__value">0%</span>
           </div>
+          <div id="stock-strip-foe" class="stock-strip stock-strip--foe" aria-hidden="true"></div>
         </div>
         <div id="charge-bar-wrap" class="charge-bar-wrap" style="--charge-pct: 0%">
         <div id="ammo-feedback" class="ammo-feedback" hidden aria-hidden="true">+1</div>
@@ -378,7 +389,7 @@
             <button type="button" id="match-rematch-btn" class="match-end-btn match-end-btn--primary">
               Rematch
             </button>
-            <button type="button" id="match-close-btn" class="match-end-btn">Continue</button>
+            <button type="button" id="match-close-btn" class="match-end-btn match-end-btn--secondary">Lobby</button>
           </div>
           <p id="match-rematch-status" class="match-rematch-status" hidden></p>
           <button type="button" id="match-rematch-cancel-btn" class="match-end-btn" hidden>
