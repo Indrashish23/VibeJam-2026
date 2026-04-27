@@ -4600,6 +4600,18 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         if (multiplayerBlocksPlay()) return
         applyPeerMeleeHit(0.62, -0.74, { authoritative: true, victimPercent: playerPercent })
       },
+      onReplayTutorial: () => {
+        if (multiplayerBlocksPlay() || isPvp()) return
+        try {
+          localStorage.removeItem('vibejam_tutorial_done_v1')
+        } catch {
+          /* storage may be blocked */
+        }
+        const wTut = window as unknown as {
+          vibejamStartTutorial?: () => void | Promise<void>
+        }
+        void wTut.vibejamStartTutorial?.()
+      },
       ...(isOnline && lobby.mode === 'online'
         ? { onPracticeWithDummy: beginLobbyDummyPractice }
         : {}),

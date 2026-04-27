@@ -57,6 +57,7 @@ function wireLobbyDom(): {
   joinCode: HTMLInputElement
   joinBtn: HTMLButtonElement
   offline: HTMLButtonElement
+  replayTutorial: HTMLButtonElement | null
   changeName: HTMLButtonElement
   visPrivate: HTMLInputElement
   visPublic: HTMLInputElement
@@ -75,6 +76,7 @@ function wireLobbyDom(): {
     joinCode: document.getElementById('lobby-join-code') as HTMLInputElement,
     joinBtn: document.getElementById('lobby-join') as HTMLButtonElement,
     offline: document.getElementById('lobby-offline') as HTMLButtonElement,
+    replayTutorial: document.getElementById('lobby-replay-tutorial') as HTMLButtonElement | null,
     changeName: document.getElementById('lobby-change-name') as HTMLButtonElement,
     visPrivate: document.getElementById('lobby-vis-private') as HTMLInputElement,
     visPublic: document.getElementById('lobby-vis-public') as HTMLInputElement,
@@ -239,6 +241,19 @@ export function runLobbyGate(initialDisplayName: string): Promise<LobbyResult> {
     ui.offline.onclick = () => {
       clearErr()
       finish({ mode: 'offline', mapId: selectedMapId(ui) })
+    }
+
+    if (ui.replayTutorial) {
+      ui.replayTutorial.onclick = () => {
+        clearErr()
+        try {
+          localStorage.removeItem('vibejam_tutorial_done_v1')
+        } catch {
+          /* storage may be blocked */
+        }
+        /* Force default map so the tutorial runs in the stage it was authored for. */
+        finish({ mode: 'offline', mapId: 'default' })
+      }
     }
 
     ui.create.onclick = () => {

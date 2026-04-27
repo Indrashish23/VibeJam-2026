@@ -32,6 +32,8 @@ export type TweaksPanelHooks = {
   onPracticeWithDummy?: () => void | Promise<void>
   /** Gameplay section: apply a dev knockback to the local player (for testing hit FX). */
   onTriggerKnockbackDev?: () => void
+  /** Re-run the HOWL tutorial in-session (clears the tutorial-done flag and starts fresh). */
+  onReplayTutorial?: () => void | Promise<void>
 }
 
 type RowInput = { key: GameConfigKey; range: HTMLInputElement; num: HTMLInputElement | null }
@@ -439,6 +441,20 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
       })()
     })
     actions.appendChild(practiceBtn)
+  }
+
+  if (hooks.onReplayTutorial) {
+    const tutorialBtn = document.createElement('button')
+    tutorialBtn.type = 'button'
+    tutorialBtn.textContent = 'Replay Tutorial'
+    tutorialBtn.title = 'Run the HOWL tutorial again from the start.'
+    tutorialBtn.addEventListener('click', () => {
+      void (async () => {
+        await hooks.onReplayTutorial!()
+        setOpen(false)
+      })()
+    })
+    actions.appendChild(tutorialBtn)
   }
 
   const debugRoomBtn = document.createElement('button')
