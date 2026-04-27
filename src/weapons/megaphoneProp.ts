@@ -80,12 +80,6 @@ export class MegaphoneFpProp {
     camera.add(this.root)
   }
 
-  /** Smoothstep 0–1 (Ken Perlin). */
-  private static smooth01(t: number): number {
-    const x = Math.min(1, Math.max(0, t))
-    return x * x * (3 - 2 * x)
-  }
-
   update(delta: number, opts: MegaphoneUpdateOpts): void {
     if (!this.loaded) return
 
@@ -114,12 +108,15 @@ export class MegaphoneFpProp {
 
     this.visualRoot.scale.setScalar(Math.max(0.05, megaphoneScaleMul))
 
-    const chargeEase = MegaphoneFpProp.smooth01(opts.charge01)
-    const targetPose = opts.charging ? chargeEase : 0
-    /* One time constant for both easing toward pull (recording) and back to rest — `megaphoneRestReturnSec`. */
-    const easeTauSec = Math.max(0.02, megaphoneRestReturnSec)
-    const alpha = 1 - Math.exp(-delta / easeTauSec)
-    this.poseSmooth += (targetPose - this.poseSmooth) * alpha
+    /* Pull pose snaps on as soon as recording starts; return to rest still eases (see `megaphoneRestReturnSec`). */
+    const targetPose = opts.charging ? 1 : 0
+    if (opts.charging) {
+      this.poseSmooth = 1
+    } else {
+      const restTau = Math.max(0.02, megaphoneRestReturnSec)
+      const alpha = 1 - Math.exp(-delta / restTau)
+      this.poseSmooth += (targetPose - this.poseSmooth) * alpha
+    }
 
     const t = this.poseSmooth
     _tmpPos.set(megaphoneRestLocalX, megaphoneRestLocalY, megaphoneRestLocalZ)

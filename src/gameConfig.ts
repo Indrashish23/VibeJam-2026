@@ -448,7 +448,7 @@ export const defaultGameConfig = {
   megaphonePullPitchDeg: -23,
   megaphonePullYawDeg: 87,
   megaphonePullRollDeg: 7,
-  /** Time constant (s) for easing megaphone toward pull while charging and back to rest (same value). */
+  /** Time constant (s) for easing megaphone back to rest after release (pull snaps on when recording starts). */
   megaphoneRestReturnSec: 0.05,
   megaphoneShakePosAmp: 0.014,
   megaphoneShakeRotDeg: 3.2,
