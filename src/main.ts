@@ -374,14 +374,21 @@ function showHardRematchReloadOverlay(): void {
     el.style.letterSpacing = '0.08em'
     el.style.textTransform = 'uppercase'
     el.textContent = 'Rematching...'
+    el.setAttribute('aria-live', 'polite')
+    el.setAttribute('role', 'status')
     document.body.appendChild(el)
   }
   el.hidden = false
+  el.style.display = 'flex'
+  el.style.pointerEvents = 'auto'
 }
 
 function hideHardRematchReloadOverlay(): void {
   const el = document.getElementById('hard-rematch-reload-overlay') as HTMLDivElement | null
-  if (el) el.hidden = true
+  if (!el) return
+  el.hidden = true
+  el.style.display = 'none'
+  el.style.pointerEvents = 'none'
 }
 
 function saveOnlineRematchReloadLobby(l: LobbyResult): void {
@@ -461,6 +468,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let leaveMatchDialogOpen = false
 
   const isOnline = lobby.mode === 'online'
+  /* Rematch full-page overlay: hide as soon as the game boots so we never depend only on ws `open`. */
+  if (isOnline) hideHardRematchReloadOverlay()
   let mpPhase: 'waiting' | 'starting' | 'live' = isOnline ? 'waiting' : 'live'
   /** Online lobby only: Tweaks "Practice with Dummy" — move and fight vs dummy while still waiting for a peer. */
   let lobbyDummyPractice = false
@@ -4190,7 +4199,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
     try {
       mpSocket = createMultiplayerSocket(onlineLobby.roomId)
-      mpSocket.addEventListener('open', () => {
+      let mpSocketOpenHandled = false
+      const onMpSocketOpen = () => {
+        if (mpSocketOpenHandled) return
+        mpSocketOpenHandled = true
         debugMpLog('ws open')
         hideHardRematchReloadOverlay()
         mpSocket?.send(
@@ -4202,7 +4214,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           }),
         )
         queueMicrotask(() => maybeStartPublicHostAnnounce())
-      })
+      }
+      mpSocket.addEventListener('open', onMpSocketOpen)
+      if (mpSocket.readyState === WebSocket.OPEN) {
+        queueMicrotask(onMpSocketOpen)
+      }
       mpSocket.addEventListener('message', (ev: Event) =>
         onMpSocketMessage(ev as MessageEvent),
       )
