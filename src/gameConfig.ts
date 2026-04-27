@@ -58,7 +58,7 @@ export const defaultGameConfig = {
   lightingUnlitMode: 0,
   movementMaxDelta: 0.1,
 
-  /** 0/1: walking head bob + A/D strafe camera roll (presentation only). Tweaks → FPS view & weapons. */
+  /** 0/1: walking camera Y bob + walk-cycle roll (presentation only). Tweaks → FPS view & weapons. */
   fpViewBobEnabled: 1,
   /** Camera vertical bob peak while walking (m × sin(walk phase)); replaces old pitch-axis bob — arms follow camera. */
   fpHeadbobCameraYMul: 0.026,
@@ -66,10 +66,6 @@ export const defaultGameConfig = {
   fpHeadbobRollDeg: 1.7,
   /** Walk-cycle frequency scale (Hz × move speed blend). */
   fpHeadbobHz: 1.6,
-  /** Max camera roll when holding **A** or **D** alone (deg). */
-  fpStrafeTiltDeg: 3.1,
-  /** Strafe roll ease-back rate after A/D release (higher = faster return to neutral). */
-  fpStrafeTiltEaseHz: 12,
   /** Scales continuous idle hand sway loop on megaphone + banana (0 = off; not movement-gated). */
   fpWeaponSwayMul: 0.55,
   gravity: 38,

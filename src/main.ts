@@ -660,7 +660,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     storedPitchBob: 0,
     storedRollTotal: 0,
     walkPhase: 0,
-    strafeTiltRad: 0,
     /** Vertical camera bob applied at end of frame; stripped at start of movement for clean physics. */
     storedCamBobY: 0,
   }
@@ -994,7 +993,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   function applyFpCameraPresentation(
-    delta: number,
+    _delta: number,
     fpWalk: { moving: boolean; spd01: number },
   ): void {
     _fpViewEuler.setFromQuaternion(camera.quaternion, 'YXZ')
@@ -1021,26 +1020,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         : 0
     }
 
-    let targetStrafe = 0
-    if (keys.left && !keys.right) targetStrafe = 1
-    else if (keys.right && !keys.left) targetStrafe = -1
-    const tiltMax = MathUtils.degToRad(gameConfig.fpStrafeTiltDeg)
-    const desiredStrafeRoll = targetStrafe * tiltMax
-    /* Snap to full strafe tilt while A/D is held (same cap as a tap); ease out only on release. */
-    if (Math.abs(desiredStrafeRoll) > 1e-8) {
-      fpPresentationState.strafeTiltRad = desiredStrafeRoll
-    } else {
-      const easeOut = 1 - Math.exp(-delta * Math.max(0.5, gameConfig.fpStrafeTiltEaseHz))
-      fpPresentationState.strafeTiltRad += (0 - fpPresentationState.strafeTiltRad) * easeOut
-    }
-
     if (gameConfig.fpViewBobEnabled < 0.5) {
       bobPitch = 0
       bobRoll = 0
       camBobY = 0
     }
 
-    const totalRoll = slipRoll + fpPresentationState.strafeTiltRad + bobRoll
+    const totalRoll = slipRoll + bobRoll
     fpPresentationState.storedPitchBob = bobPitch
     fpPresentationState.storedRollTotal = totalRoll
     fpPresentationState.storedCamBobY = camBobY
@@ -1081,7 +1067,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     fpPresentationState.storedPitchBob = 0
     fpPresentationState.storedRollTotal = 0
     fpPresentationState.walkPhase = 0
-    fpPresentationState.strafeTiltRad = 0
     fpPresentationState.storedCamBobY = 0
     localHasBanana = false
     pvpBananaInventory = { host: 0, guest: 0 }
@@ -3267,7 +3252,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     fpPresentationState.storedPitchBob = 0
     fpPresentationState.storedRollTotal = 0
     fpPresentationState.walkPhase = 0
-    fpPresentationState.strafeTiltRad = 0
     fpPresentationState.storedCamBobY = 0
     slideAnimUntilMs = 0
     gameRoot.classList.remove('game-root--dash-tilt')
