@@ -489,6 +489,12 @@ export const defaultGameConfig = {
   bananaSlipCamRollSnapSec: 0.038,
   /** Seconds to ease roll back to 0 after peak. */
   bananaSlipCamRollRecoverSec: 0.3,
+  /** Cartoon slip flip pitch magnitude in degrees (upward arc). */
+  slipPitchAngle: 50,
+  /** Seconds for the upward flip snap-in. */
+  slipPitchInTime: 0.08,
+  /** Seconds for easing back down after the upward snap. */
+  slipPitchOutTime: 0.25,
   /** Initial throw speed (world; × physics frame feel). */
   bananaThrowSpeed: 32,
   /** Max throw distance on XZ from throw start. */

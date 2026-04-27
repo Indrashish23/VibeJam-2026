@@ -989,12 +989,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let bananaSlipCamRollStartMs = 0
   let bananaSlipCamRollPlaying = false
   const _fpViewEuler = new Euler(0, 0, 0, 'YXZ')
-  /** Stored camera baseline at slip start; used to ease back after slip ends. */
+  /** Stored camera baseline at slip start; used for immediate hard reset when slip ends. */
   const slipCamStoredQuat = new Quaternion()
   let slipCamStoredY = 0
   let slipCamHasStoredBaseline = false
-  let slipCamRestoreStartMs = 0
-  let slipCamRestoring = false
   let slipCamWasActive = false
 
   function startBananaSlipCamRoll(): void {
@@ -1009,7 +1007,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       }
       slipCamHasStoredBaseline = true
     }
-    slipCamRestoring = false
     bananaSlipCamRollStartMs = performance.now()
     bananaSlipCamRollPlaying = true
     slipCamWasActive = true
@@ -1017,7 +1014,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   function resetBananaSlipCamRoll(): void {
     bananaSlipCamRollPlaying = false
-    slipCamRestoring = false
     slipCamWasActive = false
     slipCamHasStoredBaseline = false
   }
@@ -1025,7 +1021,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   function computeBananaSlipRollRad(): number {
     if (gameConfig.bananaSlipCamRollEnabled < 0.5) {
       bananaSlipCamRollPlaying = false
-      slipCamRestoring = false
       slipCamWasActive = false
       slipCamHasStoredBaseline = false
       return 0
@@ -1033,25 +1028,36 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     const activeNow = isPlayerBananaSlipNow()
     if (activeNow) {
       slipCamWasActive = true
-    } else if (slipCamWasActive && !slipCamRestoring && slipCamHasStoredBaseline) {
-      slipCamRestoring = true
-      slipCamRestoreStartMs = performance.now()
+    } else if (slipCamWasActive && slipCamHasStoredBaseline) {
+      /* Hard snap baseline restore when slip ends: bypass spring-arm lag smoothing. */
+      cameraSpringArm.intendedQuat.copy(slipCamStoredQuat)
+      cameraSpringArm.displayQuat.copy(slipCamStoredQuat)
+      cameraSpringArm.intendedY = slipCamStoredY
+      cameraSpringArm.displayY = slipCamStoredY
+      camera.quaternion.copy(slipCamStoredQuat)
+      camera.position.y = slipCamStoredY
+      bananaSlipCamRollPlaying = false
       slipCamWasActive = false
+      slipCamHasStoredBaseline = false
+      return 0
     }
     if (!bananaSlipCamRollPlaying) return 0
 
     const now = performance.now()
     const elapsed = (now - bananaSlipCamRollStartMs) / 1000
-    const snap = Math.max(0.012, gameConfig.bananaSlipCamRollSnapSec)
-    const rec = Math.max(0.04, gameConfig.bananaSlipCamRollRecoverSec)
-    const peak = MathUtils.degToRad(gameConfig.bananaSlipCamRollPeakDeg)
+    const snap = Math.max(0.02, gameConfig.slipPitchInTime)
+    const rec = Math.max(0.05, gameConfig.slipPitchOutTime)
+    /* Three.js camera pitch-up is negative X in YXZ Euler order. */
+    const peak = -MathUtils.degToRad(gameConfig.slipPitchAngle)
 
     if (elapsed < snap) {
-      return peak * (elapsed / snap)
+      const u = Math.max(0, Math.min(1, elapsed / snap))
+      const easeOut = 1 - Math.pow(1 - u, 3)
+      return peak * easeOut
     }
     if (elapsed < snap + rec) {
       const u = (elapsed - snap) / rec
-      const easeOut = 1 - (1 - u) * (1 - u)
+      const easeOut = 1 - Math.pow(1 - u, 3)
       return peak * (1 - easeOut)
     }
     bananaSlipCamRollPlaying = false
@@ -1088,7 +1094,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     _fpViewEuler.x -= fpPresentationState.storedPitchBob
     _fpViewEuler.z -= fpPresentationState.storedRollTotal
 
-    const slipRoll = computeBananaSlipRollRad()
+    const slipPitch = computeBananaSlipRollRad()
 
     let bobRoll = 0
     let camBobY = 0
@@ -1107,11 +1113,12 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         : 0
     }
 
-    const totalRoll = slipRoll + bobRoll
-    fpPresentationState.storedPitchBob = 0
+    const totalRoll = bobRoll
+    fpPresentationState.storedPitchBob = slipPitch
     fpPresentationState.storedRollTotal = totalRoll
     fpPresentationState.storedCamBobY = camBobY
 
+    _fpViewEuler.x += fpPresentationState.storedPitchBob
     _fpViewEuler.z += fpPresentationState.storedRollTotal
     camera.quaternion.setFromEuler(_fpViewEuler)
     camera.position.y += fpPresentationState.storedCamBobY
@@ -1126,18 +1133,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   function tickCameraSpringArm(delta: number): void {
     cameraSpringArm.intendedQuat.copy(camera.quaternion)
     cameraSpringArm.intendedY = camera.position.y
-
-    if (slipCamRestoring && slipCamHasStoredBaseline) {
-      const recSec = Math.max(0.06, gameConfig.bananaSlipCamRollRecoverSec)
-      const t = Math.min(1, (performance.now() - slipCamRestoreStartMs) / 1000 / recSec)
-      const ease = 1 - Math.pow(1 - t, 3)
-      cameraSpringArm.intendedQuat.slerp(slipCamStoredQuat, ease)
-      cameraSpringArm.intendedY = MathUtils.lerp(cameraSpringArm.intendedY, slipCamStoredY, ease)
-      if (t >= 1) {
-        slipCamRestoring = false
-        slipCamHasStoredBaseline = false
-      }
-    }
 
     if (!cameraSpringArm.initialized) {
       cameraSpringArm.displayQuat.copy(cameraSpringArm.intendedQuat)
