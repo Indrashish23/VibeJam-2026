@@ -431,19 +431,20 @@ export const defaultGameConfig = {
    * FP megaphone (`MegaPhone.glb`): camera-local rest pose, pull pose while charging, shake.
    * Tweaks → Player weapon.
    */
-  megaphoneScaleMul: 1,
-  megaphoneRestLocalX: 0.44,
-  megaphoneRestLocalY: -0.2,
-  megaphoneRestLocalZ: -0.52,
-  megaphoneRestPitchDeg: -14,
-  megaphoneRestYawDeg: 10,
-  megaphoneRestRollDeg: -8,
-  megaphonePullLocalX: 0.1,
-  megaphonePullLocalY: -0.14,
-  megaphonePullLocalZ: -0.44,
-  megaphonePullPitchDeg: -6,
-  megaphonePullYawDeg: 3,
-  megaphonePullRollDeg: -3,
+  megaphoneScaleMul: 1.31,
+  megaphoneRestLocalX: 0.34,
+  megaphoneRestLocalY: -0.4,
+  megaphoneRestLocalZ: -0.48,
+  megaphoneRestPitchDeg: -23,
+  megaphoneRestYawDeg: 75,
+  megaphoneRestRollDeg: 10,
+  /** Kept identical to rest defaults so charge tween does not offset pose (tweak pull separately for motion). */
+  megaphonePullLocalX: 0.34,
+  megaphonePullLocalY: -0.4,
+  megaphonePullLocalZ: -0.48,
+  megaphonePullPitchDeg: -23,
+  megaphonePullYawDeg: 75,
+  megaphonePullRollDeg: 10,
   /** Seconds (approx) to ease megaphone back to rest after release. */
   megaphoneRestReturnSec: 0.22,
   megaphoneShakePosAmp: 0.018,
