@@ -77,6 +77,7 @@ import {
 import { playFootstepOneShot } from './audio/footstepsSfx'
 import { playJumpOneShot, playLandOneShot } from './audio/playerMoveSfx'
 import { createProximityVoip3d } from './audio/proximityVoip3d'
+import { playEnemySfxSpatialAt, resumeEnemySfxAudio, type SfxKind } from './audio/enemySfx'
 import { mountUserSettingsPanel, setUserSettingsPointerControls } from './userSettingsUI'
 import { setPartyKitHostSession, getPartyKitHost } from './net/partyKitHost'
 import { createProceduralSky } from './skyDome'
@@ -1100,6 +1101,22 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     else sendMp(obj)
   }
 
+  /**
+   * Broadcast a peer-audible movement / weapon SFX event so the other player hears
+   * footsteps / jumps / lands / shoot release at our avatar. Fire-and-forget — no host
+   * authority involved (purely cosmetic), and the data channel does not echo to the
+   * sender so we don't double-play locally.
+   */
+  function broadcastActorSfxIfPvp(kind: SfxKind): void {
+    if (!isPvp()) return
+    if (lobby.mode !== 'online') return
+    sendGameTraffic({
+      type: 'actorSfx',
+      sfx: kind,
+      fromRole: lobby.role,
+    })
+  }
+
   if (isOnline && lobby.mode === 'online' && !isAuthoritativeListenServer()) {
     rtcGame = createWebRtcGameChannel({
       role: lobby.role,
@@ -1118,6 +1135,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       onChannelOpen: () => {
         debugMpLog('rtc dataChannel open')
         tryAttachProximityVoip()
+        /* PvP just started: warm up the enemy-SFX context so peer footsteps play immediately. */
+        resumeEnemySfxAudio()
       },
     })
     if (lobby.role === 'host') {
@@ -1993,6 +2012,20 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       }
     }
 
+    if (ty === 'actorSfx' && typeof data.sfx === 'string') {
+      const fromRole =
+        data.fromRole === 'host' || data.fromRole === 'guest' ? data.fromRole : undefined
+      /* Ignore our own echoes: WS relay can mirror sends; RTC channel does not, but this is cheap. */
+      if (!fromRole || fromRole === lobby.role) return
+      /* Only play during live PvP — silences spurious or pre-match SFX. */
+      if (!isPvp() || mpPhase !== 'live') return
+      if (data.sfx === 'footstep' || data.sfx === 'jump' || data.sfx === 'land' || data.sfx === 'shoot') {
+        const kind = data.sfx as SfxKind
+        playEnemySfxSpatialAt(kind, bot.bodyCenter, camera)
+      }
+      return
+    }
+
     if (ty === 'presence' && typeof data.count === 'number') {
       mpPresenceCount = data.count
       if (mpPresenceCount >= 2) {
@@ -2631,6 +2664,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (fired) {
       tutorialVoiceShotsFired += 1
       playLocalVoiceRecordReleaseSfx()
+      broadcastActorSfxIfPvp('shoot')
       voice.stopVoiceClipPlayback()
       voice.resetChargeMeter()
       voiceChargeSmoothed = 0
@@ -2833,6 +2867,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (!fired) return
 
     playLocalVoiceRecordReleaseSfx()
+    broadcastActorSfxIfPvp('shoot')
 
     /* Consume one round; clear the magazine when emptied so the HUD prompt swaps to "Hold RMB". */
     pistolNextSlot += 1
@@ -3421,7 +3456,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       vy = gameConfig.jumpForce
       grounded = false
       lastJumpAt = now
-      if (!multiplayerBlocksPlay()) playJumpOneShot()
+      if (!multiplayerBlocksPlay()) {
+        playJumpOneShot()
+        broadcastActorSfxIfPvp('jump')
+      }
       return
     }
     /* Mid-air double jump: replace (not add to) vertical velocity for a clean second pop. */
@@ -3429,7 +3467,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       vy = gameConfig.jumpForce
       airJumpsLeft -= 1
       lastJumpAt = now
-      if (!multiplayerBlocksPlay()) playJumpOneShot()
+      if (!multiplayerBlocksPlay()) {
+        playJumpOneShot()
+        broadcastActorSfxIfPvp('jump')
+      }
     }
   }
 
@@ -3841,6 +3882,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
     if (gameplayInputBlocked()) return
     void proxVoip3d?.resume()
+    /* Enemy SFX shares an AudioContext that needs the user-gesture chain to resume + decode. */
+    resumeEnemySfxAudio()
 
     if (pistolModeOn()) {
       if (e.button === 0) {
@@ -3932,11 +3975,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     const now = performance.now()
     if (footstepLastMs <= 0) {
       playFootstepOneShot()
+      broadcastActorSfxIfPvp('footstep')
       footstepLastMs = now
       return
     }
     if (now - footstepLastMs >= intervalSec * 1000) {
       playFootstepOneShot()
+      broadcastActorSfxIfPvp('footstep')
       footstepLastMs = now
     }
   }
@@ -4018,6 +4063,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (!groundedBeforeResolve && grounded) {
       if (!multiplayerBlocksPlay() && !tweaksPanelOpen && !leaveMatchDialogOpen && !matchOutcome) {
         playLandOneShot()
+        broadcastActorSfxIfPvp('land')
       }
       voiceDownBoostReady = true
       airDashReady = true

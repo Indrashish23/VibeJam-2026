@@ -4,6 +4,13 @@ import { gameConfig } from '../gameConfig'
 /**
  * Spatializes the peer’s live voice with a Panner (Web Audio) + master gain.
  * Listener matches the local camera; source is the opponent’s “mouth” position (caller provides).
+ *
+ * IMPORTANT (Chromium bug 933677 / 121673): a remote WebRTC `MediaStream` connected ONLY to
+ * `MediaStreamAudioSourceNode → ...` is silent in Chromium until the same stream is also bound
+ * to a sink `<audio>`/`<video>` element so the underlying decoder actually pulls packets.
+ * We attach a hidden, *muted* `<audio>` element to “kick” the decoder; the real audible output
+ * is the panner graph below. This is the canonical workaround used by every voice-chat web
+ * stack we’ve seen; without it, proximity voice never plays no matter what gain we set.
  */
 export function createProximityVoip3d(
   stream: MediaStream,
@@ -11,6 +18,23 @@ export function createProximityVoip3d(
   getListenerForward: () => Vector3,
   getSourcePos: () => Vector3,
 ): { dispose: () => void; tick: () => void; resume: () => void } {
+  /* Sink element (muted) — kicks the WebRTC audio pipeline so the panner actually hears samples. */
+  const sinkEl = document.createElement('audio')
+  sinkEl.autoplay = true
+  sinkEl.muted = true
+  sinkEl.setAttribute('playsinline', 'true')
+  /* Some Chromium versions need the element in the DOM tree to schedule decode. Hidden, off-screen. */
+  sinkEl.style.position = 'absolute'
+  sinkEl.style.width = '0'
+  sinkEl.style.height = '0'
+  sinkEl.style.opacity = '0'
+  sinkEl.style.pointerEvents = 'none'
+  sinkEl.srcObject = stream
+  document.body.appendChild(sinkEl)
+  void sinkEl.play().catch(() => {
+    /* play() may reject pre-gesture; once user has clicked anywhere it succeeds on the next tick. */
+  })
+
   const ctx = new AudioContext()
   const src = ctx.createMediaStreamSource(stream)
   const out = ctx.createGain()
@@ -34,10 +58,21 @@ export function createProximityVoip3d(
   out.connect(ctx.destination)
 
   return {
-    resume: () => void ctx.resume(),
+    resume: () => {
+      void ctx.resume()
+      /* Retry sink play() — first attempt may have failed pre-gesture. */
+      void sinkEl.play().catch(() => {
+        /* still no gesture; the next tick will try again */
+      })
+    },
 
     tick: () => {
       if (ctx.state === 'suspended') void ctx.resume()
+      if (sinkEl.paused) {
+        void sinkEl.play().catch(() => {
+          /* ignore: next tick will retry */
+        })
+      }
       if (gameConfig.proximityVoipEnabled < 0.5) {
         out.gain.value = 0
         return
@@ -68,6 +103,13 @@ export function createProximityVoip3d(
         src.disconnect()
         panner.disconnect()
         out.disconnect()
+      } catch {
+        /* ignore */
+      }
+      try {
+        sinkEl.pause()
+        sinkEl.srcObject = null
+        sinkEl.remove()
       } catch {
         /* ignore */
       }
