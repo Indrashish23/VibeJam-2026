@@ -1528,6 +1528,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   function scheduleRoundResetAfterTweak(): void {
     /* While in debug room, never trigger a round reset on slider edits — the user is live-tuning. */
     if (gameConfig.debugRoomActive >= 0.5) return
+    /*
+     * Offline dummy/smart + online lobby (non-live): tweaking should not respawn / voice-countdown.
+     * Full restart stays on **R** via `applyRoundReset`. Live PvP matches still reset so map/spawn-dependent knobs stay coherent.
+     */
+    if (!isPvp()) return
     if (tweakConfigDebounce) window.clearTimeout(tweakConfigDebounce)
     tweakConfigDebounce = window.setTimeout(() => {
       tweakConfigDebounce = null
