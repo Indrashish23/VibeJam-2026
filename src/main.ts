@@ -986,6 +986,14 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let pvpBananaInventory: { host: 0 | 1; guest: 0 | 1 } = { host: 0, guest: 0 }
   let playerBananaSlipUntil = 0
   let nextBananaPeelId = 1
+  /**
+   * Banana auth messages (init/pickup/throw/slip) are one-shot — losing one means
+   * the round is desynced. Both peers run independent local countdowns, so the host's
+   * `bananaInit` can land on the guest a tick before the guest sets `mpPhase = 'live'`.
+   * We buffer any auth-banana payloads that arrive while we're not yet ready and replay
+   * them as soon as `flushPendingBananaMsgs` is called (right after we go live).
+   */
+  const pendingBananaMsgs: Array<Record<string, unknown>> = []
   const _fpViewEuler = new Euler(0, 0, 0, 'YXZ')
 
   function startBananaSlipCamRoll(): void {
@@ -1130,6 +1138,17 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     dispatchPeerGamePayload(msg)
   }
 
+  /**
+   * Send to the peer without re-applying locally — used when the host has already
+   * mutated state synchronously (e.g. `bananaInit` after `respawnLocal` placed
+   * the host's pickups; re-running `applyInitPickups` would needlessly clear+reload
+   * the freshly-spawned visuals and dispose their shared GLB geometry).
+   */
+  function pvpHostBroadcastOnly(msg: Record<string, unknown>): void {
+    if (rtcGame) rtcGame.sendGameJson(msg)
+    else sendMp(msg)
+  }
+
   function myPvpRole(): 'host' | 'guest' {
     if (lobby.mode === 'online') return lobby.role
     return 'host'
@@ -1169,12 +1188,53 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
     if (lobby.mode === 'online' && lobby.role === 'host') {
       const list = await bananaWorld.respawnLocal(map, terrainPhysics, n)
-      pvpHostBroadcastAndApply({ type: 'bananaInit', pickups: list })
+      pvpHostBroadcastOnly({ type: 'bananaInit', pickups: list })
     }
   }
 
   function applyBananaInit(pickups: { id: string; x: number; y: number; z: number }[]): void {
     void bananaWorld.applyInitPickups(pickups)
+  }
+
+  /**
+   * Replay any banana auth messages that arrived before we transitioned to live.
+   * Guests in particular can lose `bananaInit` if the host broadcasts it during
+   * the gap where the guest's countdown hasn't ticked over yet.
+   */
+  function flushPendingBananaMsgs(): void {
+    if (pendingBananaMsgs.length === 0) return
+    if (!isPvp() || mpPhase !== 'live') return
+    const queued = pendingBananaMsgs.splice(0, pendingBananaMsgs.length)
+    for (const data of queued) {
+      const ty = data.type as string | undefined
+      if (ty === 'bananaInit' && Array.isArray(data.pickups)) {
+        applyBananaInit(
+          data.pickups as { id: string; x: number; y: number; z: number }[],
+        )
+      } else if (
+        ty === 'bananaAuthPickup' &&
+        (data.role === 'host' || data.role === 'guest') &&
+        typeof data.pickupId === 'string'
+      ) {
+        applyBananaAuthPickup(data.role, data.pickupId)
+      } else if (
+        ty === 'bananaAuthThrowResult' &&
+        (data.fromRole === 'host' || data.fromRole === 'guest') &&
+        typeof data.peelId === 'string' &&
+        typeof data.x === 'number' &&
+        typeof data.y === 'number' &&
+        typeof data.z === 'number'
+      ) {
+        applyBananaAuthThrowResult(data.fromRole, data.peelId, data.x, data.y, data.z)
+      } else if (
+        ty === 'bananaAuthSlip' &&
+        (data.victimRole === 'host' || data.victimRole === 'guest') &&
+        typeof data.ms === 'number' &&
+        typeof data.peelId === 'string'
+      ) {
+        applyBananaAuthSlip(data.victimRole, data.ms, data.peelId)
+      }
+    }
   }
 
   function applyBananaAuthPickup(
@@ -2004,6 +2064,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     mpPhase = 'live'
     updateMicBlockedUi()
     void initBananaRound()
+    flushPendingBananaMsgs()
     tryPointerLock()
     hideHardRematchReloadOverlay()
     window.setTimeout(() => {
@@ -2437,20 +2498,26 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       return
     }
 
-    if (ty === 'bananaInit' && Array.isArray(data.pickups) && isPvp() && mpPhase === 'live') {
-      applyBananaInit(
-        data.pickups as { id: string; x: number; y: number; z: number }[],
-      )
+    if (ty === 'bananaInit' && Array.isArray(data.pickups)) {
+      if (isPvp() && mpPhase === 'live') {
+        applyBananaInit(
+          data.pickups as { id: string; x: number; y: number; z: number }[],
+        )
+      } else {
+        pendingBananaMsgs.push(data)
+      }
       return
     }
     if (
       ty === 'bananaAuthPickup' &&
       (data.role === 'host' || data.role === 'guest') &&
-      typeof data.pickupId === 'string' &&
-      isPvp() &&
-      mpPhase === 'live'
+      typeof data.pickupId === 'string'
     ) {
-      applyBananaAuthPickup(data.role, data.pickupId)
+      if (isPvp() && mpPhase === 'live') {
+        applyBananaAuthPickup(data.role, data.pickupId)
+      } else {
+        pendingBananaMsgs.push(data)
+      }
       return
     }
     if (
@@ -2459,22 +2526,26 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       typeof data.peelId === 'string' &&
       typeof data.x === 'number' &&
       typeof data.y === 'number' &&
-      typeof data.z === 'number' &&
-      isPvp() &&
-      mpPhase === 'live'
+      typeof data.z === 'number'
     ) {
-      applyBananaAuthThrowResult(data.fromRole, data.peelId, data.x, data.y, data.z)
+      if (isPvp() && mpPhase === 'live') {
+        applyBananaAuthThrowResult(data.fromRole, data.peelId, data.x, data.y, data.z)
+      } else {
+        pendingBananaMsgs.push(data)
+      }
       return
     }
     if (
       ty === 'bananaAuthSlip' &&
       (data.victimRole === 'host' || data.victimRole === 'guest') &&
       typeof data.ms === 'number' &&
-      typeof data.peelId === 'string' &&
-      isPvp() &&
-      mpPhase === 'live'
+      typeof data.peelId === 'string'
     ) {
-      applyBananaAuthSlip(data.victimRole, data.ms, data.peelId)
+      if (isPvp() && mpPhase === 'live') {
+        applyBananaAuthSlip(data.victimRole, data.ms, data.peelId)
+      } else {
+        pendingBananaMsgs.push(data)
+      }
       return
     }
     if (
