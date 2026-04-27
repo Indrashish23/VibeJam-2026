@@ -43,6 +43,11 @@ import { VoiceChargeManager, audioBufferSliceToWavBlob } from './audio/voiceChar
 import { playLocalVoiceRecordReleaseSfx, playLocalVoiceRecordStartSfx } from './audio/voiceRecordUiSfx'
 import { mountTweaksPanel } from './tweaksPanel'
 import {
+  attachHudOverlayDrag,
+  resetGameplayHudLayout,
+  restoreHudElementPosition,
+} from './hudLayout'
+import {
   startTutorial,
   isTutorialPending,
   clearTutorialDone,
@@ -176,6 +181,8 @@ const countdownOverlay = document.getElementById('countdown-overlay') as HTMLDiv
 const countdownNumEl = document.getElementById('countdown-num') as HTMLSpanElement | null
 const dashScanEl = document.getElementById('dash-scanlines') as HTMLDivElement | null
 const jumpVfxEl = document.getElementById('jump-vfx') as HTMLDivElement | null
+const hudViewportEl = document.getElementById('hud-viewport') as HTMLDivElement | null
+const percentHudEl = document.getElementById('percent-hud') as HTMLDivElement | null
 const chargeBarWrap = document.getElementById('charge-bar-wrap') as HTMLDivElement | null
 const chargeBarFill = document.getElementById('charge-bar-fill') as HTMLDivElement | null
 const chargeBarMinMark = document.getElementById('charge-bar-min') as HTMLDivElement | null
@@ -195,6 +202,8 @@ if (chargeBarWrap) {
   chargeBarWrap.style.setProperty('--charge-pct', '0%')
   syncChargeHudLayout()
 }
+restoreHudElementPosition(percentHudEl, 'percentHud')
+restoreHudElementPosition(chargeBarWrap, 'chargeHud')
 
 function setChargeBarDisplayPct(pct0to100: number): void {
   if (!chargeBarWrap) return
@@ -217,6 +226,23 @@ function syncChargeHudLayout(): void {
   chargeBarWrap.style.setProperty('--charge-hud-ammo-gap', `${g.chargeHudAmmoPopGapRem}rem`)
   chargeBarWrap.style.setProperty('--charge-hud-ammo-y', `${g.chargeHudAmmoPopTopPct}%`)
 }
+
+function syncUiHudChrome(): void {
+  const g = gameConfig
+  hudViewportEl?.style.setProperty('--ui-hud-master', String(g.uiHudMasterScale))
+  percentHudEl?.style.setProperty('--percent-hud-scale', String(g.percentHudScale))
+}
+
+function syncTweaksPanelChrome(): void {
+  document.getElementById('tweaks-panel-host')?.style.setProperty(
+    '--tweaks-panel-scale',
+    String(gameConfig.tweaksPanelUiScale),
+  )
+}
+
+syncUiHudChrome()
+syncTweaksPanelChrome()
+
 const ammoCountEl = document.getElementById('ammo-count') as HTMLDivElement | null
 const ammoFeedbackEl = document.getElementById('ammo-feedback') as HTMLDivElement | null
 const micBlockedOverlay = document.getElementById('mic-blocked-overlay') as HTMLDivElement | null
@@ -526,6 +552,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   let tweaksPanelOpen = false
   let leaveMatchDialogOpen = false
+
+  function syncHudDragChrome(): void {
+    gameRoot.classList.toggle(
+      'game-root--hud-drag',
+      tweaksPanelOpen && gameConfig.hudDragLayoutEnabled >= 0.5,
+    )
+  }
 
   const isOnline = lobby.mode === 'online'
   /* Rematch full-page overlay: hide as soon as the game boots so we never depend only on ws `open`. */
@@ -1250,7 +1283,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   function applyBananaInit(pickups: { id: string; x: number; y: number; z: number }[]): void {
-    void bananaWorld.applyInitPickups(pickups, terrainPhysics)
+    void bananaWorld.applyInitPickups(pickups)
   }
 
   /**
@@ -5145,6 +5178,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       sun,
       keysThatSkipRoundReset: [
         'hideGameHud',
+        'hudDragLayoutEnabled',
+        'uiHudMasterScale',
+        'percentHudScale',
+        'tweaksPanelUiScale',
         'chargeHudRightRem',
         'chargeHudVerticalBiasRem',
         'chargeHudWidthRem',
@@ -5165,14 +5202,22 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           gameConfig.lightingUnlitEnemyModel >= 0.5,
         )
         syncGameHudVisibility()
+        syncUiHudChrome()
+        syncTweaksPanelChrome()
         syncChargeHudLayout()
+        syncHudDragChrome()
       },
       onToggle(open) {
         tweaksPanelOpen = open
+        syncHudDragChrome()
         if (open) clearMovementKeys()
         if (!open) tryPointerLock()
       },
       onConfigChanged: scheduleRoundResetAfterTweak,
+      onResetHudLayout: () => {
+        resetGameplayHudLayout(percentHudEl, chargeBarWrap)
+        syncChargeHudLayout()
+      },
       onTriggerKnockbackDev: () => {
         if (multiplayerBlocksPlay()) return
         applyPeerMeleeHit(0.62, -0.74, { authoritative: true, victimPercent: playerPercent })
@@ -5190,6 +5235,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         ? { onPracticeWithDummy: beginLobbyDummyPractice }
         : {}),
     })
+    attachHudOverlayDrag(percentHudEl, 'percentHud', {
+      active: () => tweaksPanelOpen && gameConfig.hudDragLayoutEnabled >= 0.5,
+    })
+    attachHudOverlayDrag(chargeBarWrap, 'chargeHud', {
+      active: () => tweaksPanelOpen && gameConfig.hudDragLayoutEnabled >= 0.5,
+    })
+    syncHudDragChrome()
     syncGameHudVisibility()
   }
 

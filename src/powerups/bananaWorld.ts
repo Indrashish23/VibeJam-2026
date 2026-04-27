@@ -347,35 +347,22 @@ export class BananaWorld {
   }
 
   /**
-   * Apply network init (host sends positions).
-   * When `terrain` is set, each pickup is re-snapped to **local** ground via raycast so the
-   * guest matches their loaded collision mesh (host Y alone can float visibly high if meshes differ).
+   * Apply network init: use the host’s `{ id, x, y, z }` as-is (including Y) so client and host
+   * show pickups at the same world height. No local raycast resnap (that desynced Y vs. host).
    */
   async applyInitPickups(
     list: { id: string; x: number; y: number; z: number }[],
-    terrain?: TerrainPhysics,
   ): Promise<void> {
     this.clear()
     for (const it of list) {
-      let groundY = it.y
-      if (terrain) {
-        const startY = Math.max(24, it.y + 8)
-        const hit = terrain.raycastDown(it.x, startY, it.z, 400)
-        if (hit) {
-          const hy = hit.point.y
-          // If local trimesh hits a surface *above* host ground, keep host Y (avoids “floating” crates).
-          // If local is lower (sunken / offset mesh), use local so the mesh sits on visible floor.
-          if (hy <= it.y + 0.45) groundY = hy
-        }
-      }
       const m = await this.clonePickupVisual()
-      const yVis = groundY + gameConfig.bananaPickupVisualYOffset
+      const yVis = it.y + gameConfig.bananaPickupVisualYOffset
       m.position.set(it.x, yVis, it.z)
       this.scene.add(m)
       this.pickups.push({
         id: it.id,
         x: it.x,
-        y: groundY,
+        y: it.y,
         z: it.z,
         baseY: yVis,
         mesh: m,
