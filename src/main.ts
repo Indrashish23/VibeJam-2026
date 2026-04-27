@@ -101,6 +101,7 @@ const stunnedStarUrl = `${import.meta.env.BASE_URL}ui/StunnedStar.svg`
 const chargeBarEmptyUrl = `${import.meta.env.BASE_URL}ui/ChargeBarEmpty.svg`
 const chargeBarTopUrl = `${import.meta.env.BASE_URL}ui/ChargeBarTop.svg`
 const chargeBarFillMaskUrl = `${import.meta.env.BASE_URL}ui/ChargeBarFillMask.svg`
+/** Full chrome layer while voice charge is capped (swap back to {@link chargeBarTopUrl} on release). */
 const chargeBarMaxUrl = `${import.meta.env.BASE_URL}ui/ui_chargebar_max.svg`
 
 /** Production without baked host: open once with `?pk=your-deployment.partykit.dev` (stored in session). */
@@ -189,15 +190,17 @@ const chargeBarFill = document.getElementById('charge-bar-fill') as HTMLDivEleme
 const chargeBarMinMark = document.getElementById('charge-bar-min') as HTMLDivElement | null
 const chargeBarStatus = document.getElementById('charge-bar-status') as HTMLDivElement | null
 const chargeWedgeEl = document.getElementById('charge-wedge') as HTMLDivElement | null
-const chargeWedgeMaxImg = document.getElementById('charge-wedge-max-img') as HTMLImageElement | null
+const chargeBarPctEl = document.getElementById('charge-bar-pct') as HTMLSpanElement | null
 const chargeWedgeEmptyImg = document.querySelector(
   '.charge-wedge__empty',
 ) as HTMLImageElement | null
 const chargeWedgeTopImg = document.querySelector('.charge-wedge__top') as HTMLImageElement | null
 
+/** Tracks `chargeWedgeTopImg.src` so we only swap chrome SVG when crossing max/release (avoid reload flicker). */
+let chargeChromeShowsMaxArt = false
+
 if (chargeWedgeEmptyImg) chargeWedgeEmptyImg.src = chargeBarEmptyUrl
 if (chargeWedgeTopImg) chargeWedgeTopImg.src = chargeBarTopUrl
-if (chargeWedgeMaxImg) chargeWedgeMaxImg.src = chargeBarMaxUrl
 if (chargeBarWrap) {
   chargeBarWrap.style.setProperty('--charge-fill-mask', `url('${chargeBarFillMaskUrl}')`)
   chargeBarWrap.style.setProperty('--charge-pct', '0%')
@@ -4756,9 +4759,20 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         const showMax = !pistolOn && voiceChargeSmoothed >= 1
         chargeBarFill.classList.toggle('charge-wedge__fill-inner--max', showMax)
       }
-      if (chargeWedgeEl) {
-        const atMax = !pistolOn && voiceChargeSmoothed >= 1
-        chargeWedgeEl.classList.toggle('charge-wedge--at-max', atMax)
+      const wantMaxChrome = !pistolOn && voiceChargeSmoothed >= 1
+      if (chargeWedgeTopImg && wantMaxChrome !== chargeChromeShowsMaxArt) {
+        chargeChromeShowsMaxArt = wantMaxChrome
+        chargeWedgeTopImg.src = wantMaxChrome ? chargeBarMaxUrl : chargeBarTopUrl
+      }
+      if (chargeBarPctEl) {
+        if (pistolOn) {
+          const cap = pistolMagSize()
+          const left = pistolAmmoLeft()
+          chargeBarPctEl.textContent = `${left}/${cap}`
+        } else {
+          const v = Math.min(100, Math.round(voiceChargeSmoothed * 100))
+          chargeBarPctEl.textContent = voiceChargeSmoothed >= 1 ? 'MAX' : `${v}%`
+        }
       }
     }
     if (chargeBarWrap) {

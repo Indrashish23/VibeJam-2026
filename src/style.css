@@ -1150,35 +1150,22 @@ body {
 }
 
 .charge-wedge__pct {
-  display: none;
-}
-
-.charge-wedge__max-art {
-  display: none;
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: fill;
-  z-index: 5;
+  z-index: 3;
+  left: var(--charge-hud-pct-left);
+  top: var(--charge-hud-pct-top);
+  width: 38%;
+  text-align: center;
+  font-family: 'Krona One', system-ui, sans-serif;
+  font-size: clamp(0.7rem, 2.3vw, 0.95rem);
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+  color: #fff;
+  text-shadow:
+    0 0 2px rgba(0, 0, 0, 0.9),
+    0 1px 2px rgba(0, 0, 0, 0.85);
   pointer-events: none;
 }
-
-.charge-wedge--at-max .charge-wedge__empty,
-.charge-wedge--at-max .charge-wedge__fill-zone,
-.charge-wedge--at-max .charge-wedge__chrome {
-  visibility: hidden;
-}
-
-.charge-wedge--at-max .charge-wedge__max-art {
-  display: block;
-  visibility: visible;
-}
-
-.charge-wedge--at-max .charge-bar-min {
-  display: none;
-}
-
 
 .ammo-count {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
