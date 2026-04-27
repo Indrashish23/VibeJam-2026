@@ -44,6 +44,7 @@ import {
   startTutorial,
   isTutorialPending,
   clearTutorialDone,
+  TUTORIAL_ENABLED,
   type TutorialApi,
 } from './tutorial'
 import { runLobbyGate, type LobbyResult } from './lobbyGate'
@@ -4625,11 +4626,15 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         if (multiplayerBlocksPlay()) return
         applyPeerMeleeHit(0.62, -0.74, { authoritative: true, victimPercent: playerPercent })
       },
-      onReplayTutorial: () => {
-        if (multiplayerBlocksPlay() || isPvp()) return
-        clearTutorialDone()
-        void startTutorial(buildTutorialApi())
-      },
+      ...(TUTORIAL_ENABLED
+        ? {
+            onReplayTutorial: () => {
+              if (multiplayerBlocksPlay() || isPvp()) return
+              clearTutorialDone()
+              void startTutorial(buildTutorialApi())
+            },
+          }
+        : {}),
       ...(isOnline && lobby.mode === 'online'
         ? { onPracticeWithDummy: beginLobbyDummyPractice }
         : {}),

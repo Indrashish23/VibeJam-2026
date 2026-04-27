@@ -19,8 +19,17 @@
 
 export const TUTORIAL_DONE_KEY = 'vibejam_tutorial_done_v1'
 
-/** True when the per-tab "tutorial done" flag is unset. */
+/**
+ * Master kill-switch. Flip to `true` to re-enable the tutorial flow + Replay
+ * buttons. Disabled for now while the FSM is buggy (welcome modal + advance
+ * gates regressed against latest gameplay changes); flipping this back on is a
+ * one-line revert with no behaviour change elsewhere.
+ */
+export const TUTORIAL_ENABLED = false
+
+/** True when the per-tab "tutorial done" flag is unset and the feature is on. */
 export function isTutorialPending(): boolean {
+  if (!TUTORIAL_ENABLED) return false
   try {
     return sessionStorage.getItem(TUTORIAL_DONE_KEY) !== '1'
   } catch {
@@ -193,6 +202,7 @@ function waitFor(predicate: () => boolean, signal: AbortSignal): Promise<boolean
  * (Replay button calling `startTutorial` again) leaves the flag untouched.
  */
 export async function startTutorial(api: TutorialApi): Promise<void> {
+  if (!TUTORIAL_ENABLED) return
   /* Cancel any currently-running tutorial run before starting fresh. */
   const previous = activeAbort
   if (previous) previous.abort()
