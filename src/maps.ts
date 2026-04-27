@@ -77,8 +77,12 @@ function isCollisionNodeName(name: string): boolean {
 
 /**
  * Empties or any node with a world position; case-insensitive after normalize.
- * Player A: spawn_player, spawn_a, spawn_p1, player_spawn, …
- * Player B: spawn_player_2, spawn_b, spawn_p2, …
+ * Player A: spawn_player, spawn_a, spawn_p1, player_spawn, PlayerSpawn1, …
+ * Player B: spawn_player_2, spawn_b, spawn_p2, PlayerSpawn2, PlayerSpawn1.001 (Blender dup), …
+ *
+ * Note: Blender appends `.001`, `.002`, … when an object is duplicated; after
+ * normalization those become `_001`, `_002`, …  We treat the first such duplicate
+ * of a slot-A name as slot B so authors can copy the spawn empty in Blender.
  */
 function spawnSlotFromName(normalized: string): SpawnSlot | null {
   if (
@@ -89,7 +93,10 @@ function spawnSlotFromName(normalized: string): SpawnSlot | null {
     normalized === 'player_spawn_1' ||
     normalized === 'spawn_1' ||
     normalized === 'p1' ||
-    normalized === 'spawna'
+    normalized === 'spawna' ||
+    normalized === 'playerspawn' ||
+    normalized === 'playerspawn1' ||
+    normalized === 'playerspawn_1'
   ) {
     return 'a'
   }
@@ -101,11 +108,29 @@ function spawnSlotFromName(normalized: string): SpawnSlot | null {
     normalized === 'player_spawn_2' ||
     normalized === 'spawn_2' ||
     normalized === 'p2' ||
-    normalized === 'spawnb'
+    normalized === 'spawnb' ||
+    normalized === 'playerspawn2' ||
+    normalized === 'playerspawn_2' ||
+    /* Blender duplicate of an A-named spawn → use as B. */
+    /^(playerspawn1?|player_spawn|spawn_player|spawn_a|spawn_p1)_\d{3,}$/.test(normalized)
   ) {
     return 'b'
   }
   return null
+}
+
+/** Loosely identifies any node likely to be a player spawn marker (used for ordered fallback). */
+function looksLikeSpawnMarker(normalized: string): boolean {
+  return (
+    normalized.startsWith('playerspawn') ||
+    normalized.startsWith('spawn_player') ||
+    normalized.startsWith('player_spawn') ||
+    normalized.startsWith('spawn_p') ||
+    normalized.startsWith('spawn_a') ||
+    normalized.startsWith('spawn_b') ||
+    normalized === 'p1' ||
+    normalized === 'p2'
+  )
 }
 
 function hasCollisionMarker(node: Object3D): boolean {
@@ -187,6 +212,8 @@ async function loadIslandMap(_scene: Scene, hubRoot: Group): Promise<MapHandle> 
   const collisionMeshes: Mesh[] = []
   let spawnA: Vector3 | null = null
   let spawnB: Vector3 | null = null
+  /* Ordered fallback: any node that looks like a spawn but doesn't match a known A/B name. */
+  const looseSpawns: Vector3[] = []
   gltf.scene.updateMatrixWorld(true)
   gltf.scene.traverse((node) => {
     const normalizedName = normalizeSceneName(node.name)
@@ -195,6 +222,8 @@ async function loadIslandMap(_scene: Scene, hubRoot: Group): Promise<MapHandle> 
       spawnA = node.getWorldPosition(new Vector3())
     } else if (slot === 'b') {
       spawnB = node.getWorldPosition(new Vector3())
+    } else if (looksLikeSpawnMarker(normalizedName)) {
+      looseSpawns.push(node.getWorldPosition(new Vector3()))
     }
 
     const mesh = node as Mesh
@@ -204,6 +233,10 @@ async function loadIslandMap(_scene: Scene, hubRoot: Group): Promise<MapHandle> 
       if (hasCollisionMarker(mesh)) collisionMeshes.push(mesh)
     }
   })
+
+  /* Fill missing slots from loose spawn markers in document order. */
+  if (!spawnA && looseSpawns.length > 0) spawnA = looseSpawns.shift() ?? null
+  if (!spawnB && looseSpawns.length > 0) spawnB = looseSpawns.shift() ?? null
 
   if (collisionMeshes.length === 0) {
     console.warn(
