@@ -17,7 +17,7 @@ export const defaultGameConfig = {
   /** Pixel pass edge hint strength (subtle retro contour). */
   retroEdgeStrength: 0.12,
   /** 0 = skip cel/toon post-pass; 1 = apply cel outline pass after output. */
-  celShadeEnabled: 1,
+  celShadeEnabled: 0,
   /** Cel post-pass color quantization bands (higher = smoother, lower = flatter toon steps). */
   celShadeLevels: 5,
   /** Cel post-pass local-contrast threshold for black outlines. */
