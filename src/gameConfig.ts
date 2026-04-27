@@ -61,17 +61,21 @@ export const defaultGameConfig = {
   /** 0/1: walking head bob + A/D strafe camera roll (presentation only). Tweaks → FPS view & weapons. */
   fpViewBobEnabled: 1,
   /** Pitch bob amplitude (deg) while moving on the ground. */
-  fpHeadbobPitchDeg: 1.05,
-  /** Secondary roll wobble from the walk cycle (deg). */
-  fpHeadbobRollDeg: 0.42,
+  fpHeadbobPitchDeg: 1.5,
+  /** Walk-cycle camera roll amplitude (±deg peak); scales with cosine of walk phase, not move speed. */
+  fpHeadbobRollDeg: 1.7,
   /** Walk-cycle frequency scale (Hz × move speed blend). */
-  fpHeadbobHz: 2.25,
+  fpHeadbobHz: 1.6,
   /** Max camera roll when holding **A** or **D** alone (deg). */
   fpStrafeTiltDeg: 3.1,
-  /** Strafe-roll smoothing rate (higher = snappier). */
+  /** Strafe roll ease-back rate after A/D release (higher = faster return to neutral). */
   fpStrafeTiltEaseHz: 12,
-  /** Scales idle in-hand sway on megaphone + banana (0 = off). */
+  /** Scales continuous idle hand sway loop on megaphone + banana (0 = off; not movement-gated). */
   fpWeaponSwayMul: 0.55,
+  /**
+   * Camera-local Y bob peak while walking (m × sin(walk phase)); not scaled by move speed so W/S does not change sway amount.
+   */
+  fpWeaponWalkBobYMul: 0.034,
 
   gravity: 38,
   jumpForce: 25,
@@ -549,6 +553,10 @@ export const defaultGameConfig = {
   voiceHitImpactEchoMul: 0.32,
   /** Seconds of delay before the echo tap (slight slapback). */
   voiceHitImpactEchoDelaySec: 0.088,
+  /** 0 = off. Hit-confirm tick when your shot connects (`Assets/SFX/hitmarker.ogg`). */
+  hitMarkerSfxEnabled: 1,
+  /** Gain × for hitmarker × SFX chain. */
+  hitMarkerSfxVolumeMul: 0.55,
 } as const
 
 export type GameConfigKey = keyof typeof defaultGameConfig

@@ -244,19 +244,20 @@ export class BananaWorld {
     this.handGroup.rotation.set(0, 0, 0)
   }
 
-  /** Subtle sway on top of `syncHandPoseFromConfig` (movement + strafe). */
-  applyHandPresentationSway(move01: number, strafeSigned: number): void {
+  /** Idle sway + optional walk bob Y on top of `syncHandPoseFromConfig`. */
+  applyHandPresentationSway(walkBobLocalY = 0): void {
     const wm = Math.max(0, Math.min(1, gameConfig.fpWeaponSwayMul))
-    if (wm < 1e-4) return
-    const sway = wm * Math.min(1, Math.abs(move01) + 0.35 * Math.abs(strafeSigned))
+    if (wm < 1e-4 && Math.abs(walkBobLocalY) < 1e-8) return
+    const sway = wm
+    if (Math.abs(walkBobLocalY) > 1e-8) this.handGroup.position.y += walkBobLocalY
     if (sway < 1e-4) return
     const tt = performance.now() * 0.001
-    this.handGroup.position.x += Math.sin(tt * 2.05 + strafeSigned * 0.5) * 0.0034 * sway
-    this.handGroup.position.y += Math.cos(tt * 2.45 + move01 * 0.6) * 0.0027 * sway
-    this.handGroup.position.z += Math.sin(tt * 1.85 - strafeSigned * 0.28) * 0.0023 * sway
-    this.handGroup.rotation.x = Math.sin(tt * 1.25 + move01) * 0.018 * sway
+    this.handGroup.position.x += Math.sin(tt * 2.05) * 0.0034 * sway
+    this.handGroup.position.y += Math.cos(tt * 2.45) * 0.0027 * sway
+    this.handGroup.position.z += Math.sin(tt * 1.85) * 0.0023 * sway
+    this.handGroup.rotation.x = Math.sin(tt * 1.25) * 0.018 * sway
     this.handGroup.rotation.y = Math.cos(tt * 1.05) * 0.014 * sway
-    this.handGroup.rotation.z = Math.sin(tt * 1.65 + strafeSigned * 0.4) * 0.017 * sway
+    this.handGroup.rotation.z = Math.sin(tt * 1.65) * 0.017 * sway
   }
 
   clear(): void {

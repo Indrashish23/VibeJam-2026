@@ -77,6 +77,7 @@ import {
   wireBackgroundMusicToFirstGesture,
 } from './audio/backgroundMusic'
 import { playFootstepOneShot } from './audio/footstepsSfx'
+import { playHitmarkerOneShot } from './audio/combatSfx'
 import { playBananaSlipOneShot, playJumpOneShot, playLandOneShot } from './audio/playerMoveSfx'
 import { createProximityVoip3d } from './audio/proximityVoip3d'
 import { playEnemySfxSpatialAt, resumeEnemySfxAudio, type SfxKind } from './audio/enemySfx'
@@ -966,7 +967,33 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     return 0
   }
 
-  function applyFpCameraPresentation(delta: number): void {
+  /** Advance walk phase once per frame (before FP weapons + camera bob use it). */
+  function tickFpWalkPresentation(delta: number): { moving: boolean; spd01: number } {
+    let moving = false
+    let spd01 = 0
+    if (gameConfig.fpViewBobEnabled >= 0.5) {
+      const slip = isPlayerBananaSlipNow()
+      const canWalk = playerHurt === 'none' && !slip
+      moving =
+        !!(canWalk && grounded && (keys.forward || keys.back || keys.left || keys.right))
+      const spd = Math.hypot(velocity.x, velocity.z)
+      spd01 = Math.min(1, spd / Math.max(1e-4, gameConfig.moveSpeed))
+      if (moving && grounded) {
+        fpPresentationState.walkPhase +=
+          delta * Math.PI * 2 * gameConfig.fpHeadbobHz * Math.max(0.28, spd01)
+      } else {
+        fpPresentationState.walkPhase *= Math.exp(-delta * 5.5)
+      }
+    } else {
+      fpPresentationState.walkPhase *= Math.exp(-delta * 6)
+    }
+    return { moving, spd01 }
+  }
+
+  function applyFpCameraPresentation(
+    delta: number,
+    fpWalk: { moving: boolean; spd01: number },
+  ): void {
     _fpViewEuler.setFromQuaternion(camera.quaternion, 'YXZ')
     _fpViewEuler.x -= fpPresentationState.storedPitchBob
     _fpViewEuler.z -= fpPresentationState.storedRollTotal
@@ -976,39 +1003,33 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     let bobPitch = 0
     let bobRoll = 0
     if (gameConfig.fpViewBobEnabled >= 0.5) {
-      const slip = isPlayerBananaSlipNow()
-      const canWalk = playerHurt === 'none' && !slip
-      const moving =
-        canWalk &&
-        grounded &&
-        (keys.forward || keys.back || keys.left || keys.right)
-      const spd = Math.hypot(velocity.x, velocity.z)
-      const spd01 = Math.min(1, spd / Math.max(1e-4, gameConfig.moveSpeed))
-      if (moving && grounded) {
-        fpPresentationState.walkPhase +=
-          delta * Math.PI * 2 * gameConfig.fpHeadbobHz * Math.max(0.28, spd01)
-      } else {
-        fpPresentationState.walkPhase *= Math.exp(-delta * 5.5)
-      }
+      const { moving, spd01 } = fpWalk
       bobPitch =
         Math.sin(fpPresentationState.walkPhase) *
         MathUtils.degToRad(gameConfig.fpHeadbobPitchDeg) *
         spd01
-      bobRoll =
-        Math.cos(fpPresentationState.walkPhase * 2) *
-        MathUtils.degToRad(gameConfig.fpHeadbobRollDeg) *
-        spd01 *
-        0.48
-    } else {
-      fpPresentationState.walkPhase *= Math.exp(-delta * 6)
+      /*
+       * Walk roll: fixed peak ±fpHeadbobRollDeg (cos envelope); do NOT scale by spd01 — that tied tilt
+       * intensity to W/S speed and felt like runaway roll. Strafe tilt is separate (fpStrafeTiltDeg).
+       */
+      bobRoll = moving
+        ? Math.cos(fpPresentationState.walkPhase * 2) *
+          MathUtils.degToRad(gameConfig.fpHeadbobRollDeg)
+        : 0
     }
 
     let targetStrafe = 0
     if (keys.left && !keys.right) targetStrafe = 1
     else if (keys.right && !keys.left) targetStrafe = -1
     const tiltMax = MathUtils.degToRad(gameConfig.fpStrafeTiltDeg)
-    const ease = 1 - Math.exp(-delta * Math.max(0.5, gameConfig.fpStrafeTiltEaseHz))
-    fpPresentationState.strafeTiltRad += (targetStrafe * tiltMax - fpPresentationState.strafeTiltRad) * ease
+    const desiredStrafeRoll = targetStrafe * tiltMax
+    /* Snap to full strafe tilt while A/D is held (same cap as a tap); ease out only on release. */
+    if (Math.abs(desiredStrafeRoll) > 1e-8) {
+      fpPresentationState.strafeTiltRad = desiredStrafeRoll
+    } else {
+      const easeOut = 1 - Math.exp(-delta * Math.max(0.5, gameConfig.fpStrafeTiltEaseHz))
+      fpPresentationState.strafeTiltRad += (0 - fpPresentationState.strafeTiltRad) * easeOut
+    }
 
     if (gameConfig.fpViewBobEnabled < 0.5) {
       bobPitch = 0
@@ -2633,6 +2654,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   function triggerAggressorHitConfirmFx(): void {
+    playHitmarkerOneShot()
     const sm = getCameraShakeMul()
     shakeIntensity = Math.max(shakeIntensity, gameConfig.pvpAggressorHitShake * sm)
     flashIntensity = Math.max(flashIntensity, gameConfig.pvpAggressorHitFlash)
@@ -3706,6 +3728,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         const isPistolShot = arms.peekIsPistolShot()
         const hitAudio = arms.takeHitAudio()
         arms.markDealt()
+        playHitmarkerOneShot()
         voice.playBufferSpatialAt(hitAudio, bot.bodyCenter, camera)
         const botAimY = knockDirFromFistImpact(_fp, _knDir)
         /* Pistol shots use dedicated multipliers so spam-clicks can't fling the bot off-stage. */
@@ -4426,29 +4449,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
     updateChargeStatusUi(voiceChargeSmoothed)
 
-    const megaphoneCanCharge =
-      !voiceInputBlocked && !voiceResumeCountdownActive && !multiplayerBlocksPlay()
-    const slipForPres = isPlayerBananaSlipNow()
-    const canPresMove =
-      playerHurt === 'none' && !slipForPres && !multiplayerBlocksPlay()
-    let presMove01 = 0
-    let presStrafe = 0
-    if (canPresMove && grounded) {
-      presMove01 = Math.min(
-        1,
-        Math.hypot(velocity.x, velocity.z) / Math.max(1e-4, gameConfig.moveSpeed),
-      )
-      presStrafe = Number(keys.right) - Number(keys.left)
-    }
-    megaphoneFp.update(delta, {
-      charging: megaphoneCanCharge && (chargingLmb || chargingRmb),
-      charge01: voiceChargeSmoothed,
-      presentationMove01: presMove01,
-      presentationStrafe: presStrafe,
-    })
-    bananaWorld.syncHandPoseFromConfig()
-    bananaWorld.applyHandPresentationSway(presMove01, presStrafe)
-
     const dashSpd = dashVel.length()
     dashTiltDeg *= Math.exp(-13.5 * delta)
     if (Math.abs(dashTiltDeg) < 0.08) {
@@ -4567,7 +4567,25 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       }
     }
 
-    applyFpCameraPresentation(delta)
+    /* After movement: walk phase + weapon Y bob match camera head bob this frame. */
+    const fpWalk = tickFpWalkPresentation(delta)
+    /* Fixed peak vs walk phase only — do not × spd01 or W/S speed changes apparent sway. */
+    const weaponWalkBobY =
+      gameConfig.fpViewBobEnabled >= 0.5 && fpWalk.moving
+        ? Math.sin(fpPresentationState.walkPhase) * gameConfig.fpWeaponWalkBobYMul
+        : 0
+
+    const megaphoneCanCharge =
+      !voiceInputBlocked && !voiceResumeCountdownActive && !multiplayerBlocksPlay()
+    megaphoneFp.update(delta, {
+      charging: megaphoneCanCharge && (chargingLmb || chargingRmb),
+      charge01: voiceChargeSmoothed,
+      walkBobLocalY: weaponWalkBobY,
+    })
+    bananaWorld.syncHandPoseFromConfig()
+    bananaWorld.applyHandPresentationSway(weaponWalkBobY)
+
+    applyFpCameraPresentation(delta, fpWalk)
     composer.render()
   }
 

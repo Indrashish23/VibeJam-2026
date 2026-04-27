@@ -198,6 +198,7 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   fpStrafeTiltDeg: { min: 0, max: 12, step: 0.1 },
   fpStrafeTiltEaseHz: { min: 2, max: 28, step: 0.5 },
   fpWeaponSwayMul: { min: 0, max: 2, step: 0.05 },
+  fpWeaponWalkBobYMul: { min: 0, max: 0.12, step: 0.002 },
 
   gravity: { min: 0, max: CAP, step: 1 },
   jumpForce: { min: 0, max: CAP, step: 0.5 },
@@ -268,6 +269,8 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   voiceHitImpactSfxVolumeMul: { min: 0, max: 1, step: 0.02 },
   voiceHitImpactEchoMul: { min: 0, max: 1, step: 0.02 },
   voiceHitImpactEchoDelaySec: { min: 0.02, max: 0.35, step: 0.004 },
+  hitMarkerSfxEnabled: { min: 0, max: 1, step: 1 },
+  hitMarkerSfxVolumeMul: { min: 0, max: 1, step: 0.02 },
 }
 
 /** Human-readable labels for the tweaks panel (fallback: raw config key). */
@@ -286,11 +289,12 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   movementMaxDelta: 'Physics max delta',
   fpViewBobEnabled: 'FPS head bob',
   fpHeadbobPitchDeg: 'Head bob pitch (deg)',
-  fpHeadbobRollDeg: 'Head bob roll wobble (deg)',
+  fpHeadbobRollDeg: 'Walk bob roll ±deg (fixed vs speed)',
   fpHeadbobHz: 'Head bob cadence (Hz)',
   fpStrafeTiltDeg: 'Strafe head tilt (deg)',
-  fpStrafeTiltEaseHz: 'Strafe tilt smoothing (Hz)',
-  fpWeaponSwayMul: 'Weapon sway intensity',
+  fpStrafeTiltEaseHz: 'Strafe tilt release easing (Hz)',
+  fpWeaponSwayMul: 'Idle weapon sway intensity',
+  fpWeaponWalkBobYMul: 'Weapon walk bob height (m)',
   dashImpulse: 'Shift dash distance target',
   dashVelocityMul: 'Shift dash distance multiplier ×',
   dashDecay: 'Slide decay',
@@ -522,6 +526,8 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   voiceHitImpactSfxVolumeMul: 'Voice hit: impact dry level × (0–1)',
   voiceHitImpactEchoMul: 'Voice hit: impact echo tap × dry (0–1)',
   voiceHitImpactEchoDelaySec: 'Voice hit: echo delay (seconds)',
+  hitMarkerSfxEnabled: 'Hitmarker SFX (0/1)',
+  hitMarkerSfxVolumeMul: 'Hitmarker level ×',
 }
 
 /**
@@ -545,11 +551,15 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   fpViewBobEnabled:
     'When 1, first-person camera gets walking head bob (pitch + light roll). Strafe roll still applies when off.',
   fpHeadbobPitchDeg: 'Vertical nod amplitude while moving (degrees, scaled by speed).',
-  fpHeadbobRollDeg: 'Secondary roll wobble while moving (degrees, scaled by speed).',
+  fpHeadbobRollDeg:
+    'Side-to-side roll from the walk cycle (degrees peak ±). Amplitude does not scale with how fast you move — only W/A/S/D “walking”. Set to 0 for pitch-only bob; strafe-only tilt uses Strafe tilt °.',
   fpHeadbobHz: 'Bob frequency at full stride (walk phase advances with speed).',
   fpStrafeTiltDeg: 'Max camera roll toward the strafe direction (A/D) in degrees.',
-  fpStrafeTiltEaseHz: 'How quickly strafe tilt catches up / eases when you change direction.',
-  fpWeaponSwayMul: 'Scales subtle in-hand motion on the megaphone and banana (0 = off).',
+  fpStrafeTiltEaseHz:
+    'After you release A/D only: roll eases back to upright (Hz). Tilt snaps in immediately while strafing; use higher for a snappier return.',
+  fpWeaponSwayMul: 'Continuous idle sway on megaphone + banana (0 = off; × time, not movement).',
+  fpWeaponWalkBobYMul:
+    'Vertical weapon bob while moving (camera-local m peak × sin(walk phase)); same phase as head bob, not scaled by how fast you move. Idle sway is separate.',
 
   groundWidth: 'Half the stage is this wide in X; larger = more room before ring-out.',
   groundDepth: 'Half the stage depth in Z.',
@@ -728,6 +738,9 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
     'Second tap level relative to dry (0 = dry only). Routed through same spatial panner with delay.',
   voiceHitImpactEchoDelaySec:
     'Delay before the echo tap (slapback). Capped ~20–350 ms in range for sensible slapback.',
+  hitMarkerSfxEnabled:
+    '0 = off. 1 = play `hitmarker.ogg` when your hit registers (PvP shot connect or local vs bot).',
+  hitMarkerSfxVolumeMul: 'Hitmarker gain × SFX chain (Settings → sound effects × Tweaks SFX).',
 
   ambientIntensity: 'Fill light strength from all directions (shadow softness).',
   sunIntensity: 'Main directional light strength (contrast and shadows).',
@@ -1047,6 +1060,8 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'voiceHitImpactSfxVolumeMul',
       'voiceHitImpactEchoMul',
       'voiceHitImpactEchoDelaySec',
+      'hitMarkerSfxEnabled',
+      'hitMarkerSfxVolumeMul',
       'proximityVoipOutputMul',
       'proximityVoipRefDistance',
       'proximityVoipMaxDistance',
@@ -1106,6 +1121,7 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'fpStrafeTiltDeg',
       'fpStrafeTiltEaseHz',
       'fpWeaponSwayMul',
+      'fpWeaponWalkBobYMul',
     ],
   },
   {
