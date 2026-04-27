@@ -26,6 +26,11 @@ export type TweaksPanelHooks = {
   onToggle: (open: boolean) => void
   /** Called after any slider / reset / debug-toggle edit (debounce in main). */
   onConfigChanged?: () => void
+  /**
+   * Sliders listed here update `gameConfig` and visuals but do not trigger round-reset debounce
+   * (pure UI / presentation).
+   */
+  keysThatSkipRoundReset?: readonly GameConfigKey[]
   blockToggle?: () => boolean
   debugBoolToggles?: DebugBoolToggle[]
   /** Online lobby (waiting): start local dummy round without leaving the room. */
@@ -56,7 +61,8 @@ function appendConfigRow(
   key: GameConfigKey,
   rows: RowInput[],
   syncSceneFromConfig: () => void,
-  onConfigChanged?: () => void,
+  onConfigChanged: (() => void) | undefined,
+  skipRoundReset: boolean,
 ): HTMLElement {
   const r = TWEAK_RANGE[key]
   const row = document.createElement('label')
@@ -103,7 +109,7 @@ function appendConfigRow(
     gameConfig[key] = clamped
     syncRow()
     syncSceneFromConfig()
-    onConfigChanged?.()
+    if (!skipRoundReset) onConfigChanged?.()
   }
 
   range.addEventListener('input', () => applyValue(Number.parseFloat(range.value)))
@@ -123,6 +129,7 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
 } {
   let open = false
   const rows: RowInput[] = []
+  const skipRoundResetKeys = new Set<GameConfigKey>(hooks.keysThatSkipRoundReset ?? [])
 
   const panel = document.createElement('aside')
   panel.className = 'tweaks-panel'
@@ -242,7 +249,15 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
     panel.hidden = section.id !== defaultSectionId
 
     for (const key of section.keys) {
-      panel.appendChild(appendConfigRow(key, rows, syncSceneFromConfig, hooks.onConfigChanged))
+      panel.appendChild(
+        appendConfigRow(
+          key,
+          rows,
+          syncSceneFromConfig,
+          hooks.onConfigChanged,
+          skipRoundResetKeys.has(key),
+        ),
+      )
     }
     sectionPanels.set(section.id, panel)
     body.appendChild(panel)

@@ -164,6 +164,7 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   cameraFov: { min: 20, max: 120, step: 1 },
   cameraNear: { min: 0.001, max: 50, step: 0.01 },
   cameraFar: { min: 100, max: CAP, step: 10 },
+  hideGameHud: { min: 0, max: 1, step: 1 },
   retroPixelScale: { min: 1, max: 8, step: 0.05 },
   retroEdgeStrength: { min: 0, max: 1, step: 0.01 },
   celShadeEnabled: { min: 0, max: 1, step: 1 },
@@ -379,6 +380,7 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   cameraFov: 'Field of view',
   cameraNear: 'Near clip',
   cameraFar: 'Far clip',
+  hideGameHud: 'Hide HUD overlays (1 = hide)',
   retroPixelScale: 'Retro pixel scale',
   retroEdgeStrength: 'Retro edge strength',
   celShadeEnabled: 'Cel shading (toon + outline)',
@@ -511,6 +513,8 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   cameraFov: 'Vertical field of view in degrees (wider = more peripheral view).',
   cameraNear: 'Near clipping plane; too large can clip your hands in front of the camera.',
   cameraFar: 'Far clipping plane; how far the world is still drawn.',
+  hideGameHud:
+    'When 1, hides gameplay HUD layers (launch %, charge bar, crosshair, lobby code strip, mp toast, proximity mic icon, series banner). Dialogs (leave match, mic blocked, countdown, match end, hit-flash FX) stay. Tweaks panel stays open so you can turn HUD back on.',
   retroPixelScale: 'Chunk size of the pixel post-process pass (higher = more retro/chunkier).',
   retroEdgeStrength: 'Edge accent strength in the pixel pass (subtle contour lines).',
   celShadeEnabled: 'When 0, the cel/toon outline post-pass is skipped (pixel pass still runs).',
@@ -1104,6 +1108,11 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'bananaHandLocalY',
       'bananaHandLocalZ',
     ],
+  },
+  {
+    id: 'ui',
+    title: 'UI',
+    keys: ['hideGameHud'],
   },
   {
     id: 'playerWeapon',

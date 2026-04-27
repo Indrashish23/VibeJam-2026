@@ -1971,3 +1971,17 @@ body {
 .tutorial-skip[hidden] {
   display: none !important;
 }
+
+/* === Dev: hide persistent gameplay HUD (Tweaks → UI → Hide HUD) =============== */
+.game-root.game-root--hide-hud #percent-hud,
+.game-root.game-root--hide-hud #charge-bar-wrap,
+.game-root.game-root--hide-hud #crosshair,
+.game-root.game-root--hide-hud #mp-code-hud,
+.game-root.game-root--hide-hud #mp-toast,
+.game-root.game-root--hide-hud #prox-voice-active,
+.game-root.game-root--hide-hud #series-score-overlay,
+.game-root.game-root--hide-hud #mp-wait-layer,
+.game-root.game-root--hide-hud #win-game-splash {
+  visibility: hidden !important;
+  pointer-events: none;
+}

@@ -9,6 +9,9 @@ export const defaultGameConfig = {
   groundWidth: 52,
   groundDepth: 52,
 
+  /** 1 = hide gameplay HUD overlays (percent, charge bar, crosshair, mp code/toast); Tweaks stays usable. */
+  hideGameHud: 0,
+
   cameraFov: 75,
   cameraNear: 0.1,
   cameraFar: 650,

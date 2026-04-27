@@ -4662,6 +4662,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     { once: true },
   )
 
+  function syncGameHudVisibility(): void {
+    gameRoot.classList.toggle('game-root--hide-hud', gameConfig.hideGameHud >= 0.5)
+  }
+
   const tweaksHost = document.getElementById('tweaks-panel-host')
   if (tweaksHost) {
     mountTweaksPanel(tweaksHost, {
@@ -4669,9 +4673,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       camera,
       ambient,
       sun,
+      keysThatSkipRoundReset: ['hideGameHud'],
       syncVisualsFromConfig: () => {
         skyDome.syncFromConfig()
         applyLightingModeToScene(gameConfig.lightingUnlitMode >= 0.5)
+        syncGameHudVisibility()
       },
       onToggle(open) {
         tweaksPanelOpen = open
@@ -4696,6 +4702,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         ? { onPracticeWithDummy: beginLobbyDummyPractice }
         : {}),
     })
+    syncGameHudVisibility()
   }
 
   if (isOnline && lobby.mode === 'online' && lobby.role === 'host' && lobby.startWithDummyPractice) {
