@@ -58,6 +58,7 @@ import { PublicLobbyDirectoryClient } from './net/publicLobbyDirectory'
 import { isAuthoritativeListenServer } from './net/transportConfig'
 import { simBananaThrowToLanding, feetOnPeel, isFeetInPickUpRange } from './net/bananaSim'
 import { BananaWorld } from './powerups/bananaWorld'
+import { MegaphoneFpProp } from './weapons/megaphoneProp'
 import {
   createWebRtcGameChannel,
   type WebRtcGameApi,
@@ -905,6 +906,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   const bananaWorld = new BananaWorld(scene)
   bananaWorld.attachHandToCamera(camera)
+  const megaphoneFp = new MegaphoneFpProp()
+  megaphoneFp.attachToCamera(camera)
   const _bLand = new Vector3()
   const _bFeet = new Vector3()
   let localHasBanana = false
@@ -4290,6 +4293,14 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       }
     }
     updateChargeStatusUi(voiceChargeSmoothed)
+
+    const megaphoneCanCharge =
+      !voiceInputBlocked && !voiceResumeCountdownActive && !multiplayerBlocksPlay()
+    megaphoneFp.update(delta, {
+      charging: megaphoneCanCharge && (chargingLmb || chargingRmb),
+      charge01: voiceChargeSmoothed,
+      hideForBanana: getMyBananaHeld() && !isPlayerBananaSlipNow(),
+    })
 
     const dashSpd = dashVel.length()
     dashTiltDeg *= Math.exp(-13.5 * delta)

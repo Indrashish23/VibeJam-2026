@@ -427,6 +427,32 @@ export const defaultGameConfig = {
   bananaHandLocalY: -0.2,
   bananaHandLocalZ: -0.52,
 
+  /**
+   * FP megaphone (`MegaPhone.glb`): camera-local rest pose, pull pose while charging, shake.
+   * Tweaks → Player weapon.
+   */
+  megaphoneScaleMul: 1,
+  megaphoneRestLocalX: 0.44,
+  megaphoneRestLocalY: -0.2,
+  megaphoneRestLocalZ: -0.52,
+  megaphoneRestPitchDeg: -14,
+  megaphoneRestYawDeg: 10,
+  megaphoneRestRollDeg: -8,
+  megaphonePullLocalX: 0.1,
+  megaphonePullLocalY: -0.14,
+  megaphonePullLocalZ: -0.44,
+  megaphonePullPitchDeg: -6,
+  megaphonePullYawDeg: 3,
+  megaphonePullRollDeg: -3,
+  /** Seconds (approx) to ease megaphone back to rest after release. */
+  megaphoneRestReturnSec: 0.22,
+  megaphoneShakePosAmp: 0.018,
+  megaphoneShakeRotDeg: 3.2,
+  megaphoneShakeFreqHz: 38,
+  megaphoneShakeFreq2Hz: 71,
+  /** Curves shake intensity vs charge above min-fire (higher = snappier ramp). */
+  megaphoneShakeRampPow: 1.28,
+
   /** Debug Room: when 1, slider edits do NOT trigger a round reset; teleports you + dummy to a side arena. */
   debugRoomActive: 0,
 
