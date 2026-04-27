@@ -20,6 +20,7 @@ import {
   MathUtils,
   Mesh,
   MeshBasicMaterial,
+  Object3D,
   Points,
   PointsMaterial,
   PerspectiveCamera,
@@ -679,6 +680,16 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   const unlitToLit = new WeakMap<Material, Material>()
   let lastUnlitMode = false
   let unlitRescanTick = 0
+  /** Island GLB stays PBR so sun shadows read; only non-island meshes swap to MeshBasic when unlit. */
+  function isUnderIslandMap(node: Object3D): boolean {
+    let cur: Object3D | null = node
+    while (cur) {
+      if (cur.name === 'map:island') return true
+      cur = cur.parent
+    }
+    return false
+  }
+
   function mapMaterialForLightingMode(src: Material, unlit: boolean): Material {
     if (unlit) {
       const cached = litToUnlit.get(src)
@@ -733,11 +744,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     return unlitToLit.get(src) ?? src
   }
   function applyLightingModeToScene(unlit: boolean): void {
-    ambient.intensity = unlit ? 0 : gameConfig.ambientIntensity
-    sun.intensity = unlit ? 0 : gameConfig.sunIntensity
+    /* Keep sun + ambient so island terrain (skipped below) still shades and receives shadows when unlit. */
+    ambient.intensity = gameConfig.ambientIntensity
+    sun.intensity = gameConfig.sunIntensity
     scene.traverse((node) => {
       const mesh = node as Mesh
       if (!mesh.isMesh) return
+      if (unlit && isUnderIslandMap(mesh)) return
       const matRef = (mesh as unknown as { material?: Material | Material[] }).material
       if (!matRef) return
       if (Array.isArray(matRef)) {
