@@ -17,11 +17,6 @@ const _aim = new Vector3()
 const BANANA_GLB = new URL('../../Assets/Props/Banana_Pickup.glb', import.meta.url).href
 const OPENED_BANANA_GLB = new URL('../../Assets/Props/OpenedBanana.glb', import.meta.url).href
 
-/** Pickup visual height above terrain contact point (matches prior crate lift). */
-const PICKUP_Y_OFFSET = 0.35
-/** Peel mesh sits slightly above the hit point so it does not clip into the floor. */
-const PEEL_Y_OFFSET = 0.077
-
 function disposeBananaVisual(root: Object3D): void {
   root.traverse((o) => {
     if (o instanceof PointLight) o.dispose()
@@ -205,6 +200,9 @@ export class BananaWorld {
     node.name = 'bananaPeel'
     node.rotation.y = Math.PI * 0.15
     node.scale.multiplyScalar(1.08)
+    const glow = new PointLight(0xffe588, 0.85, 5.2, 1.35)
+    glow.name = 'bananaPeelGlow'
+    node.add(glow)
     return node
   }
 
@@ -296,7 +294,7 @@ export class BananaWorld {
     for (const pos of placed) {
       const id = `p${this.nextId++}`
       const m = await this.clonePickupVisual()
-      const yVis = pos.y + PICKUP_Y_OFFSET
+      const yVis = pos.y + gameConfig.bananaPickupVisualYOffset
       m.position.set(pos.x, yVis, pos.z)
       this.scene.add(m)
       this.pickups.push({
@@ -321,7 +319,7 @@ export class BananaWorld {
     this.clear()
     for (const it of list) {
       const m = await this.clonePickupVisual()
-      const yVis = it.y + PICKUP_Y_OFFSET
+      const yVis = it.y + gameConfig.bananaPickupVisualYOffset
       m.position.set(it.x, yVis, it.z)
       this.scene.add(m)
       this.pickups.push({
@@ -359,7 +357,7 @@ export class BananaWorld {
     id: string,
   ): Promise<BananaPeelRecord> {
     const m = await this.clonePeelVisual()
-    m.position.set(x, y + PEEL_Y_OFFSET, z)
+    m.position.set(x, y + gameConfig.bananaPeelVisualYOffset, z)
     this.scene.add(m)
     const r: BananaPeelRecord = { id, x, y, z, mesh: m }
     this.peels.push(r)

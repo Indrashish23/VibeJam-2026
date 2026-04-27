@@ -51,9 +51,9 @@ export const defaultGameConfig = {
   skyCloudOpacity: 0.22,
 
   /** Fill light; keep low so the directional sun reads harsh against the skybox. */
-  ambientIntensity: 10,
+  ambientIntensity: 5,
   /** Key directional sun strength (shadow caster). */
-  sunIntensity: 1,
+  sunIntensity: 13.7,
   /** 1 = force unlit materials (ignores scene lighting) for flat readability/debugging. */
   lightingUnlitMode: 0,
   /** 1 = force unlit materials on the local player avatar only. */
@@ -453,12 +453,12 @@ export const defaultGameConfig = {
   /** Peels: feet must be within this radius to slip. */
   bananaPeelRadius: 1.1,
   /** Y tolerance feet vs baked peel Y (island / slopes). */
-  bananaPeelYTolerance: 2.5,
+  bananaPeelYTolerance: 2.15,
   /**
    * Online PvP guest only: added to authoritative peel Y when placing synced peels locally.
    * Host keeps broadcast Y (slip simulation). Use to fix peel float/sink vs terrain on guest.
    */
-  bananaPeelNetworkYOffset: 0,
+  bananaPeelNetworkYOffset: 2,
   /** How long a slip stuns movement (ms). Vulnerable to hits. */
   bananaSlipMs: 1700,
   /** 0/1: one-shot slip_sound.ogg when **you** slip on a peel (local). */
@@ -476,11 +476,15 @@ export const defaultGameConfig = {
   /** Initial throw speed (world; × physics frame feel). */
   bananaThrowSpeed: 32,
   /** Max throw distance on XZ from throw start. */
-  bananaThrowMaxRange: 48,
+  bananaThrowMaxRange: 74,
   /** Arc bias on aim vector before normalize. */
-  bananaThrowUpMul: 0.6,
-  /** Hover bob amplitude (m) on pickups. */
+  bananaThrowUpMul: 0.54,
+  /** Hover bob amplitude (m) on pickups only (peels use offsets below, no bob). */
   bananaHoverAmp: 0.24,
+  /** Pickup crate mesh sits this far above terrain contact (matches prior ~0.35 constant). */
+  bananaPickupVisualYOffset: 0.35,
+  /** Peel mesh sits this far above landed point — match pickup lift; tweakers can separate if needed. */
+  bananaPeelVisualYOffset: 0.35,
   /** Local-space offset for the in-hand banana (camera parent). */
   bananaHandLocalX: -0.42,
   bananaHandLocalY: -0.4,
