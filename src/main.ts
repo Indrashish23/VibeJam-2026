@@ -57,7 +57,12 @@ import {
   type TutorialApi,
 } from './tutorial'
 import { runLobbyGate, type LobbyResult } from './lobbyGate'
-import { base64ToBlob, blobToBase64 } from './net/blobCodec'
+import {
+  base64ToBlob,
+  blobToBase64,
+  decodeVoiceShotAudioFrame,
+  encodeVoiceShotAudioFrame,
+} from './net/blobCodec'
 import {
   createMultiplayerSocket,
   type MultiplayerWire,
@@ -513,9 +518,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let mpPhase: 'waiting' | 'starting' | 'live' = isOnline ? 'waiting' : 'live'
   /** Online lobby only: Tweaks "Practice with Dummy" — move and fight vs dummy while still waiting for a peer. */
   let lobbyDummyPractice = false
+  /** Online host: same as dummy practice but `recreateBot('smart')` (replicated to guest when WebRTC is up). */
+  let lobbySmartBotActive = false
 
   function multiplayerBlocksPlay(): boolean {
-    return isOnline && mpPhase !== 'live' && !lobbyDummyPractice
+    return isOnline && mpPhase !== 'live' && !lobbyDummyPractice && !lobbySmartBotActive
   }
 
   let mpSocket: MultiplayerWire | null = null
@@ -971,7 +978,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (!isOnline || lobby.mode !== 'online') return
     if (lobby.role !== 'host') return
     if (lobby.lobbyVisibility !== 'public') return
-    if (lobby.startWithDummyPractice) return
+    if (lobby.startWithDummyPractice || lobby.startWithSmartBot) return
     if (mpPhase !== 'waiting') return
     const client = new PublicLobbyDirectoryClient(() => {})
     publicHostDirClient = client
@@ -1282,11 +1289,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   function applyBananaAuthPeel(peelId: string, x: number, y: number, z: number): void {
     if (bananaWorld.peels.some((p) => p.id === peelId)) return
-    const yNet =
-      isPvp() && lobby.mode === 'online' && lobby.role === 'guest'
-        ? gameConfig.bananaPeelNetworkYOffset
-        : 0
-    bananaWorld.addPeelFromId(peelId, x, y + yNet, z)
+    bananaWorld.addPeelFromId(peelId, x, y, z)
   }
 
   function applyBananaAuthSlip(
@@ -1428,6 +1431,41 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   /**
+   * Voice-shot audio: prefer compact binary frames over the RTC data channel so we
+   * avoid `JSON.stringify` + base64 on every shot. Falls back to a JSON+base64
+   * `voiceShotAudio` payload when the RTC channel isn't open yet (signaling relay).
+   *
+   * `audioBlob` lifetime: caller can drop it after this returns; we read its bytes once.
+   */
+  async function sendVoiceShotAudio(
+    shotId: string,
+    mime: string,
+    audioBlob: Blob,
+  ): Promise<void> {
+    if (rtcGame?.channel?.readyState === 'open') {
+      try {
+        const ab = await audioBlob.arrayBuffer()
+        const frame = encodeVoiceShotAudioFrame(shotId, mime, new Uint8Array(ab))
+        if (rtcGame.sendGameBinary(frame)) {
+          if (DEBUG_MP) debugMpLog(`send voiceShotAudio bin=${frame.byteLength}b`)
+          return
+        }
+      } catch {
+        /* fall through to base64 */
+      }
+    }
+    /* WS relay / data-channel send failure: keep legacy JSON+base64 path so the peer
+     * still receives the clip even if RTC is briefly unhealthy. */
+    try {
+      const audioB64 = await blobToBase64(audioBlob)
+      sendGameTraffic({ type: 'voiceShotAudio', shotId, mime, audioB64 })
+    } catch {
+      mpDiagCounters.voiceShotSendFail++
+      debugMpLog('voiceShotAudio fallback (b64) encode failed')
+    }
+  }
+
+  /**
    * Broadcast a peer-audible movement / weapon SFX event so the other player hears
    * footsteps / jumps / lands / shoot release at our avatar. Fire-and-forget — no host
    * authority involved (purely cosmetic), and the data channel does not echo to the
@@ -1456,6 +1494,16 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           return
         }
         dispatchPeerGamePayload(data)
+      },
+      onGameBinary: (buf) => {
+        const frame = decodeVoiceShotAudioFrame(buf)
+        if (!frame) return
+        if (DEBUG_MP) debugMpLog(`recv voiceShotAudio bin=${frame.bytes.byteLength}b`)
+        /* Re-slice into a non-shared ArrayBuffer so `new Blob` accepts the bytes
+         * across all supported browser type-slots (avoids SAB / view-of-view issues). */
+        const audioBuf = frame.bytes.slice().buffer
+        const blob = new Blob([audioBuf], { type: frame.mime })
+        void handlePeerVoiceShotAudioBlob(frame.shotId, blob)
       },
       onChannelOpen: () => {
         debugMpLog('rtc dataChannel open')
@@ -2084,6 +2132,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (mpSeqStarted || mpPhase === 'live') return
     stopPublicHostAnnounce()
     lobbyDummyPractice = false
+    lobbySmartBotActive = false
     mpSeqStarted = true
     resetMatchStockState()
 
@@ -2100,6 +2149,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       bot.alignFacingToward(camera.position)
       rebindOpponentBananaAttachment()
       warpRapierCapsulesToCurrentActors()
+      syncHostSmartBotVoiceHandler()
     }
 
     const name = mpOpponentName ?? 'Player'
@@ -2558,6 +2608,44 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       return
     }
 
+    if (
+      ty === 'pose' &&
+      data.fromRole === 'bot' &&
+      typeof data.x === 'number' &&
+      typeof data.z === 'number' &&
+      typeof data.fy === 'number' &&
+      typeof data.ry === 'number' &&
+      !isPvp()
+    ) {
+      if (lobby.mode === 'online' && lobby.role === 'guest') {
+        if (bot.mode !== 'network') {
+          recreateBot('network')
+        }
+        bot.root.position.set(data.x, data.fy + bot.getFootOffset(), data.z)
+        bot.root.rotation.y = data.ry
+        bot.networkTargetPos.copy(bot.root.position)
+        bot.networkTargetYaw = data.ry
+        bot.setRecordingTelegraph(data.recording === true)
+        const baseRaw = typeof data.animBase === 'string' ? data.animBase : null
+        const base: 'idle' | 'running' | 'jumping' | 'hitreact' =
+          baseRaw === 'idle' ||
+          baseRaw === 'running' ||
+          baseRaw === 'jumping' ||
+          baseRaw === 'hitreact'
+            ? baseRaw
+            : data.recording === true
+              ? 'idle'
+              : 'idle'
+        const oneShotRaw = typeof data.animOneShot === 'string' ? data.animOneShot : null
+        const oneShot: 'recording' | 'shooting' | null =
+          oneShotRaw === 'recording' || oneShotRaw === 'shooting' ? oneShotRaw : null
+        const epoch = typeof data.animEpoch === 'number' ? data.animEpoch : undefined
+        bot.setRemoteAnimState(base, oneShot, epoch)
+        if (typeof data.speedN === 'number') bot.speedN = Math.max(0, Math.min(1, data.speedN))
+      }
+      return
+    }
+
     if (bot.mode !== 'network') return
 
     if (
@@ -2609,11 +2697,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     ) {
       mpDiagCounters.recvVoiceShotMsg++
       const fromRole =
-        data.fromRole === 'host' || data.fromRole === 'guest' ? data.fromRole : undefined
-      if (lobby.role === 'host' && browserHost && fromRole) {
+        data.fromRole === 'host' || data.fromRole === 'guest' || data.fromRole === 'bot'
+          ? data.fromRole
+          : undefined
+      if (lobby.role === 'host' && browserHost && fromRole && fromRole !== 'bot') {
         browserHost.processVoiceShot(fromRole, data)
       }
-      if (fromRole && fromRole !== lobby.role) {
+      if (fromRole && (fromRole === 'bot' || fromRole !== lobby.role)) {
         const b64 = typeof data.audioB64 === 'string' ? data.audioB64 : undefined
         void handlePeerVoiceShot({
           shotId: data.shotId,
@@ -2869,9 +2959,29 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     audioB64: string,
   ): Promise<void> {
     if (!seenVoiceShotIds.has(shotId)) return
+    let blob: Blob
+    try {
+      blob = base64ToBlob(audioB64, mime)
+    } catch {
+      debugMpLog('peer voiceShotAudio b64 decode failed')
+      tryPlayVictimPendingShot(shotId, null)
+      return
+    }
+    return handlePeerVoiceShotAudioBlob(shotId, blob)
+  }
+
+  /**
+   * Binary-frame path for peer voice clips: skips the per-shot
+   * `JSON.stringify` + base64 encode/decode that would otherwise stall
+   * the main thread when the opponent fires a fresh clip.
+   */
+  async function handlePeerVoiceShotAudioBlob(
+    shotId: string,
+    blob: Blob,
+  ): Promise<void> {
+    if (!seenVoiceShotIds.has(shotId)) return
     let buf: AudioBuffer | null = null
     try {
-      const blob = base64ToBlob(audioB64, mime)
       buf = await voice.decodeRecording(blob)
       if (buf) {
         pendingPeerShotAudioById.set(shotId, buf)
@@ -2894,7 +3004,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     const blob = await voice.finishChargeRecording()
     setLocalVoipRecordingBlocked(false)
     queueLocalAnimOneShot('shooting')
-    const buf = await voice.decodeRecording(blob)
     const raw = voiceInputBlocked
       ? Math.max(0, Math.min(1, gameConfig.voiceDryFireT))
       : voiceChargeSmoothed
@@ -2924,12 +3033,16 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       .addScaledVector(_worldUp, gameConfig.pcMouthHeight)
       .addScaledVector(_camRight, gameConfig.pcMouthSide)
     const projMode = Math.max(0, Math.min(2, Math.round(gameConfig.voiceProjectileMode)))
+    /* Fire visual immediately with `null` audio — `decodeAudioData` can stall the main
+     * thread for tens of ms on long clips. The decoded buf is attached below as soon
+     * as it lands, so local hit playback (offline) and the `pendingAttackerShotAudioById`
+     * confirm playback (PvP) still work without delaying the shot. */
     const fired =
       projMode === 1
-        ? arms.tryHeadscanFire(speedMul, buf, t, sizeMul, _muzzleWorld, _aimDir)
+        ? arms.tryHeadscanFire(speedMul, null, t, sizeMul, _muzzleWorld, _aimDir)
         : projMode === 2
-          ? arms.tryHeadscanFire(speedMul, buf, t, sizeMul, camera.position, _aimDir)
-          : arms.tryFire(speedMul, buf, t, sizeMul, _muzzleWorld, _aimDir)
+          ? arms.tryHeadscanFire(speedMul, null, t, sizeMul, camera.position, _aimDir)
+          : arms.tryFire(speedMul, null, t, sizeMul, _muzzleWorld, _aimDir)
     if (fired) {
       tutorialVoiceShotsFired += 1
       playLocalVoiceRecordReleaseSfx()
@@ -2952,30 +3065,30 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
     if (fired && cap > 0 && voiceAmmoLeft > 0) voiceAmmoLeft -= 1
 
+    if (!fired) return
+
+    /* PvP path: send trajectory immediately so the host can validate and the peer
+     * can render the projectile right away. The audio (binary frame) and the local
+     * decoded `AudioBuffer` are produced in parallel below — neither is on the
+     * critical input → fire path. */
+    let pvpShotId: string | null = null
+    let pvpMime: string | null = null
     if (
-      fired &&
       isOnline &&
       mpPhase === 'live' &&
       lobby.mode === 'online' &&
       bot.mode === 'network'
     ) {
-      const shotId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+      pvpShotId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+      pvpMime = blob.type || 'audio/webm'
       const o = new Vector3()
       const v = new Vector3()
       arms.copyLastShotWorld(o, v)
-      const mime = blob.type || 'audio/webm'
       try {
-        if (buf) {
-          pendingAttackerShotAudioById.set(shotId, buf)
-          if (pendingAttackerShotAudioById.size > 240) {
-            const first = pendingAttackerShotAudioById.keys().next().value as string | undefined
-            if (first) pendingAttackerShotAudioById.delete(first)
-          }
-        }
         flushPoseForNetwork()
         const payloadLead: Record<string, unknown> = {
           type: 'voiceShot',
-          shotId,
+          shotId: pvpShotId,
           ox: o.x,
           oy: o.y,
           oz: o.z,
@@ -2984,27 +3097,37 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           vz: v.z,
           chargeT: raw,
           shotScale: sizeMul,
-          mime,
+          mime: pvpMime,
           fromRole: lobby.role,
         }
         sendGameTraffic(payloadLead)
         if (lobby.role === 'host' && browserHost) {
           browserHost.processVoiceShot('host', payloadLead)
         }
-        void blobToBase64(blob).then(
-          (audioB64) => {
-            sendGameTraffic({ type: 'voiceShotAudio', shotId, mime, audioB64 })
-          },
-          () => {
-            mpDiagCounters.voiceShotSendFail++
-            debugMpLog('local voiceShot audio encode failed (clip size?)')
-          },
-        )
+        void sendVoiceShotAudio(pvpShotId, pvpMime, blob)
       } catch {
         mpDiagCounters.voiceShotSendFail++
         debugMpLog('local voiceShot build/send failed (clip size?)')
       }
     }
+
+    /* Local audio decode in the background — attach to the in-flight projectile and
+     * the attacker pending map once it lands. */
+    void voice
+      .decodeRecording(blob)
+      .then((buf) => {
+        if (buf) arms.attachLastShotHitAudio(buf)
+        if (buf && pvpShotId) {
+          pendingAttackerShotAudioById.set(pvpShotId, buf)
+          if (pendingAttackerShotAudioById.size > 240) {
+            const first = pendingAttackerShotAudioById.keys().next().value as string | undefined
+            if (first) pendingAttackerShotAudioById.delete(first)
+          }
+        }
+      })
+      .catch(() => {
+        /* Decode failure is non-fatal: hit will still trigger via fallback SFX. */
+      })
   }
 
   /** Pistol mode: build a fresh AudioBuffer holding just the snippet's samples (cheap, ≤1s usually). */
@@ -3199,15 +3322,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         if (lobby.role === 'host' && browserHost) {
           browserHost.processVoiceShot('host', payloadLead)
         }
-        void blobToBase64(wavBlob).then(
-          (audioB64) => {
-            sendGameTraffic({ type: 'voiceShotAudio', shotId, mime, audioB64 })
-          },
-          () => {
-            mpDiagCounters.voiceShotSendFail++
-            debugMpLog('pistol voiceShot audio encode failed (slice encode?)')
-          },
-        )
+        void sendVoiceShotAudio(shotId, mime, wavBlob)
       } catch {
         mpDiagCounters.voiceShotSendFail++
         debugMpLog('pistol voiceShot build/send failed (slice encode?)')
@@ -3905,6 +4020,37 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       gameConfig.lightingUnlitEnemyModel >= 0.5,
     )
     instantHudRematch()
+    syncHostSmartBotVoiceHandler()
+  }
+
+  function syncHostSmartBotVoiceHandler(): void {
+    if (!isOnline || lobby.mode !== 'online' || lobby.role !== 'host') {
+      bot.setHostAiVoiceShotHandler(null)
+      return
+    }
+    if (!lobbySmartBotActive || bot.mode !== 'smart') {
+      bot.setHostAiVoiceShotHandler(null)
+      return
+    }
+    bot.setHostAiVoiceShotHandler((p) => {
+      if (rtcGame?.channel?.readyState !== 'open') return
+      const shotId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+      sendGameTraffic({
+        type: 'voiceShot',
+        shotId,
+        ox: p.ox,
+        oy: p.oy,
+        oz: p.oz,
+        vx: p.vx,
+        vy: p.vy,
+        vz: p.vz,
+        mime: 'audio/webm',
+        audioB64: '',
+        shotScale: p.shotScale,
+        chargeT: 0.5,
+        fromRole: 'bot',
+      })
+    })
   }
 
   async function beginLobbyDummyPractice(): Promise<void> {
@@ -3912,6 +4058,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (mpSeqStarted || mpPhase === 'live') return
 
     lobbyDummyPractice = true
+    lobbySmartBotActive = false
     if (mpWaitLayer) mpWaitLayer.hidden = true
     updateMicBlockedUi()
 
@@ -3935,6 +4082,39 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (!voiceInputBlocked) await runVoiceResumeCountdown()
     if (!lobbyDummyPractice) return
     tryPointerLock()
+    syncHostSmartBotVoiceHandler()
+  }
+
+  async function beginLobbySmartBot(): Promise<void> {
+    if (!isOnline || lobby.mode !== 'online') return
+    if (mpSeqStarted || mpPhase === 'live') return
+
+    lobbyDummyPractice = false
+    lobbySmartBotActive = true
+    if (mpWaitLayer) mpWaitLayer.hidden = true
+    updateMicBlockedUi()
+
+    if (botMode !== 'smart') recreateBot('smart')
+    else applyRoundReset()
+
+    if (mpToast) {
+      mpToast.textContent = 'Solo vs smart bot — a real match still starts when someone joins.'
+      mpToast.hidden = false
+      mpToast.classList.remove('mp-toast--bad')
+      window.setTimeout(() => {
+        if (
+          mpToast &&
+          mpToast.textContent === 'Solo vs smart bot — a real match still starts when someone joins.'
+        ) {
+          mpToast.hidden = true
+        }
+      }, 5200)
+    }
+
+    if (!voiceInputBlocked) await runVoiceResumeCountdown()
+    if (!lobbySmartBotActive) return
+    tryPointerLock()
+    syncHostSmartBotVoiceHandler()
   }
 
   spawnActors()
@@ -4090,6 +4270,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         return
       }
       arms.update(delta)
+      bot.setPlayerCharging(chargingLmb)
+      bot.setIntentInputs(playerPercent, enemyPercent)
+      bot.setAiSuppressed(true)
       bot.update(delta, camera.position, terrainPhysics, false)
       updateWinFinisher(delta)
       advanceWinFlashTimer()
@@ -4099,6 +4282,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     arms.update(delta)
 
     const playerProjActive = arms.isProjectileActive()
+    bot.setPlayerCharging(chargingLmb)
+    bot.setIntentInputs(playerPercent, enemyPercent)
+    bot.setAiSuppressed(false)
     bot.update(delta, camera.position, terrainPhysics, playerProjActive)
 
     /* Player projectile vs bot — dedicated listen server validates shots when authPvp() */
@@ -4281,7 +4467,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         if (map.isBlastZone(camera.position)) {
           if (offlineBlastKoPending === 'you') return
           if (nowMs < respawnInvulnUntilYou) return
-          if (lobbyDummyPractice) {
+          if (lobbyDummyPractice || lobbySmartBotActive) {
             applyRoundReset()
             return
           }
@@ -4291,7 +4477,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         if (map.isBlastZone(bot.root.position)) {
           if (offlineBlastKoPending === 'foe') return
           if (nowMs < respawnInvulnUntilFoe) return
-          if (lobbyDummyPractice) {
+          if (lobbyDummyPractice || lobbySmartBotActive) {
             applyRoundReset()
             return
           }
@@ -4417,7 +4603,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   function tryBananaRmb(): boolean {
     if (!getMyBananaHeld() || isPlayerBananaSlipNow()) return false
     if (matchOutcome || winFinisher) return false
-    if (multiplayerBlocksPlay() && !lobbyDummyPractice) return false
+    if (multiplayerBlocksPlay()) return false
     if (tweaksPanelOpen || leaveMatchDialogOpen) return false
     if (Math.round(gameConfig.bananaPickupCount) <= 0) return false
     camera.getWorldDirection(_aimDir)
@@ -4834,6 +5020,36 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           animOneShot: localAnimOneShot,
           animEpoch: localAnimEpoch,
           speedN,
+        })
+      }
+    }
+
+    const hostSideAi =
+      isOnline &&
+      lobby.mode === 'online' &&
+      lobby.role === 'host' &&
+      bot.mode === 'smart' &&
+      lobbySmartBotActive &&
+      rtcGame?.channel?.readyState === 'open'
+    if (hostSideAi) {
+      poseSendAcc += delta
+      const poseIvBot = 0.05
+      if (poseSendAcc >= poseIvBot) {
+        poseSendAcc -= poseIvBot
+        const fy = bot.root.position.y - bot.getFootOffset()
+        const oneShot = bot.peekNetAnimOneShotForPose()
+        sendGameTraffic({
+          type: 'pose',
+          fromRole: 'bot',
+          x: bot.root.position.x,
+          z: bot.root.position.z,
+          fy,
+          ry: bot.root.rotation.y,
+          recording: bot.isWindingUp(),
+          animBase: bot.deriveAnimBaseForNet(),
+          animOneShot: oneShot,
+          animEpoch: bot.getNetAnimEpoch(),
+          speedN: bot.speedN,
         })
       }
     }
@@ -5336,7 +5552,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           }
         : {}),
       ...(isOnline && lobby.mode === 'online'
-        ? { onPracticeWithDummy: beginLobbyDummyPractice }
+        ? {
+            onPracticeWithDummy: beginLobbyDummyPractice,
+            onSoloVsBot: beginLobbySmartBot,
+          }
         : {}),
     })
     attachHudOverlayDrag(percentHudEl, 'percentHud', {
@@ -5349,8 +5568,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     syncGameHudVisibility()
   }
 
-  if (isOnline && lobby.mode === 'online' && lobby.role === 'host' && lobby.startWithDummyPractice) {
-    void beginLobbyDummyPractice()
+  if (isOnline && lobby.mode === 'online' && lobby.role === 'host') {
+    if (lobby.startWithSmartBot) void beginLobbySmartBot()
+    else if (lobby.startWithDummyPractice) void beginLobbyDummyPractice()
   }
 
   /* === Tutorial bootstrap (offline only, per-tab via sessionStorage) ====== */

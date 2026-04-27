@@ -43,6 +43,7 @@ export type LobbyResult =
       shortCode: string
       mapId: MapId
       startWithDummyPractice?: boolean
+      startWithSmartBot?: boolean
       /** `public` = listed in the browser room list; `private` = join by code only. */
       lobbyVisibility?: 'public' | 'private'
       /** Guest joining from the public browser: host display name from the listing (until hello overwrites HUD). */
@@ -55,6 +56,7 @@ function wireLobbyDom(): {
   err: HTMLElement
   create: HTMLButtonElement
   practice: HTMLButtonElement
+  soloBot: HTMLButtonElement
   joinCode: HTMLInputElement
   joinBtn: HTMLButtonElement
   offline: HTMLButtonElement
@@ -74,6 +76,7 @@ function wireLobbyDom(): {
     err: document.getElementById('lobby-error') as HTMLElement,
     create: document.getElementById('lobby-create') as HTMLButtonElement,
     practice: document.getElementById('lobby-practice') as HTMLButtonElement,
+    soloBot: document.getElementById('lobby-solo-bot') as HTMLButtonElement,
     joinCode: document.getElementById('lobby-join-code') as HTMLInputElement,
     joinBtn: document.getElementById('lobby-join') as HTMLButtonElement,
     offline: document.getElementById('lobby-offline') as HTMLButtonElement,
@@ -289,6 +292,25 @@ export function runLobbyGate(initialDisplayName: string): Promise<LobbyResult> {
         roomId,
         shortCode,
         startWithDummyPractice: true,
+        lobbyVisibility: 'private',
+        mapId: selectedMapId(ui),
+      })
+    }
+
+    ui.soloBot.onclick = () => {
+      clearErr()
+      if (onlineUnavailable()) {
+        setErr('Solo vs Bot needs online lobby transport configured.')
+        return
+      }
+      const roomId = randomRoomId()
+      const shortCode = roomId.replace(/^vj-/, '')
+      finish({
+        mode: 'online',
+        role: 'host',
+        roomId,
+        shortCode,
+        startWithSmartBot: true,
         lobbyVisibility: 'private',
         mapId: selectedMapId(ui),
       })

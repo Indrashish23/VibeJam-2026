@@ -32,6 +32,39 @@ import {
 } from './localPlayerAvatar'
 import type { TerrainPhysics } from '../physics/terrainPhysics'
 
+export type BotProfile = {
+  reactionMs: number
+  aimJitterDegSigma: number
+  predictionConfidence: number
+  dodgeRate: number
+  decisionMargin: number
+  shotGapMs: readonly [number, number]
+  commitmentMs: readonly [number, number]
+  chargeWindupMs: number
+  windupMoveScale: number
+  dodgeWindowMs: readonly [number, number]
+  dodgeDurationMs: number
+  ringMargin: number
+}
+
+/** Mid-tier human-like opponent defaults (windup telegraph → predictionConfidence 0.7 day-one). */
+export const MID_TIER_PROFILE: BotProfile = {
+  reactionMs: 180,
+  aimJitterDegSigma: 2,
+  predictionConfidence: 0.7,
+  dodgeRate: 0.35,
+  decisionMargin: 0.15,
+  shotGapMs: [800, 1400],
+  commitmentMs: [400, 800],
+  chargeWindupMs: 350,
+  windupMoveScale: 0.6,
+  dodgeWindowMs: [200, 500],
+  dodgeDurationMs: 150,
+  ringMargin: 3.2,
+}
+
+type MoveState = 'approach' | 'spacing' | 'reposition' | 'unstuck'
+
 const BOT_GLB_IDLE = new URL('../../Assets/MonkeyModel/Idle.glb', import.meta.url).href
 const BOT_GLB_RUNNING = new URL('../../Assets/MonkeyModel/Running.glb', import.meta.url).href
 const BOT_GLB_JUMPING = new URL('../../Assets/MonkeyModel/Jumping.glb', import.meta.url).href
@@ -40,7 +73,6 @@ const BOT_GLB_RECORDING = new URL('../../Assets/MonkeyModel/RecordingSound.glb',
 const BOT_GLB_SHOOTING = new URL('../../Assets/MonkeyModel/ShootingSound.glb', import.meta.url).href
 
 export type BotMode = 'dummy' | 'smart' | 'network'
-type SmartBotState = 'chase' | 'flank' | 'retreat' | 'aim' | 'recover' | 'unstuck'
 
 export class BotFighter {
   readonly root = new Group()
@@ -59,15 +91,48 @@ export class BotFighter {
   private hurtFinisher = false
   private hurtAirSince = 0
 
-  private smartState: SmartBotState = 'chase'
-  private smartStateLeft = 0
-  private smartStrafePickT = 0
-  private smartFlankSign = Math.random() < 0.5 ? -1 : 1
-  private readonly smartMoveDir = new Vector3(0, 0, 1)
-  private smartShotGapMs = 2500
+  private readonly profile: BotProfile
+  private readonly lastPlayerPos = new Vector3()
+  private hasPlayerSample = false
+  private readonly smoothedPlayerVel = new Vector3()
+  private readonly playerSampleBuffer: { t: number; pos: Vector3; vel: Vector3 }[] = []
+  private playerCharging = false
+  private prevPlayerCharging = false
+  private recentDamageTaken = 0
+  private recentHitsLanded = 0
+  private intentPlayerPercent = 0
+  private intentBotPercent = 0
+  private currentIntent: 'push' | 'hold' | 'retreat' = 'hold'
+  private moveState: MoveState = 'approach'
+  private moveCommitLeftMs = 0
+  private strafeSign: -1 | 1 = Math.random() < 0.5 ? -1 : 1
+  private dodgeUntilMs = 0
+  private dodgeScheduleAtMs = 0
+  private readonly dodgeDir = new Vector3()
   private smartDesiredSpeed = 0
   private smartStuckAcc = 0
   private readonly smartUnstuckDir = new Vector3(1, 0, 0)
+  private shotState: 'idle' | 'windup' = 'idle'
+  private windupLeftMs = 0
+  private pendingSpeedMul = 1
+  private shotGapLeftMs = 0
+  private aiSuppressed = false
+  private netAnimOneShotOut: AvatarOneShotClip | null = null
+  private netAnimEpoch = 0
+  private windupEpochBumped = false
+  private readonly smartMoveDir = new Vector3(0, 0, 1)
+  private onHostAiVoiceShot:
+    | ((p: {
+        ox: number
+        oy: number
+        oz: number
+        vx: number
+        vy: number
+        vz: number
+        speedMul: number
+        shotScale: number
+      }) => void)
+    | null = null
 
   mesh: Mesh
   private readonly bodyMat: MeshStandardMaterial
@@ -127,9 +192,24 @@ export class BotFighter {
     scene: Scene,
     mode: BotMode,
     startPos: Vector3,
-    opts?: { bodyColor?: number },
+    opts?: {
+      bodyColor?: number
+      profile?: BotProfile
+      onHostAiVoiceShot?: (p: {
+        ox: number
+        oy: number
+        oz: number
+        vx: number
+        vy: number
+        vz: number
+        speedMul: number
+        shotScale: number
+      }) => void
+    },
   ) {
     this.mode = mode
+    this.profile = opts?.profile ?? MID_TIER_PROFILE
+    this.onHostAiVoiceShot = opts?.onHostAiVoiceShot ?? null
     this.root.name = 'avatar:enemy'
     const bodyHex =
       typeof opts?.bodyColor === 'number'
@@ -181,9 +261,14 @@ export class BotFighter {
     this.networkTargetPos.copy(this.root.position)
     scene.add(this.root)
 
-    this.smartShotGapMs = 1200 + Math.random() * 700
+    this.shotGapLeftMs = this.randomShotGapMs()
 
     void this.loadMonkeyVisual()
+  }
+
+  private randomShotGapMs(): number {
+    const [a, b] = this.profile.shotGapMs
+    return a + Math.random() * (b - a)
   }
 
   /** Load and attach the monkey GLB + every animation slot; once it's in, hide the capsule mesh. */
@@ -444,6 +529,63 @@ export class BotFighter {
     return this.feetFromCenter
   }
 
+  setPlayerCharging(charging: boolean): void {
+    this.playerCharging = charging
+  }
+
+  setIntentInputs(playerPercent: number, botPercent: number): void {
+    this.intentPlayerPercent = playerPercent
+    this.intentBotPercent = botPercent
+  }
+
+  /** When true, smart AI does not start windups or fire (e.g. win finisher sequence). */
+  setAiSuppressed(suppressed: boolean): void {
+    this.aiSuppressed = suppressed
+    if (!suppressed) {
+      this.playerSampleBuffer.length = 0
+      this.hasPlayerSample = false
+    }
+  }
+
+  setHostAiVoiceShotHandler(
+    cb:
+      | ((
+          p: {
+            ox: number
+            oy: number
+            oz: number
+            vx: number
+            vy: number
+            vz: number
+            speedMul: number
+            shotScale: number
+          },
+        ) => void)
+      | null,
+  ): void {
+    this.onHostAiVoiceShot = cb
+  }
+
+  isWindingUp(): boolean {
+    return this.shotState === 'windup'
+  }
+
+  /** Animation base for outbound `pose` when replicating host-side AI. */
+  deriveAnimBaseForNet(): AvatarBaseClip {
+    if (this.isBananaSlipNow()) return 'hitreact'
+    if (this.hurtPhase !== 'none') return 'hitreact'
+    if (!this.grounded) return 'jumping'
+    return this.speedN > gameConfig.botSmartRunAnimThreshold ? 'running' : 'idle'
+  }
+
+  peekNetAnimOneShotForPose(): AvatarOneShotClip | null {
+    return this.netAnimOneShotOut
+  }
+
+  getNetAnimEpoch(): number {
+    return this.netAnimEpoch
+  }
+
   /**
    * Opponent voice shot replicated in world space (same ballistic integration as local arms).
    */
@@ -508,11 +650,21 @@ export class BotFighter {
     this.velocity.set(0, 0, 0)
     this.knockXZ.set(0, 0, 0)
     this.vy = 0
-    this.smartState = 'chase'
-    this.smartStateLeft = 0
-    this.smartStrafePickT = 0
-    this.smartFlankSign = Math.random() < 0.5 ? -1 : 1
-    this.smartShotGapMs = 1200 + Math.random() * 700
+    this.moveState = 'approach'
+    this.moveCommitLeftMs = 0
+    this.strafeSign = Math.random() < 0.5 ? -1 : 1
+    this.shotGapLeftMs = this.randomShotGapMs()
+    this.shotState = 'idle'
+    this.windupLeftMs = 0
+    this.windupEpochBumped = false
+    this.pendingSpeedMul = 1
+    this.currentIntent = 'hold'
+    this.recentDamageTaken = 0
+    this.recentHitsLanded = 0
+    this.playerCharging = false
+    this.prevPlayerCharging = false
+    this.dodgeUntilMs = 0
+    this.dodgeScheduleAtMs = 0
     this.smartMoveDir.set(0, 0, 1)
     this.smartDesiredSpeed = 0
     this.smartStuckAcc = 0
@@ -535,6 +687,11 @@ export class BotFighter {
       mat.color.copy(baseColor)
     }
     this.clearProjectile()
+    this.playerSampleBuffer.length = 0
+    this.hasPlayerSample = false
+    this.netAnimOneShotOut = null
+    this.netAnimEpoch = 0
+    this.aiSuppressed = false
     this.respawnMeshFlashUntil = 0
   }
 
@@ -659,103 +816,304 @@ export class BotFighter {
     this.root.rotation.y += Math.sign(dy) * step
   }
 
-  private setSmartState(next: SmartBotState, durationSec = 0): void {
-    this.smartState = next
-    this.smartStateLeft = Math.max(0, durationSec)
-  }
-
   private updateSmartAi(delta: number, playerPos: Vector3, dist: number, toPx: number, toPz: number): void {
+    if (this.aiSuppressed) {
+      this.velocity.set(0, 0, 0)
+      this.smartDesiredSpeed = 0
+      return
+    }
+
+    const now = performance.now()
+    const dt = Math.max(delta, 1e-4)
+
+    /* --- Perception --- */
+    if (!this.hasPlayerSample) {
+      this.lastPlayerPos.copy(playerPos)
+      this.smoothedPlayerVel.set(0, 0, 0)
+      this.hasPlayerSample = true
+    }
+    _work.subVectors(playerPos, this.lastPlayerPos).divideScalar(dt)
+    this.smoothedPlayerVel.lerp(_work, 0.2)
+    this.lastPlayerPos.copy(playerPos)
+    this.playerSampleBuffer.push({
+      t: now,
+      pos: playerPos.clone(),
+      vel: this.smoothedPlayerVel.clone(),
+    })
+    while (this.playerSampleBuffer.length && now - this.playerSampleBuffer[0].t > 600) {
+      this.playerSampleBuffer.shift()
+    }
+    this.recentDamageTaken *= Math.exp(-delta / 1.5)
+    this.recentHitsLanded *= Math.exp(-delta / 1.5)
+
     const safeDist = Math.max(1e-5, dist)
     const rdx = toPx / safeDist
     const rdz = toPz / safeDist
     _rad.set(rdx, 0, rdz)
     _tan.set(-rdz, 0, rdx)
-    if (this.smartStateLeft > 0) this.smartStateLeft = Math.max(0, this.smartStateLeft - delta)
-    this.smartShotGapMs -= delta * 1000
-    this.setRecordingTelegraph(false)
-    this.turnToward(playerPos, delta, gameConfig.botSmartTurnRate)
 
     const prefer = gameConfig.botSmartPreferredRange
     const ringBand = Math.max(0.4, gameConfig.botSmartRangeBand)
     const retreatAt = gameConfig.botSmartRetreatRange
     const attackMax = gameConfig.botPunchRange * gameConfig.botSmartAttackRangeMul
-    const canAttack = !this.projActive && this.smartShotGapMs <= 0 && dist <= attackMax && dist >= 0.32
     const moveBase = gameConfig.moveSpeed * gameConfig.botSmartMoveSpeedMul
 
-    if (this.smartState === 'aim') {
-      this.setRecordingTelegraph(true)
-      this.velocity.set(0, 0, 0)
-      this.smartDesiredSpeed = 0
-      this.turnToward(playerPos, delta, gameConfig.botSmartAimTurnRate)
-      if (this.smartStateLeft <= 0) {
-        if (canAttack) {
-          const t = Math.max(0, Math.min(1, (dist - retreatAt) / Math.max(1, attackMax - retreatAt)))
-          const speedMul =
-            gameConfig.botSmartShotSpeedMinMul +
-            (1 - t) * (gameConfig.botSmartShotSpeedMaxMul - gameConfig.botSmartShotSpeedMinMul)
-          this.spawnProjectile(playerPos, speedMul)
-          this.smartShotGapMs = gameConfig.botSmartShotCooldownMs + Math.random() * 220
-          this.setSmartState('recover', gameConfig.botSmartRecoverMs / 1000)
-          return
-        }
-        this.setSmartState(dist < retreatAt ? 'retreat' : 'chase')
+    /* --- Utility scorer (push / hold / retreat) --- */
+    const botHpN = Math.max(0, 1 - this.intentBotPercent / 150)
+    const playerHpN = Math.max(0, 1 - this.intentPlayerPercent / 150)
+    const optimalRange = gameConfig.botPunchRange * 1.1
+    const distNorm = Math.min(1, Math.abs(dist - optimalRange) / 26)
+    const pushScore = botHpN + (1 - playerHpN) + this.recentHitsLanded
+    const holdScore = 0.5 + (1 - distNorm)
+    const retreatScore = (1 - botHpN) + this.recentDamageTaken
+    let nextIntent: 'push' | 'hold' | 'retreat' = 'hold'
+    const mx = Math.max(pushScore, holdScore, retreatScore)
+    if (mx === pushScore) nextIntent = 'push'
+    else if (mx === retreatScore) nextIntent = 'retreat'
+    else nextIntent = 'hold'
+
+    const curScore =
+      this.currentIntent === 'push'
+        ? pushScore
+        : this.currentIntent === 'retreat'
+          ? retreatScore
+          : holdScore
+    if (mx > curScore + this.profile.decisionMargin) {
+      this.currentIntent = nextIntent
+    }
+
+    /* --- Shot FSM (idle → windup → fire at windup end) --- */
+    this.shotGapLeftMs -= delta * 1000
+
+    const chargingEdge = this.playerCharging && !this.prevPlayerCharging
+    this.prevPlayerCharging = this.playerCharging
+
+    if (
+      chargingEdge &&
+      this.dodgeScheduleAtMs === 0 &&
+      now >= this.dodgeUntilMs &&
+      Math.random() < this.profile.dodgeRate
+    ) {
+      const [dw0, dw1] = this.profile.dodgeWindowMs
+      this.dodgeScheduleAtMs = now + dw0 + Math.random() * (dw1 - dw0)
+    }
+    if (this.dodgeScheduleAtMs > 0 && now >= this.dodgeScheduleAtMs) {
+      this.dodgeScheduleAtMs = 0
+      this.dodgeDir.set(-_rad.z, 0, _rad.x).multiplyScalar(Math.random() < 0.5 ? -1 : 1)
+      if (this.dodgeDir.lengthSq() < 1e-8) this.dodgeDir.set(-_rad.z, 0, _rad.x)
+      this.dodgeDir.normalize()
+      this.dodgeUntilMs = now + this.profile.dodgeDurationMs
+    }
+
+    if (this.shotState === 'windup') {
+      this.windupLeftMs -= delta * 1000
+      this.recordingTelegraph = true
+      if (!this.windupEpochBumped) {
+        this.netAnimOneShotOut = 'recording'
+        this.netAnimEpoch++
+        this.windupEpochBumped = true
       }
+      this.turnToward(playerPos, delta, gameConfig.botSmartAimTurnRate)
+
+      if (this.windupLeftMs <= 0) {
+        const projSpeed =
+          gameConfig.punchProjectileSpeed * this.pendingSpeedMul
+        const aim = _moveDesired
+        if (this.solveIntercept(aim, projSpeed)) {
+          this.spawnProjectileAimed(aim, this.pendingSpeedMul)
+        }
+        this.shotState = 'idle'
+        this.recordingTelegraph = false
+        this.shotGapLeftMs = this.randomShotGapMs()
+        this.windupEpochBumped = false
+      }
+
+      const wMul = this.profile.windupMoveScale
+      const vx =
+        now < this.dodgeUntilMs ? this.dodgeDir.x * moveBase * 1.35 : 0
+      const vz =
+        now < this.dodgeUntilMs ? this.dodgeDir.z * moveBase * 1.35 : 0
+      if (now >= this.dodgeUntilMs) {
+        /* Minimal drift during windup — solver aims at fire time */
+        this.velocity.x = this.smartMoveDir.x * moveBase * wMul * 0.35
+        this.velocity.z = this.smartMoveDir.z * moveBase * wMul * 0.35
+      } else {
+        this.velocity.x = vx
+        this.velocity.z = vz
+      }
+      this.smartDesiredSpeed = moveBase * wMul
       return
     }
 
-    if (this.smartState === 'recover') {
-      this.velocity.set(0, 0, 0)
-      this.smartDesiredSpeed = 0
-      if (this.smartStateLeft <= 0) this.setSmartState(dist < retreatAt ? 'retreat' : 'chase')
+    /* Offer windup when idle */
+    const canOfferShot =
+      !this.projActive &&
+      this.shotGapLeftMs <= 0 &&
+      dist <= attackMax &&
+      dist >= 0.32 &&
+      dist <= gameConfig.punchMaxRange * 0.92
+
+    if (this.shotState === 'idle' && canOfferShot) {
+      const t = Math.max(0, Math.min(1, (dist - retreatAt) / Math.max(1e-3, attackMax - retreatAt)))
+      this.pendingSpeedMul =
+        gameConfig.voiceShotSpeedMinMul +
+        (1 - t) * (gameConfig.voiceShotSpeedMaxMul - gameConfig.voiceShotSpeedMinMul) * 0.92
+      this.shotState = 'windup'
+      this.windupLeftMs = this.profile.chargeWindupMs
+      this.windupEpochBumped = false
+      this.recordingTelegraph = true
       return
     }
 
-    if (this.smartState === 'unstuck') {
+    /* --- Movement commitment --- */
+    if (this.moveState !== 'unstuck') {
+      if (this.moveCommitLeftMs <= 0 || this.recentDamageTaken > 1.5) {
+        const r = gameConfig.botPunchRange
+        let wApproach = 0.25
+        let wSpacing = 0.35
+        let wRetreat = 0.25
+        if (dist > r * 1.4) {
+          wApproach = 0.65
+          wSpacing = 0.28
+          wRetreat = 0.07
+        } else if (dist < r * 0.89) {
+          wApproach = 0.08
+          wSpacing = 0.27
+          wRetreat = 0.65
+        }
+        if (this.currentIntent === 'push') wApproach *= 1.35
+        if (this.currentIntent === 'retreat') wRetreat *= 1.35
+        const sum = wApproach + wSpacing + wRetreat
+        const pick = Math.random() * sum
+        if (pick < wApproach) this.moveState = 'approach'
+        else if (pick < wApproach + wSpacing) this.moveState = 'spacing'
+        else this.moveState = 'reposition'
+        const [c0, c1] = this.profile.commitmentMs
+        this.moveCommitLeftMs = c0 + Math.random() * (c1 - c0)
+        if (Math.random() < 0.5) this.strafeSign = -1
+        else this.strafeSign = 1
+      } else {
+        this.moveCommitLeftMs -= delta * 1000
+      }
+    }
+
+    /* --- Unstuck --- */
+    if (this.moveState === 'unstuck') {
+      this.moveCommitLeftMs -= delta * 1000
       this.velocity.x = this.smartUnstuckDir.x * moveBase
       this.velocity.z = this.smartUnstuckDir.z * moveBase
       this.smartDesiredSpeed = moveBase
-      if (this.smartStateLeft <= 0) this.setSmartState('flank')
+      if (this.moveCommitLeftMs <= 0) {
+        this.moveState = 'spacing'
+        const [c0, c1] = this.profile.commitmentMs
+        this.moveCommitLeftMs = c0 + Math.random() * (c1 - c0)
+      }
+      this.turnToward(playerPos, delta, gameConfig.botSmartTurnRate)
+      this.setRecordingTelegraph(false)
       return
     }
 
-    if (dist < retreatAt) {
-      this.setSmartState('retreat')
-    } else if (canAttack && dist >= prefer - ringBand * 0.45) {
-      this.setSmartState('aim', gameConfig.botSmartAimMs / 1000)
-      return
-    } else if (Math.abs(dist - prefer) <= ringBand) {
-      this.setSmartState('flank')
-    } else {
-      this.setSmartState('chase')
-    }
-
-    if (this.smartState === 'retreat') {
+    /* Direction from movement mode */
+    if (this.moveState === 'reposition') {
       this.smartMoveDir.copy(_rad).multiplyScalar(-1)
-      if (dist > prefer + ringBand * 0.4) this.setSmartState('flank')
-    } else if (this.smartState === 'chase') {
+      this.smartMoveDir.addScaledVector(_tan, this.strafeSign * 0.38)
+    } else if (this.moveState === 'approach') {
       this.smartMoveDir.copy(_rad)
-      if (dist > prefer + ringBand) {
-        this.smartMoveDir.addScaledVector(_tan, this.smartFlankSign * gameConfig.botSmartApproachFlankBias)
+      if (dist > prefer + ringBand * 0.6) {
+        this.smartMoveDir.addScaledVector(_tan, this.strafeSign * gameConfig.botSmartApproachFlankBias)
       }
-      if (Math.abs(dist - prefer) <= ringBand) this.setSmartState('flank')
     } else {
-      this.smartStrafePickT -= delta
-      if (this.smartStrafePickT <= 0) {
-        this.smartStrafePickT = 0.32 + Math.random() * 0.55
-        this.smartFlankSign = Math.random() < 0.5 ? -1 : 1
-      }
       const inOut = (dist - prefer) / Math.max(1, prefer)
       this.smartMoveDir
         .copy(_tan)
-        .multiplyScalar(this.smartFlankSign)
-        .addScaledVector(_rad, Math.max(-0.55, Math.min(0.55, inOut * 0.7)))
+        .multiplyScalar(this.strafeSign)
+        .addScaledVector(_rad, Math.max(-0.55, Math.min(0.55, inOut * 0.65)))
     }
 
     if (this.smartMoveDir.lengthSq() < 1e-8) this.smartMoveDir.copy(_rad)
     this.smartMoveDir.normalize()
-    this.velocity.x = this.smartMoveDir.x * moveBase
-    this.velocity.z = this.smartMoveDir.z * moveBase
+
+    /* Dodge override */
+    if (now < this.dodgeUntilMs) {
+      this.velocity.x = this.dodgeDir.x * moveBase * 1.35
+      this.velocity.z = this.dodgeDir.z * moveBase * 1.35
+    } else {
+      this.velocity.x = this.smartMoveDir.x * moveBase
+      this.velocity.z = this.smartMoveDir.z * moveBase
+    }
+
+    /* Rectangular edge lookahead clamp */
+    const rm = this.profile.ringMargin
+    const halfX = gameConfig.groundWidth * 0.5 - rm
+    const halfZ = gameConfig.groundDepth * 0.5 - rm
+    const px = this.root.position.x + this.velocity.x * 0.4
+    const pz = this.root.position.z + this.velocity.z * 0.4
+    if ((px > halfX && this.velocity.x > 0) || (px < -halfX && this.velocity.x < 0)) this.velocity.x = 0
+    if ((pz > halfZ && this.velocity.z > 0) || (pz < -halfZ && this.velocity.z < 0)) this.velocity.z = 0
+
     this.smartDesiredSpeed = moveBase
+    this.turnToward(playerPos, delta, gameConfig.botSmartTurnRate)
+    this.setRecordingTelegraph(false)
+  }
+
+  private solveIntercept(out: Vector3, projectileSpeed: number): boolean {
+    const target = this.sampleDelayed(this.profile.reactionMs)
+    const v = target.vel.clone().multiplyScalar(this.profile.predictionConfidence)
+    const muzzleY = this.root.position.y + this.feetFromCenter * 0.52 + 0.55
+    _muzzleForSolve.set(this.root.position.x, muzzleY, this.root.position.z)
+    const r = target.pos.clone().sub(_muzzleForSolve)
+    const vv = v.dot(v) - projectileSpeed * projectileSpeed
+    const b = 2 * r.dot(v)
+    const c = r.dot(r)
+    let t: number
+    if (Math.abs(vv) < 1e-3) {
+      if (Math.abs(b) < 1e-6) return false
+      t = -c / b
+    } else {
+      const disc = b * b - 4 * vv * c
+      if (disc < 0) return false
+      const sq = Math.sqrt(disc)
+      const t1 = (-b - sq) / (2 * vv)
+      const t2 = (-b + sq) / (2 * vv)
+      const cand = [t1, t2].filter((x) => x > 0)
+      if (cand.length === 0) return false
+      t = Math.min(...cand)
+    }
+    if (!isFinite(t) || t <= 0) return false
+    if (t * projectileSpeed > gameConfig.punchMaxRange) return false
+    const aimPoint = target.pos.clone().addScaledVector(v, t)
+    if (
+      Math.abs(aimPoint.x) > gameConfig.groundWidth / 2 ||
+      Math.abs(aimPoint.z) > gameConfig.groundDepth / 2
+    ) {
+      return false
+    }
+    const dir = aimPoint.sub(_muzzleForSolve)
+    if (dir.lengthSq() < 1e-6) return false
+    dir.normalize()
+    dir.y *= 0.85
+    dir.normalize()
+    const sigma = (this.profile.aimJitterDegSigma * Math.PI) / 180
+    const ang = gaussianRand() * sigma
+    out.copy(dir).applyAxisAngle(_yAxis, ang)
+    return true
+  }
+
+  private sampleDelayed(reactionMs: number): { pos: Vector3; vel: Vector3 } {
+    const targetT = performance.now() - reactionMs
+    if (this.playerSampleBuffer.length === 0) {
+      return { pos: this.lastPlayerPos.clone(), vel: this.smoothedPlayerVel.clone() }
+    }
+    let best = this.playerSampleBuffer[0]!
+    let bestDelta = Math.abs(best.t - targetT)
+    for (const s of this.playerSampleBuffer) {
+      const d = Math.abs(s.t - targetT)
+      if (d < bestDelta) {
+        best = s
+        bestDelta = d
+      }
+    }
+    return { pos: best.pos.clone(), vel: best.vel.clone() }
   }
 
   applyKnockback(
@@ -765,8 +1123,10 @@ export class BotFighter {
     /** Normalized fist→body Y (from full impact vector before XZ flattening). */
     aimUpN = 0,
   ): void {
+    this.abortSmartShotFsm()
     this.clearBananaSlipOnHit()
     if (dirXZ.lengthSq() < 1e-8) return
+    this.recentDamageTaken += 1
     dirXZ.normalize()
     this.hurtPhase = 'air'
     this.hurtFinisher = false
@@ -788,7 +1148,9 @@ export class BotFighter {
 
   /** Cataclysm knock when victim crosses 150% launch — huge send-off. */
   applyLaunchPercentCataclysm(dirXZ: Vector3): void {
+    this.abortSmartShotFsm()
     this.clearBananaSlipOnHit()
+    this.recentDamageTaken += 1
     if (dirXZ.lengthSq() < 1e-8) dirXZ.set(0, 0, 1)
     dirXZ.normalize()
     this.hurtPhase = 'air'
@@ -801,7 +1163,9 @@ export class BotFighter {
   }
 
   applyFinisherKnockback(dirXZ: Vector3, xzImpulse: number, yImpulse: number): void {
+    this.abortSmartShotFsm()
     this.clearBananaSlipOnHit()
+    this.recentDamageTaken += 1
     if (dirXZ.lengthSq() < 1e-8) dirXZ.set(0, 0, 1)
     dirXZ.normalize()
     this.hurtPhase = 'air'
@@ -815,6 +1179,13 @@ export class BotFighter {
 
   get inHitstun(): boolean {
     return this.hurtPhase !== 'none'
+  }
+
+  private abortSmartShotFsm(): void {
+    this.shotState = 'idle'
+    this.windupLeftMs = 0
+    this.windupEpochBumped = false
+    this.recordingTelegraph = false
   }
 
   private clearProjectile(): void {
@@ -833,18 +1204,16 @@ export class BotFighter {
     return this.projHitAudio
   }
 
-  private spawnProjectile(
-    playerPos: Vector3,
+  private spawnProjectileAimed(
+    direction: Vector3,
     speedMul: number,
     voiceClip: AudioBuffer | null = null,
   ): void {
     if (this.projActive) return
-    this.faceToward(playerPos)
     const muzzleY = this.root.position.y + this.feetFromCenter * 0.52 + 0.55
     this.projPos.set(this.root.position.x, muzzleY, this.root.position.z)
     this.projSpawn.copy(this.projPos)
-    _work.subVectors(playerPos, this.projPos)
-    _work.y *= 0.85
+    _work.copy(direction)
     if (_work.lengthSq() < 1e-6) _work.set(0, 0, 1)
     _work.normalize()
     const base = gameConfig.punchProjectileSpeed
@@ -853,6 +1222,38 @@ export class BotFighter {
     this.projFlying = true
     this.projDealt = false
     this.projHitAudio = voiceClip
+    _moveDesired.copy(this.projPos).add(this.projVel)
+    this.faceToward(_moveDesired)
+    if (this.mode !== 'network') {
+      this.playMonkeyOneShot('shooting')
+    }
+    this.netAnimOneShotOut = 'shooting'
+    this.netAnimEpoch++
+    this.onHostAiVoiceShot?.({
+      ox: this.projPos.x,
+      oy: this.projPos.y,
+      oz: this.projPos.z,
+      vx: this.projVel.x,
+      vy: this.projVel.y,
+      vz: this.projVel.z,
+      speedMul,
+      shotScale: this.projSizeMul,
+    })
+  }
+
+  /** Legacy: `tryTweakTestShot` — same y-dampening as pre-refactor `spawnProjectile`. */
+  private spawnProjectile(
+    playerPos: Vector3,
+    speedMul: number,
+    voiceClip: AudioBuffer | null = null,
+  ): void {
+    if (this.projActive) return
+    _work.set(
+      playerPos.x - this.root.position.x,
+      (playerPos.y - this.root.position.y) * 0.85,
+      playerPos.z - this.root.position.z,
+    )
+    this.spawnProjectileAimed(_work, speedMul, voiceClip)
   }
 
   private integrateProjectile(delta: number): void {
@@ -1024,6 +1425,9 @@ export class BotFighter {
 
     if (!canThink) {
       this.clearProjectile()
+      this.abortSmartShotFsm()
+      this.dodgeScheduleAtMs = 0
+      this.dodgeUntilMs = 0
     }
 
     this.root.position.x += (this.velocity.x + this.knockXZ.x) * delta
@@ -1039,15 +1443,16 @@ export class BotFighter {
       } else {
         this.smartStuckAcc = Math.max(0, this.smartStuckAcc - delta * 1.4)
       }
-      if (this.smartStuckAcc >= gameConfig.botSmartStuckMs / 1000 && this.smartState !== 'aim') {
+      if (this.smartStuckAcc >= gameConfig.botSmartStuckMs / 1000 && this.shotState !== 'windup') {
         this.smartStuckAcc = 0
         this.smartUnstuckDir
           .copy(_tan)
-          .multiplyScalar(this.smartFlankSign)
+          .multiplyScalar(this.strafeSign)
           .addScaledVector(_rad, -0.35)
         if (this.smartUnstuckDir.lengthSq() < 1e-8) this.smartUnstuckDir.copy(_tan)
         this.smartUnstuckDir.normalize()
-        this.setSmartState('unstuck', gameConfig.botSmartUnstuckMs / 1000)
+        this.moveState = 'unstuck'
+        this.moveCommitLeftMs = gameConfig.botSmartUnstuckMs
       }
     } else {
       this.smartStuckAcc = 0
@@ -1088,6 +1493,7 @@ export class BotFighter {
   }
 
   markHitDealt(): void {
+    this.recentHitsLanded += 1
     this.projDealt = true
     this.clearProjectile()
   }
@@ -1106,8 +1512,16 @@ export class BotFighter {
 const _work = new Vector3()
 const _rad = new Vector3()
 const _tan = new Vector3()
+const _yAxis = new Vector3(0, 1, 0)
+const _muzzleForSolve = new Vector3()
 const _moveStart = new Vector3()
 const _moveDesired = new Vector3()
+
+function gaussianRand(): number {
+  const u1 = Math.random() || 1e-9
+  const u2 = Math.random()
+  return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2)
+}
 
 function loadBotGltf(
   loader: GLTFLoader,

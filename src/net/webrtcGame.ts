@@ -11,6 +11,12 @@ export type WebRtcGameApi = {
   hostStartHandshake: () => Promise<void>
   sendGameJson: (obj: Record<string, unknown>) => void
   /**
+   * Send a binary frame (e.g. voice-shot audio) over the RTC data channel without
+   * paying for `JSON.stringify` + base64 encoding. Returns `true` if dispatched, `false`
+   * when the channel isn't open (caller should fall back to a JSON path).
+   */
+  sendGameBinary: (bytes: ArrayBuffer | Uint8Array) => boolean
+  /**
    * Send a **clone** of the same mic the game uses (not the main track, so we can mute for peer
    * during voice-shot recording without breaking MediaRecorder).
    */
@@ -30,6 +36,12 @@ export function createWebRtcGameChannel(opts: {
   role: 'host' | 'guest'
   signalSend: SignalSend
   onGameJsonString: (raw: string) => void
+  /**
+   * Binary frame received over the data channel. Used to avoid JSON.stringify + base64 on
+   * large payloads like voice-shot audio. Optional: callers without binary support stay
+   * compatible (frame is dropped silently).
+   */
+  onGameBinary?: (bytes: ArrayBuffer) => void
   onChannelOpen: () => void
   /** If true, add m=audio; clone mic attached later. */
   includeProximityVoip: boolean
@@ -108,7 +120,22 @@ export function createWebRtcGameChannel(opts: {
     channel.binaryType = 'arraybuffer'
     channel.onopen = () => opts.onChannelOpen()
     channel.onmessage = (ev) => {
-      if (typeof ev.data === 'string') opts.onGameJsonString(ev.data)
+      const data = ev.data
+      if (typeof data === 'string') {
+        opts.onGameJsonString(data)
+        return
+      }
+      if (!opts.onGameBinary) return
+      if (data instanceof ArrayBuffer) {
+        opts.onGameBinary(data)
+        return
+      }
+      /* Some browsers/builds may still hand back a Blob even with binaryType='arraybuffer';
+       * cheap async path keeps the main thread free of huge base64 work. */
+      const maybeBlob = data as Blob | undefined
+      if (maybeBlob && typeof maybeBlob.arrayBuffer === 'function') {
+        void maybeBlob.arrayBuffer().then((buf) => opts.onGameBinary?.(buf))
+      }
     }
   }
 
@@ -186,6 +213,21 @@ export function createWebRtcGameChannel(opts: {
     opts.signalSend(obj)
   }
 
+  function sendGameBinary(bytes: ArrayBuffer | Uint8Array): boolean {
+    if (dc?.readyState !== 'open') return false
+    try {
+      /* Pass the ArrayBuffer directly so the runtime doesn't allocate a Blob copy. */
+      const payload =
+        bytes instanceof Uint8Array
+          ? bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+          : bytes
+      dc.send(payload as ArrayBuffer)
+      return true
+    } catch {
+      return false
+    }
+  }
+
   function dispose(): void {
     try {
       if (localVoipTrack) {
@@ -211,6 +253,7 @@ export function createWebRtcGameChannel(opts: {
     handleSignal,
     hostStartHandshake,
     sendGameJson,
+    sendGameBinary,
     attachLocalProximityVoipTrack,
     setLocalVoipGameRecordingBlock,
     dispose,

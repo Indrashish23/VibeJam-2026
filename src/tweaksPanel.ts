@@ -346,6 +346,8 @@ export type TweaksPanelHooks = {
   debugBoolToggles?: DebugBoolToggle[]
   /** Online lobby (waiting): start local dummy round without leaving the room. */
   onPracticeWithDummy?: () => void | Promise<void>
+  /** Online host (waiting): practice vs smart AI, replicated when WebRTC is up. */
+  onSoloVsBot?: () => void | Promise<void>
   /** Gameplay section: apply a dev knockback to the local player (for testing hit FX). */
   onTriggerKnockbackDev?: () => void
   /** Re-run the HOWL tutorial in-session (clears the tutorial-done flag and starts fresh). */
@@ -803,6 +805,19 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
       })()
     })
     actions.appendChild(practiceBtn)
+  }
+
+  if (hooks.onSoloVsBot) {
+    const soloBotBtn = document.createElement('button')
+    soloBotBtn.type = 'button'
+    soloBotBtn.textContent = 'Solo vs Bot'
+    soloBotBtn.addEventListener('click', () => {
+      void (async () => {
+        await hooks.onSoloVsBot!()
+        setOpen(false)
+      })()
+    })
+    actions.appendChild(soloBotBtn)
   }
 
   if (hooks.onReplayTutorial) {

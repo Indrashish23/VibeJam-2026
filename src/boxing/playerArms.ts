@@ -252,6 +252,18 @@ export class PlayerArms {
     return this.proj.hitAudio
   }
 
+  /**
+   * Late-bind audio to the currently-active projectile. Lets `releaseVoiceShot`
+   * fire the visual immediately and then attach the decoded clip when ready
+   * (avoids a 10–50 ms input → fire latency stall waiting on `decodeAudioData`).
+   * No-op when no projectile is active or when the shot already hit.
+   */
+  attachLastShotHitAudio(buf: AudioBuffer | null): void {
+    if (!this.proj.active) return
+    if (this.dealt) return
+    this.proj.hitAudio = buf
+  }
+
   update(delta: number): void {
     if (!this.proj.active) {
       this.mesh.visible = false

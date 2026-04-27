@@ -532,11 +532,6 @@ export const defaultGameConfig = {
   bananaPeelRadius: 1.1,
   /** Y tolerance feet vs baked peel Y (island / slopes). */
   bananaPeelYTolerance: 2.15,
-  /**
-   * Online PvP guest only: added to authoritative peel Y when placing synced peels locally.
-   * Host keeps broadcast Y (slip simulation). Use to fix peel float/sink vs terrain on guest.
-   */
-  bananaPeelNetworkYOffset: 2,
   /** How long a slip stuns movement (ms). Vulnerable to hits. */
   bananaSlipMs: 1700,
   /** 0/1: one-shot slip_sound.ogg when **you** slip on a peel (local). */
