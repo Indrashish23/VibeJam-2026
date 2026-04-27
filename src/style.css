@@ -1054,10 +1054,10 @@ body {
   --charge-pct: 0%;
   --charge-fill-mask: none;
   --charge-hud-right: 7.5rem;
-  --charge-hud-bias: 8rem;
+  --charge-hud-bias: 8.3rem;
   --charge-hud-width: 12.6rem;
-  --charge-hud-max-h: 53vh;
-  --charge-hud-scale: 1.79;
+  --charge-hud-max-h: 35vh;
+  --charge-hud-scale: 1.92;
   --charge-hud-pct-left: 5%;
   --charge-hud-pct-top: 4.6%;
   --charge-hud-pistol-top: 44%;
@@ -1068,8 +1068,8 @@ body {
   --charge-hud-min-right: 8%;
   --charge-hud-mic-amp: 0;
   --charge-hud-mic-pulse: 0.38;
-  --charge-hud-mic-gap: 0.45rem;
-  --charge-hud-mic-w: 1.65rem;
+  --charge-hud-mic-gap: 0rem;
+  --charge-hud-mic-w: 2.25rem;
   --charge-hud-mic-y: 0.55rem;
   position: absolute;
   right: var(--charge-hud-right);

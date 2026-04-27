@@ -15,13 +15,13 @@ export const defaultGameConfig = {
   /** Screen-space charge wedge: inset from the right edge (rem). */
   chargeHudRightRem: 7.5,
   /** Vertical offset from screen center (rem); positive moves the wedge down. */
-  chargeHudVerticalBiasRem: 8,
+  chargeHudVerticalBiasRem: 8.3,
   /** Max width of the wedge column (rem); pairs with viewport clamp in CSS. */
   chargeHudWidthRem: 12.6,
   /** Max height for the wedge (vh); capped in CSS with a rem ceiling. */
-  chargeHudMaxHeightVh: 53,
+  chargeHudMaxHeightVh: 35,
   /** Uniform scale of the wedge art (1 = authored size). */
-  chargeHudScale: 1.79,
+  chargeHudScale: 1.92,
   /** %/MAX label horizontal position (percent of wedge width from left). */
   chargeHudPctLabelLeftPct: 5,
   /** %/MAX label vertical position (percent from top of wedge). */
@@ -42,9 +42,9 @@ export const defaultGameConfig = {
   /** 1 = show live mic-activity icon beside the charge wedge; pulses with voice RMS. */
   chargeHudMicEnabled: 1,
   /** Gap between mic icon and wedge (rem). */
-  chargeHudMicGapRem: 0.45,
+  chargeHudMicGapRem: 0,
   /** Mic icon display width (rem), height follows SVG aspect. */
-  chargeHudMicWidthRem: 1.65,
+  chargeHudMicWidthRem: 2.25,
   /** Nudge icon down from row top to align with wedge fill (rem). */
   chargeHudMicTopOffsetRem: 0.55,
   /** RMS above (voiceSilenceRmsThreshold × mul) maps to 0 activity; then span maps to full pulse. */
