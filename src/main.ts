@@ -192,6 +192,9 @@ const stockStripYouEl = document.getElementById('stock-strip-you') as HTMLDivEle
 const stockStripFoeEl = document.getElementById('stock-strip-foe') as HTMLDivElement | null
 const koAnnounceOverlayEl = document.getElementById('ko-announce-overlay') as HTMLDivElement | null
 const koAnnounceNameEl = document.getElementById('ko-announce-name') as HTMLParagraphElement | null
+const koAnnounceStocksFromEl = document.getElementById('ko-announce-stocks-from') as HTMLSpanElement | null
+const koAnnounceStocksToEl = document.getElementById('ko-announce-stocks-to') as HTMLSpanElement | null
+const koAnnounceStocksWrapEl = document.getElementById('ko-announce-stocks') as HTMLDivElement | null
 const chargeBarWrap = document.getElementById('charge-bar-wrap') as HTMLDivElement | null
 const chargeBarFill = document.getElementById('charge-bar-fill') as HTMLDivElement | null
 const chargeBarMinMark = document.getElementById('charge-bar-min') as HTMLDivElement | null
@@ -2075,6 +2078,14 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   async function concludeRoundElimination(iWonRound: boolean): Promise<void> {
     if (seriesTransitionActive || matchOutcome) return
+    console.info('[matchEnd] concludeRoundElimination', {
+      iWonRound,
+      stocksYou,
+      stocksFoe,
+      lobbyMode: lobby.mode,
+      role: lobby.mode === 'online' ? lobby.role : 'offline',
+      stack: new Error().stack?.split('\n').slice(1, 6).join(' | '),
+    })
     seriesTransitionActive = true
     const epochAtStart = pvpMatchEpoch
     try {
@@ -2497,14 +2508,30 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (ty === 'authStockKO' && lobby.mode === 'online') {
       const sh = data.stocksHost
       const sg = data.stocksGuest
+      const beforeYou = stocksYou
+      const beforeFoe = stocksFoe
       if (typeof sh === 'number' && typeof sg === 'number' && Number.isFinite(sh) && Number.isFinite(sg)) {
         applyNetworkStocksFromPayload(sh, sg)
       }
       const vr =
         data.victimRole === 'host' || data.victimRole === 'guest' ? data.victimRole : undefined
+      console.info('[stockKO] authStockKO received', {
+        victimRole: vr,
+        stocksHost: sh,
+        stocksGuest: sg,
+        stocksYou,
+        stocksFoe,
+      })
       if (vr) {
-        showKoAnnouncement(vr === lobby.role ? displayPlayerName() : opponentHudName())
-        animateKoStockLoss(vr === lobby.role ? 'you' : 'foe')
+        const isYouVictim = vr === lobby.role
+        const before = isYouVictim ? beforeYou : beforeFoe
+        const after = isYouVictim ? stocksYou : stocksFoe
+        showKoAnnouncement(
+          isYouVictim ? displayPlayerName() : opponentHudName(),
+          before,
+          after,
+        )
+        animateKoStockLoss(isYouVictim ? 'you' : 'foe')
         if (lobby.role === 'host') {
           scheduleAuthRespawnHost(vr)
         }
@@ -3474,9 +3501,22 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     return roleNet === lobby.role ? slots.player : slots.opponent
   }
 
-  function showKoAnnouncement(displayName: string): void {
+  function showKoAnnouncement(displayName: string, stocksBefore: number, stocksAfter: number): void {
     if (!koAnnounceOverlayEl || !koAnnounceNameEl) return
     koAnnounceNameEl.textContent = displayName.toUpperCase()
+    if (koAnnounceStocksWrapEl) {
+      const showStocks = stocksBefore > stocksAfter
+      koAnnounceStocksWrapEl.hidden = !showStocks
+      if (showStocks) {
+        if (koAnnounceStocksFromEl) koAnnounceStocksFromEl.textContent = `×${stocksBefore}`
+        if (koAnnounceStocksToEl) koAnnounceStocksToEl.textContent = `×${stocksAfter}`
+        koAnnounceStocksFromEl?.classList.remove('ko-announce-stocks__from')
+        koAnnounceStocksToEl?.classList.remove('ko-announce-stocks__to')
+        void koAnnounceStocksWrapEl.offsetWidth
+        koAnnounceStocksFromEl?.classList.add('ko-announce-stocks__from')
+        koAnnounceStocksToEl?.classList.add('ko-announce-stocks__to')
+      }
+    }
     koAnnounceOverlayEl.hidden = false
     koAnnounceOverlayEl.classList.remove('ko-announce-overlay--visible')
     void koAnnounceOverlayEl.offsetWidth
@@ -3575,23 +3615,43 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       bot.alignFacingToward(camera.position)
       bot.beginRespawnMeshFlash(invulnMs)
     }
-    browserHost?.notifyRespawnApplied(vr)
+    /* Set invuln window BEFORE clearing the ring-out latch so a stale incoming
+     * pose can't double-deduct stocks between these two state mutations. */
     browserHost?.setRespawnInvulnUntil(vr, untilAuth)
+    browserHost?.notifyRespawnApplied(vr)
     syncHud()
     warpRapierCapsulesToCurrentActors()
   }
 
   function triggerOfflineRingStockKo(victim: 'you' | 'foe'): void {
-    if (seriesTransitionActive || matchOutcome || offlineBlastKoPending) return
+    if (seriesTransitionActive || matchOutcome || offlineBlastKoPending) {
+      console.debug('[stockKO] skipped (already transitioning)', {
+        victim,
+        seriesTransitionActive,
+        matchOutcome,
+        offlineBlastKoPending,
+      })
+      return
+    }
 
+    const before = victim === 'you' ? stocksYou : stocksFoe
     if (victim === 'you') stocksYou = Math.max(0, stocksYou - 1)
     else stocksFoe = Math.max(0, stocksFoe - 1)
+    const after = victim === 'you' ? stocksYou : stocksFoe
+
+    console.info('[stockKO] offline KO', {
+      victim,
+      before,
+      after,
+      stocksYou,
+      stocksFoe,
+      startStocks: gameConfig.startStocks,
+    })
 
     syncStocksHud()
 
-    const remaining = victim === 'you' ? stocksYou : stocksFoe
-
-    if (remaining <= 0) {
+    if (after <= 0) {
+      console.info('[stockKO] last stock — match end', { victim })
       winFinisher = null
       hideWinGameSplash()
       void concludeRoundElimination(victim === 'foe')
@@ -3599,7 +3659,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
 
     offlineBlastKoPending = victim
-    showKoAnnouncement(victim === 'you' ? displayPlayerName() : opponentHudName())
+    showKoAnnouncement(
+      victim === 'you' ? displayPlayerName() : opponentHudName(),
+      before,
+      after,
+    )
     animateKoStockLoss(victim)
 
     window.setTimeout(() => {
@@ -3921,6 +3985,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (!winFinisher || winFinisher.phase !== 'flash') return
     if (performance.now() - winFinisher.started <= 8) return
     winFinisher = null
+    const before = stocksFoe
     stocksFoe = Math.max(0, stocksFoe - 1)
     syncStocksHud()
     if (stocksFoe <= 0) {
@@ -3928,7 +3993,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       return
     }
     offlineBlastKoPending = 'foe'
-    showKoAnnouncement(opponentHudName())
+    showKoAnnouncement(opponentHudName(), before, stocksFoe)
     animateKoStockLoss('foe')
     window.setTimeout(() => {
       hideKoAnnouncementDeferred()
@@ -4464,8 +4529,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (!authPvp()) {
       const listenAuth = isOnline && lobby.mode === 'online' && isAuthoritativeListenServer()
       if (!listenAuth) {
+        const nowMs = performance.now()
         if (map.isBlastZone(camera.position)) {
           if (offlineBlastKoPending === 'you') return
+          if (nowMs < respawnInvulnUntilYou) return
           if (lobbyDummyPractice) {
             applyRoundReset()
             return
@@ -4475,6 +4542,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         }
         if (map.isBlastZone(bot.root.position)) {
           if (offlineBlastKoPending === 'foe') return
+          if (nowMs < respawnInvulnUntilFoe) return
           if (lobbyDummyPractice) {
             applyRoundReset()
             return

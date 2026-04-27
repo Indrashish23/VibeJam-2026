@@ -281,7 +281,15 @@
         aria-live="assertive"
         aria-atomic="true"
       >
-        <p id="ko-announce-name" class="ko-announce-name"></p>
+        <div class="ko-announce-card">
+          <p id="ko-announce-tag" class="ko-announce-tag">KO!</p>
+          <p id="ko-announce-name" class="ko-announce-name"></p>
+          <div id="ko-announce-stocks" class="ko-announce-stocks" aria-hidden="true">
+            <span id="ko-announce-stocks-from" class="ko-announce-stocks__from">×2</span>
+            <span class="ko-announce-stocks__arrow">→</span>
+            <span id="ko-announce-stocks-to" class="ko-announce-stocks__to">×1</span>
+          </div>
+        </div>
       </div>
       <div id="hud-viewport" class="hud-viewport">
         <div id="percent-hud" class="percent-hud" aria-label="Launch percent">

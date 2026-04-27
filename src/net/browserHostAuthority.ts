@@ -55,8 +55,13 @@ export function createBrowserHostAuthority(broadcast: AuthBroadcast) {
   function ringCheck(): void {
     if (ended) return
     const roles = ['host', 'guest'] as const
+    const now = Date.now()
     for (const role of roles) {
       if (ringOutPending === role) continue
+      /* Stale post-respawn pose can briefly still report feet below blastY before
+       * the teleport propagates back as a fresh pose. Gate ring-out on the
+       * respawn invuln window so we don't double-deduct stocks on the same KO. */
+      if (now < respawnInvulnUntil[role]) continue
       const p = poses[role]
       if (p && checkFeetEliminated(p)) {
         stocks[role] = Math.max(0, stocks[role] - 1)

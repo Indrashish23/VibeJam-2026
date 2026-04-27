@@ -114,8 +114,13 @@ function broadcastAll(roomId, raw) {
 function validateRingOut(roomId, r) {
   if (r.ended) return
   const roles = /** @type {const} */ (['host', 'guest'])
+  const now = Date.now()
   for (const role of roles) {
     if (r.ringOutPending === role) continue
+    /* Stale post-respawn pose can briefly still report feet below blastY before
+     * the teleport propagates back as a fresh pose. Gate ring-out on the
+     * respawn invuln window so we don't double-deduct stocks on the same KO. */
+    if (now < (r.respawnInvulnUntil?.[role] ?? 0)) continue
     const pose = r.poses[role]
     if (pose && checkFeetEliminated(pose)) {
       r.stocks[role] = Math.max(0, r.stocks[role] - 1)
@@ -267,11 +272,13 @@ wss.on('connection', (ws, req) => {
     if (t === 'authRespawn' && ws._vjRole === 'host') {
       const vr = parsed.victimRole
       if (vr === 'host' || vr === 'guest') {
-        if (r.ringOutPending === vr) r.ringOutPending = null
         const msRaw = parsed.invulnMs
         const ms =
           typeof msRaw === 'number' && Number.isFinite(msRaw) ? Math.min(120_000, Math.max(0, msRaw)) : 2000
+        /* Set invuln window BEFORE clearing the ring-out latch so a stale incoming
+         * pose can't double-deduct stocks between these two state mutations. */
         r.respawnInvulnUntil[vr] = Date.now() + ms
+        if (r.ringOutPending === vr) r.ringOutPending = null
       }
     }
 
