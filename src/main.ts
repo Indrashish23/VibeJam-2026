@@ -633,8 +633,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   composer.addPass(pixelPass)
   composer.addPass(new OutputPass())
   composer.addPass(celOutlinePass)
-  /* After color space / tone mapping: cheap screen-space noise to reduce gradient banding. */
-  composer.addPass(new ShaderPass(LowEndDitherShader))
+  /* After color space / tone mapping: screen-space dither (strength from Tweaks). */
+  const ditherPass = new ShaderPass(LowEndDitherShader)
+  const ditherUniforms = ditherPass.uniforms as Record<string, { value: unknown }>
+  composer.addPass(ditherPass)
   composer.setSize(window.innerWidth, Math.max(window.innerHeight, 1))
 
   const controls = new PointerLockControls(camera, renderer.domElement)
@@ -1130,26 +1132,41 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   dangerAuraOverlay.style.position = 'absolute'
   dangerAuraOverlay.style.inset = '0'
   dangerAuraOverlay.style.pointerEvents = 'none'
-  dangerAuraOverlay.style.zIndex = '11'
+  dangerAuraOverlay.style.zIndex = '40'
   dangerAuraOverlay.style.opacity = '0'
   dangerAuraOverlay.style.background =
-    'radial-gradient(circle at 50% 52%, rgba(255,0,0,0.02) 0%, rgba(255,0,0,0.08) 44%, rgba(255,0,0,0.2) 100%)'
+    'radial-gradient(ellipse 95% 100% at 50% 48%, rgba(255,40,30,0.12) 0%, rgba(255,0,0,0.22) 42%, rgba(120,0,0,0.55) 100%)'
   gameRoot.appendChild(dangerAuraOverlay)
+
+  /** First-person “body” stress read: red pulse over the 3D view (local high launch %). */
+  const dangerLaunchTintEl = document.createElement('div')
+  dangerLaunchTintEl.setAttribute('aria-hidden', 'true')
+  dangerLaunchTintEl.style.position = 'absolute'
+  dangerLaunchTintEl.style.inset = '0'
+  dangerLaunchTintEl.style.pointerEvents = 'none'
+  dangerLaunchTintEl.style.zIndex = '41'
+  dangerLaunchTintEl.style.opacity = '0'
+  dangerLaunchTintEl.style.mixBlendMode = 'overlay'
+  dangerLaunchTintEl.style.background =
+    'radial-gradient(ellipse 70% 85% at 50% 52%, rgba(255,85,70,0.72) 0%, rgba(200,30,25,0.35) 45%, transparent 70%)'
+  gameRoot.appendChild(dangerLaunchTintEl)
 
   const dangerSmokeCount = 16
   const dangerSmokePos = new Float32Array(dangerSmokeCount * 3)
   const dangerSmokeGeom = new BufferGeometry()
   dangerSmokeGeom.setAttribute('position', new BufferAttribute(dangerSmokePos, 3))
   const dangerSmokeMat = new PointsMaterial({
-    color: new Color(0x6f3030),
-    size: 0.32,
+    color: new Color(0xa89898),
+    size: 0.58,
     transparent: true,
     opacity: 0,
     depthWrite: false,
+    depthTest: false,
     sizeAttenuation: true,
   })
   const dangerSmoke = new Points(dangerSmokeGeom, dangerSmokeMat)
   dangerSmoke.frustumCulled = false
+  dangerSmoke.renderOrder = 50
   dangerSmoke.visible = false
   scene.add(dangerSmoke)
 
@@ -4036,20 +4053,27 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   function updateDangerAuraFx(nowSec: number): void {
-    const over = Math.max(0, playerPercent - 70)
+    const start = Math.max(0, Math.min(500, gameConfig.dangerFxStartPercent))
+    const over = Math.max(0, playerPercent - start)
     if (over <= 0.001) {
       dangerAuraOverlay.style.opacity = '0'
+      dangerLaunchTintEl.style.opacity = '0'
       dangerSmoke.visible = false
       dangerSmokeMat.opacity = 0
       return
     }
-    const t = Math.min(1, over / 80)
+    /* Full intensity by +100% past the start threshold (e.g. 50→150%). */
+    const t = Math.min(1, over / 100)
     const pulse = 0.45 + 0.55 * Math.sin(nowSec * 9.2)
-    const aura = Math.min(0.28, 0.06 + t * 0.16 + pulse * t * 0.05)
+    const pulse2 = 0.5 + 0.5 * Math.sin(nowSec * 14.1)
+    const aura = Math.min(0.55, 0.08 + t * 0.28 + pulse * t * 0.12)
     dangerAuraOverlay.style.opacity = aura.toFixed(3)
 
+    const tint = Math.min(0.52, 0.06 + t * 0.32 + pulse2 * t * 0.14)
+    dangerLaunchTintEl.style.opacity = tint.toFixed(3)
+
     dangerSmoke.visible = true
-    dangerSmokeMat.opacity = Math.min(0.22, 0.03 + t * 0.12)
+    dangerSmokeMat.opacity = Math.min(0.55, 0.08 + t * 0.32)
     const footY = feetY()
     for (let i = 0; i < dangerSmokeCount; i++) {
       const k = i * 3
@@ -4249,6 +4273,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     pixelPass.depthEdgeStrength = Math.max(0, gameConfig.retroEdgeStrength)
     pixelPass.normalEdgeStrength = Math.max(0, gameConfig.retroEdgeStrength * 0.65)
     syncCelOutlineConfig()
+    ditherPass.enabled = gameConfig.postDitherEnabled >= 0.5 && gameConfig.postDitherStrength > 1e-4
+    if (ditherPass.enabled) {
+      ditherUniforms.strength.value = Math.max(0, Math.min(1, gameConfig.postDitherStrength)) * 0.14
+    }
     skyDome.update(delta, camera.position)
 
     /* Debug capsule visualization (red wireframe). Same radius/height/offset for player and foe. */

@@ -26,6 +26,12 @@ export const defaultGameConfig = {
   celOutlineSoftness: 0.1,
   /** Cel post-pass black outline intensity (0 = off). */
   celOutlineStrength: 1,
+  /** 0 = skip post dither pass; 1 = apply after cel (or after output if cel off). */
+  postDitherEnabled: 1,
+  /** Post dither strength 0–1 (maps to shader; higher = grainier / more retro crunch). */
+  postDitherStrength: 0.32,
+  /** Launch % at which danger vignette, smoke, and red tint begin (local player). */
+  dangerFxStartPercent: 50,
   /** Skybox base color channels (0–1) for the procedural sky dome. */
   skyboxColorR: 0.14,
   skyboxColorG: 0.58,
