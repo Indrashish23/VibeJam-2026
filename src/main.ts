@@ -986,81 +986,21 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let pvpBananaInventory: { host: 0 | 1; guest: 0 | 1 } = { host: 0, guest: 0 }
   let playerBananaSlipUntil = 0
   let nextBananaPeelId = 1
-  let bananaSlipCamRollStartMs = 0
-  let bananaSlipCamRollPlaying = false
   const _fpViewEuler = new Euler(0, 0, 0, 'YXZ')
-  /** Stored camera baseline at slip start; used for immediate hard reset when slip ends. */
-  const slipCamStoredQuat = new Quaternion()
-  let slipCamStoredY = 0
-  let slipCamHasStoredBaseline = false
-  let slipCamWasActive = false
 
   function startBananaSlipCamRoll(): void {
     if (gameConfig.bananaSlipCamRollEnabled < 0.5) return
-    if (!slipCamHasStoredBaseline) {
-      if (cameraSpringArm.initialized) {
-        slipCamStoredQuat.copy(cameraSpringArm.displayQuat)
-        slipCamStoredY = cameraSpringArm.displayY
-      } else {
-        slipCamStoredQuat.copy(camera.quaternion)
-        slipCamStoredY = camera.position.y
-      }
-      slipCamHasStoredBaseline = true
-    }
-    bananaSlipCamRollStartMs = performance.now()
-    bananaSlipCamRollPlaying = true
-    slipCamWasActive = true
+    /* Banana slip uses a stronger hit-style shake only (no camera roll/pitch transform). */
+    const sm = getCameraShakeMul()
+    shakeIntensity = Math.max(shakeIntensity, gameConfig.hitScreenShake * sm * 2.7)
   }
 
   function resetBananaSlipCamRoll(): void {
-    bananaSlipCamRollPlaying = false
-    slipCamWasActive = false
-    slipCamHasStoredBaseline = false
+    /* no-op: slip camera transform is intentionally disabled */
   }
 
   function computeBananaSlipRollRad(): number {
-    if (gameConfig.bananaSlipCamRollEnabled < 0.5) {
-      bananaSlipCamRollPlaying = false
-      slipCamWasActive = false
-      slipCamHasStoredBaseline = false
-      return 0
-    }
-    const activeNow = isPlayerBananaSlipNow()
-    if (activeNow) {
-      slipCamWasActive = true
-    } else if (slipCamWasActive && slipCamHasStoredBaseline) {
-      /* Hard snap baseline restore when slip ends: bypass spring-arm lag smoothing. */
-      cameraSpringArm.intendedQuat.copy(slipCamStoredQuat)
-      cameraSpringArm.displayQuat.copy(slipCamStoredQuat)
-      cameraSpringArm.intendedY = slipCamStoredY
-      cameraSpringArm.displayY = slipCamStoredY
-      camera.quaternion.copy(slipCamStoredQuat)
-      camera.position.y = slipCamStoredY
-      bananaSlipCamRollPlaying = false
-      slipCamWasActive = false
-      slipCamHasStoredBaseline = false
-      return 0
-    }
-    if (!bananaSlipCamRollPlaying) return 0
-
-    const now = performance.now()
-    const elapsed = (now - bananaSlipCamRollStartMs) / 1000
-    const snap = Math.max(0.02, gameConfig.slipPitchInTime)
-    const rec = Math.max(0.05, gameConfig.slipPitchOutTime)
-    /* Three.js camera pitch-up is negative X in YXZ Euler order. */
-    const peak = -MathUtils.degToRad(gameConfig.slipPitchAngle)
-
-    if (elapsed < snap) {
-      const u = Math.max(0, Math.min(1, elapsed / snap))
-      const easeOut = 1 - Math.pow(1 - u, 3)
-      return peak * easeOut
-    }
-    if (elapsed < snap + rec) {
-      const u = (elapsed - snap) / rec
-      const easeOut = 1 - Math.pow(1 - u, 3)
-      return peak * (1 - easeOut)
-    }
-    bananaSlipCamRollPlaying = false
+    /* Slip camera transform disabled; keep function for existing structure/call sites. */
     return 0
   }
 
