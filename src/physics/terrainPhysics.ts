@@ -298,7 +298,7 @@ export class TerrainPhysics {
     )
     if (!hit) return null
     return {
-      point: new Vector3(x, y - hit.timeOfImpact, z),
+      point: new Vector3(x, y - hit.toi, z),
       normal: new Vector3(hit.normal.x, hit.normal.y, hit.normal.z),
     }
   }
