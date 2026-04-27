@@ -35,6 +35,15 @@ export const defaultGameConfig = {
   /** Ammo +1 feedback: vertical anchor (% from top of #charge-bar-wrap). */
   chargeHudAmmoPopTopPct: 38,
 
+  /** Uniform scale for `#hud-viewport` (launch % + charge wedge cluster); 1 = default. */
+  uiHudMasterScale: 1,
+  /** Scale only the launch-percent HUD block (inside master viewport scale). */
+  percentHudScale: 1,
+  /** Tweaks panel window UI scale (slider rows stay usable when shrunk). */
+  tweaksPanelUiScale: 1,
+  /** When 1 and Tweaks (T) is open, drag launch % + charge wedge anywhere on screen (positions persist per browser tab). */
+  hudDragLayoutEnabled: 0,
+
   cameraFov: 75,
   cameraNear: 0.1,
   cameraFar: 650,

@@ -2,6 +2,12 @@ import type { PerspectiveCamera } from 'three'
 import type { PointerLockControls } from 'three/addons/controls/PointerLockControls.js'
 import { defaultGameConfig, gameConfig, resetGameConfig, type GameConfigKey } from './gameConfig'
 import { TWEAK_DISPLAY_NAME, TWEAK_RANGE, TWEAK_SECTIONS, TWEAK_TOOLTIP } from './tweakRanges'
+import {
+  applyTweaksPanelDocked,
+  attachTweaksPanelDrag,
+  clearTweaksPanelPosition,
+  restoreTweaksPanelPosition,
+} from './hudLayout'
 
 function isTypingTarget(el: EventTarget | null): boolean {
   if (!(el instanceof HTMLElement)) return false
@@ -39,6 +45,8 @@ export type TweaksPanelHooks = {
   onTriggerKnockbackDev?: () => void
   /** Re-run the HOWL tutorial in-session (clears the tutorial-done flag and starts fresh). */
   onReplayTutorial?: () => void | Promise<void>
+  /** Reset stored launch-% + charge wedge positions (Tweaks → Reset HUD positions). */
+  onResetHudLayout?: () => void
 }
 
 type RowInput = { key: GameConfigKey; range: HTMLInputElement; num: HTMLInputElement | null }
@@ -147,13 +155,34 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
 
   const header = document.createElement('div')
   header.className = 'tweaks-panel-header'
+  const dragRow = document.createElement('div')
+  dragRow.className = 'tweaks-panel-drag-row'
+  const dragHandle = document.createElement('div')
+  dragHandle.className = 'tweaks-panel-drag-handle'
+  dragHandle.setAttribute('aria-label', 'Move panel')
+  dragHandle.title = 'Drag to move · position is saved'
+  dragHandle.textContent = '⠿'
   const title = document.createElement('strong')
+  title.className = 'tweaks-panel-title'
   title.textContent = 'Tweaks'
+  const dockBtn = document.createElement('button')
+  dockBtn.type = 'button'
+  dockBtn.className = 'tweaks-panel-dock-btn'
+  dockBtn.title = 'Snap panel to top-right corner (clears saved position)'
+  dockBtn.setAttribute('aria-label', 'Dock tweaks panel')
+  dockBtn.textContent = 'Dock'
+  dockBtn.addEventListener('click', () => {
+    clearTweaksPanelPosition()
+    applyTweaksPanelDocked(panel)
+  })
+  dragRow.appendChild(dragHandle)
+  dragRow.appendChild(title)
+  dragRow.appendChild(dockBtn)
   const sub = document.createElement('span')
   sub.className = 'tweaks-panel-sub'
   sub.textContent =
-    'T or − opens · Category: Gameplay, Knockback, Projectile, Voice, Sound, … · hover for tips · Esc closes'
-  header.appendChild(title)
+    'T or − opens · drag ⠿ to move · Category: Gameplay, Voice, UI, … · hover for tips · Esc closes'
+  header.appendChild(dragRow)
   header.appendChild(sub)
   panel.appendChild(header)
 
@@ -408,6 +437,19 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
   })
   actions.appendChild(resetBtn)
 
+  if (hooks.onResetHudLayout) {
+    const resetHudBtn = document.createElement('button')
+    resetHudBtn.type = 'button'
+    resetHudBtn.className = 'tweaks-panel-reset-hud-btn'
+    resetHudBtn.textContent = 'Reset HUD positions'
+    resetHudBtn.title =
+      'Clear saved positions for launch % + charge wedge (browser only). Tweaks sliders (inset, scale) stay as set.'
+    resetHudBtn.addEventListener('click', () => {
+      hooks.onResetHudLayout?.()
+    })
+    actions.appendChild(resetHudBtn)
+  }
+
   const copyBtn = document.createElement('button')
   copyBtn.type = 'button'
   copyBtn.textContent = 'Copy current tweaks as code'
@@ -499,6 +541,9 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
 
   host.appendChild(panel)
 
+  restoreTweaksPanelPosition(panel)
+  const disposeTweaksDrag = attachTweaksPanelDrag(panel, dragHandle)
+
   function setOpen(next: boolean) {
     open = next
     panel.hidden = !open
@@ -537,6 +582,7 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
 
   function dispose() {
     window.removeEventListener('keydown', onGlobalKeyDown, true)
+    disposeTweaksDrag()
     panel.remove()
   }
 

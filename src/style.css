@@ -977,6 +977,15 @@ body {
   }
 }
 
+.hud-viewport {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+  transform: scale(var(--ui-hud-master, 1));
+  transform-origin: center center;
+}
+
 .percent-hud {
   position: absolute;
   right: 1.5rem;
@@ -987,6 +996,21 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+  transform: scale(var(--percent-hud-scale, 1));
+  transform-origin: bottom right;
+}
+
+.game-root.game-root--hud-drag .percent-hud,
+.game-root.game-root--hud-drag #charge-bar-wrap {
+  pointer-events: auto !important;
+  cursor: grab;
+  outline: 1px dashed rgba(56, 189, 248, 0.35);
+  outline-offset: 3px;
+}
+
+.game-root.game-root--hud-drag .percent-hud:active,
+.game-root.game-root--hud-drag #charge-bar-wrap:active {
+  cursor: grabbing;
 }
 
 .percent-hud__row {
@@ -1404,16 +1428,18 @@ body {
 }
 
 #tweaks-panel-host {
-  position: absolute;
+  --tweaks-panel-scale: 1;
+  position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: 100;
+  z-index: 200;
 }
 
 .tweaks-panel {
-  position: absolute;
+  position: fixed;
   top: 0.75rem;
   right: 0.75rem;
+  left: auto;
   width: min(24rem, calc(100vw - 1.5rem));
   max-height: min(90vh, 42rem);
   overflow: auto;
@@ -1424,6 +1450,59 @@ body {
   border: 1px solid rgba(148, 163, 184, 0.4);
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
   font-size: 0.75rem;
+  transform: scale(var(--tweaks-panel-scale, 1));
+  transform-origin: top right;
+}
+
+.tweaks-panel--dragging {
+  opacity: 0.96;
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.65);
+}
+
+.tweaks-panel-drag-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.35rem;
+}
+
+.tweaks-panel-drag-handle {
+  flex: 0 0 auto;
+  width: 1.35rem;
+  text-align: center;
+  font-size: 0.95rem;
+  line-height: 1;
+  letter-spacing: -0.05em;
+  color: #94a3b8;
+  cursor: grab;
+  user-select: none;
+}
+
+.tweaks-panel-drag-handle:active {
+  cursor: grabbing;
+}
+
+.tweaks-panel-title {
+  flex: 1 1 auto;
+  font-size: 0.82rem;
+}
+
+.tweaks-panel-dock-btn {
+  flex: 0 0 auto;
+  padding: 0.22rem 0.45rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-radius: 5px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  background: rgba(30, 41, 59, 0.85);
+  color: #e2e8f0;
+  cursor: pointer;
+}
+
+.tweaks-panel-dock-btn:hover {
+  background: rgba(51, 65, 85, 0.95);
 }
 
 .tweaks-panel-header {
@@ -1616,6 +1695,10 @@ body {
 
 .tweaks-panel-actions button:hover {
   background: #475569;
+}
+
+.tweaks-panel-reset-hud-btn {
+  margin-bottom: 0.35rem;
 }
 
 .leave-match-overlay {
@@ -2116,8 +2199,7 @@ body {
 }
 
 /* === Dev: hide persistent gameplay HUD (Tweaks → UI → Hide HUD) =============== */
-.game-root.game-root--hide-hud #percent-hud,
-.game-root.game-root--hide-hud #charge-bar-wrap,
+.game-root.game-root--hide-hud #hud-viewport,
 .game-root.game-root--hide-hud #crosshair,
 .game-root.game-root--hide-hud #mp-code-hud,
 .game-root.game-root--hide-hud #mp-toast,

@@ -274,17 +274,18 @@
         <p id="countdown-title" class="countdown-title" hidden>Match begins in</p>
         <span id="countdown-num" class="countdown-num">3</span>
       </div>
-      <div id="percent-hud" class="percent-hud" aria-label="Launch percent">
-        <div class="percent-hud__row percent-hud__row--you">
-          <span id="percent-label-you" class="percent-hud__label">You</span>
-          <span id="percent-you" class="percent-hud__value">0%</span>
+      <div id="hud-viewport" class="hud-viewport">
+        <div id="percent-hud" class="percent-hud" aria-label="Launch percent">
+          <div class="percent-hud__row percent-hud__row--you">
+            <span id="percent-label-you" class="percent-hud__label">You</span>
+            <span id="percent-you" class="percent-hud__value">0%</span>
+          </div>
+          <div class="percent-hud__row percent-hud__row--foe">
+            <span id="percent-label-foe" class="percent-hud__label">Opponent</span>
+            <span id="percent-foe" class="percent-hud__value">0%</span>
+          </div>
         </div>
-        <div class="percent-hud__row percent-hud__row--foe">
-          <span id="percent-label-foe" class="percent-hud__label">Opponent</span>
-          <span id="percent-foe" class="percent-hud__value">0%</span>
-        </div>
-      </div>
-      <div id="charge-bar-wrap" class="charge-bar-wrap" style="--charge-pct: 0%">
+        <div id="charge-bar-wrap" class="charge-bar-wrap" style="--charge-pct: 0%">
         <div id="ammo-feedback" class="ammo-feedback" hidden aria-hidden="true">+1</div>
         <div id="ammo-count" class="ammo-count" hidden>0/10</div>
         <div class="charge-wedge" role="group" aria-label="Weapon charge">
@@ -308,6 +309,7 @@
         >
           Make Sound to Charge
         </span>
+        </div>
       </div>
       <div id="mic-blocked-overlay" class="mic-blocked-overlay" hidden>
         <div class="mic-blocked-card">
@@ -381,7 +383,6 @@
           </div>
         </div>
       </div>
-      <div id="tweaks-panel-host"></div>
       <div id="tutorial-overlay" class="tutorial-overlay" hidden aria-live="polite">
         <div id="tutorial-prompt" class="tutorial-prompt" hidden>
           <p id="tutorial-prompt-text" class="tutorial-prompt-text"></p>
@@ -400,6 +401,8 @@
         <button type="button" id="tutorial-skip" class="tutorial-skip">Skip Tutorial</button>
       </div>
     </div>
+
+    <div id="tweaks-panel-host"></div>
 
     <!-- Outside game-root so logs work on lobby + fixed overlay -->
     <div id="debug-mp-panel" class="debug-mp-panel debug-mp-panel--overlay" hidden>
