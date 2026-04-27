@@ -195,6 +195,8 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   fpHeadbobCameraYMul: { min: 0, max: 0.12, step: 0.002 },
   fpHeadbobRollDeg: { min: 0, max: 4, step: 0.05 },
   fpHeadbobHz: { min: 0.5, max: 5, step: 0.05 },
+  fpStrafeTiltDeg: { min: 0, max: 12, step: 0.1 },
+  fpStrafeTiltEaseHz: { min: 2, max: 28, step: 0.5 },
   fpWeaponSwayMul: { min: 0, max: 2, step: 0.05 },
   gravity: { min: 0, max: CAP, step: 1 },
   jumpForce: { min: 0, max: CAP, step: 0.5 },
@@ -287,7 +289,9 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   fpHeadbobCameraYMul: 'Head bob camera Y (m)',
   fpHeadbobRollDeg: 'Walk bob roll ±deg (fixed vs speed)',
   fpHeadbobHz: 'Head bob cadence (Hz)',
-  fpWeaponSwayMul: 'Idle weapon sway intensity',
+  fpStrafeTiltDeg: 'Strafe head tilt (deg)',
+  fpStrafeTiltEaseHz: 'Strafe tilt release easing (Hz)',
+  fpWeaponSwayMul: 'Weapon sway intensity',
   dashImpulse: 'Shift dash distance target',
   dashVelocityMul: 'Shift dash distance multiplier ×',
   dashDecay: 'Slide decay',
@@ -542,14 +546,17 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   jumpFxWhiteFlash: 'Brief white overlay mixed with punch hit-flash when you jump.',
   movementMaxDelta: 'Caps each simulation step length for stability (also limits slow-motion spikes).',
   fpViewBobEnabled:
-    'When 1, walking uses camera Y bob + walk-cycle roll (no pitch nod). Idle weapon sway stops while moving.',
+    'When 1, walking uses camera Y bob + walk-cycle roll (no pitch nod).',
   fpHeadbobCameraYMul:
     'Vertical camera bob while walking (meters peak × sin(walk phase)); view-model weapons follow — no separate weapon bob.',
   fpHeadbobRollDeg:
     'Side-to-side roll from the walk cycle (degrees peak ±). Amplitude does not scale with how fast you move — only W/A/S/D “walking”. Set to 0 for vertical-only camera bob.',
   fpHeadbobHz: 'Bob frequency at full stride (walk phase advances with speed).',
+  fpStrafeTiltDeg: 'Max camera roll toward the strafe direction (A/D) in degrees.',
+  fpStrafeTiltEaseHz:
+    'After you release A/D only: roll eases back to upright (Hz). Tilt snaps in immediately while strafing; use higher for a snappier return.',
   fpWeaponSwayMul:
-    'Idle sway on megaphone + banana while **standing** only (0 = off). Disabled while walking so it never stacks with camera bob.',
+    'Sway on megaphone + banana in first-person (0 = off).',
   groundWidth: 'Half the stage is this wide in X; larger = more room before ring-out.',
   groundDepth: 'Half the stage depth in Z.',
   blastMargin: 'Extra distance beyond the deck edge before the blast zone counts (XZ).',
@@ -1107,6 +1114,8 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'fpHeadbobCameraYMul',
       'fpHeadbobRollDeg',
       'fpHeadbobHz',
+      'fpStrafeTiltDeg',
+      'fpStrafeTiltEaseHz',
       'fpWeaponSwayMul',
     ],
   },

@@ -660,14 +660,29 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     storedPitchBob: 0,
     storedRollTotal: 0,
     walkPhase: 0,
+    strafeTiltRad: 0,
     /** Vertical camera bob applied at end of frame; stripped at start of movement for clean physics. */
     storedCamBobY: 0,
+    storedCamLagY: 0,
+    lookLagPitchRad: 0,
+    lookLagRollRad: 0,
+    jumpLagPitchRad: 0,
+    jumpLandLagY: 0,
+    rawYawPrev: 0,
+    rawPitchPrev: 0,
+    landedKickY: 0,
   }
+  fpPresentationState.rawYawPrev = camera.rotation.y
+  fpPresentationState.rawPitchPrev = camera.rotation.x
   controls.addEventListener('change', () => {
     camera.position.y -= fpPresentationState.storedCamBobY
+    camera.position.y -= fpPresentationState.storedCamLagY
     fpPresentationState.storedCamBobY = 0
+    fpPresentationState.storedCamLagY = 0
     fpPresentationState.storedPitchBob = 0
     fpPresentationState.storedRollTotal = 0
+    fpPresentationState.rawYawPrev = camera.rotation.y
+    fpPresentationState.rawPitchPrev = camera.rotation.x
   })
 
   const ambient = new AmbientLight(0xffffff, gameConfig.ambientIntensity)
@@ -993,7 +1008,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   function applyFpCameraPresentation(
-    _delta: number,
+    delta: number,
     fpWalk: { moving: boolean; spd01: number },
   ): void {
     _fpViewEuler.setFromQuaternion(camera.quaternion, 'YXZ')
@@ -1020,21 +1035,59 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         : 0
     }
 
+    let targetStrafe = 0
+    if (keys.left && !keys.right) targetStrafe = 1
+    else if (keys.right && !keys.left) targetStrafe = -1
+    const tiltMax = MathUtils.degToRad(gameConfig.fpStrafeTiltDeg)
+    const desiredStrafeRoll = targetStrafe * tiltMax
+    if (Math.abs(desiredStrafeRoll) > 1e-8) {
+      fpPresentationState.strafeTiltRad = desiredStrafeRoll
+    } else {
+      const easeOut = 1 - Math.exp(-delta * Math.max(0.5, gameConfig.fpStrafeTiltEaseHz))
+      fpPresentationState.strafeTiltRad += (0 - fpPresentationState.strafeTiltRad) * easeOut
+    }
+
+    const rawYaw = _fpViewEuler.y
+    const rawPitch = _fpViewEuler.x
+    const dyaw = MathUtils.euclideanModulo(rawYaw - fpPresentationState.rawYawPrev + Math.PI, Math.PI * 2) - Math.PI
+    const dpitch = rawPitch - fpPresentationState.rawPitchPrev
+    fpPresentationState.rawYawPrev = rawYaw
+    fpPresentationState.rawPitchPrev = rawPitch
+    const lookDragRollTarget = MathUtils.clamp(-dyaw * 0.78, -MathUtils.degToRad(2.2), MathUtils.degToRad(2.2))
+    const lookDragPitchTarget = MathUtils.clamp(-dpitch * 0.48, -MathUtils.degToRad(1.7), MathUtils.degToRad(1.7))
+    const lookFollow = 1 - Math.exp(-delta * 22)
+    fpPresentationState.lookLagRollRad +=
+      (lookDragRollTarget - fpPresentationState.lookLagRollRad) * lookFollow
+    fpPresentationState.lookLagPitchRad +=
+      (lookDragPitchTarget - fpPresentationState.lookLagPitchRad) * lookFollow
+
+    const jumpLagTargetY = MathUtils.clamp(-vy * 0.0016, -0.032, 0.022)
+    const jumpLagPitchTarget = MathUtils.clamp(-vy * 0.00085, -MathUtils.degToRad(2.6), MathUtils.degToRad(1.6))
+    fpPresentationState.jumpLandLagY +=
+      (jumpLagTargetY - fpPresentationState.jumpLandLagY) * (1 - Math.exp(-delta * 19))
+    fpPresentationState.jumpLagPitchRad +=
+      (jumpLagPitchTarget - fpPresentationState.jumpLagPitchRad) * (1 - Math.exp(-delta * 19))
+    fpPresentationState.landedKickY *= Math.exp(-delta * 24)
+
     if (gameConfig.fpViewBobEnabled < 0.5) {
       bobPitch = 0
       bobRoll = 0
       camBobY = 0
     }
 
-    const totalRoll = slipRoll + bobRoll
-    fpPresentationState.storedPitchBob = bobPitch
+    const camLagY = fpPresentationState.jumpLandLagY + fpPresentationState.landedKickY
+    const totalRoll = slipRoll + bobRoll + fpPresentationState.strafeTiltRad + fpPresentationState.lookLagRollRad
+    fpPresentationState.storedPitchBob =
+      bobPitch + fpPresentationState.lookLagPitchRad + fpPresentationState.jumpLagPitchRad
     fpPresentationState.storedRollTotal = totalRoll
     fpPresentationState.storedCamBobY = camBobY
+    fpPresentationState.storedCamLagY = camLagY
 
     _fpViewEuler.x += fpPresentationState.storedPitchBob
     _fpViewEuler.z += fpPresentationState.storedRollTotal
     camera.quaternion.setFromEuler(_fpViewEuler)
     camera.position.y += fpPresentationState.storedCamBobY
+    camera.position.y += fpPresentationState.storedCamLagY
   }
   function pvpHostBroadcastAndApply(msg: Record<string, unknown>): void {
     if (rtcGame) rtcGame.sendGameJson(msg)
@@ -1067,7 +1120,14 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     fpPresentationState.storedPitchBob = 0
     fpPresentationState.storedRollTotal = 0
     fpPresentationState.walkPhase = 0
+    fpPresentationState.strafeTiltRad = 0
     fpPresentationState.storedCamBobY = 0
+    fpPresentationState.storedCamLagY = 0
+    fpPresentationState.lookLagPitchRad = 0
+    fpPresentationState.lookLagRollRad = 0
+    fpPresentationState.jumpLagPitchRad = 0
+    fpPresentationState.jumpLandLagY = 0
+    fpPresentationState.landedKickY = 0
     localHasBanana = false
     pvpBananaInventory = { host: 0, guest: 0 }
     nextBananaPeelId = 1
@@ -3252,7 +3312,14 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     fpPresentationState.storedPitchBob = 0
     fpPresentationState.storedRollTotal = 0
     fpPresentationState.walkPhase = 0
+    fpPresentationState.strafeTiltRad = 0
     fpPresentationState.storedCamBobY = 0
+    fpPresentationState.storedCamLagY = 0
+    fpPresentationState.lookLagPitchRad = 0
+    fpPresentationState.lookLagRollRad = 0
+    fpPresentationState.jumpLagPitchRad = 0
+    fpPresentationState.jumpLandLagY = 0
+    fpPresentationState.landedKickY = 0
     slideAnimUntilMs = 0
     gameRoot.classList.remove('game-root--dash-tilt')
     gameRoot.style.transform = ''
@@ -4138,6 +4205,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   function updateMovement(delta: number) {
     camera.position.y -= fpPresentationState.storedCamBobY
+    camera.position.y -= fpPresentationState.storedCamLagY
 
     /* Online lobby / pre-live: freeze local player. Voice resume countdown still runs physics so grounded / jump stay consistent. */
     if (multiplayerBlocksPlay()) return
@@ -4217,6 +4285,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         playLandOneShot()
         broadcastActorSfxIfPvp('land')
       }
+      fpPresentationState.landedKickY = Math.min(0.028, fpPresentationState.landedKickY + 0.022)
       voiceDownBoostReady = true
       airDashReady = true
       airJumpsLeft = Math.max(0, Math.round(gameConfig.airJumpsMax))
@@ -4561,9 +4630,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       }
     }
 
-    /* After movement: walk phase for FP; idle weapon sway only when not walking (never stacked with cam bob). */
+    /* After movement: walk phase for FP; weapon sway stays active so removed head-bob still has hand motion. */
     const fpWalk = tickFpWalkPresentation(delta)
-    const idleWeaponSway = !fpWalk.moving
+    const idleWeaponSway = true
 
     const megaphoneCanCharge =
       !voiceInputBlocked && !voiceResumeCountdownActive && !multiplayerBlocksPlay()
