@@ -1,25 +1,34 @@
 import {
-  BoxGeometry,
-  Color,
+  Box3,
   Group,
   Mesh,
-  MeshStandardMaterial,
+  Object3D,
   PointLight,
   Vector3,
   type PerspectiveCamera,
   type Scene,
 } from 'three'
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { gameConfig } from '../gameConfig'
 import type { MapHandle, MapId } from '../maps'
 import type { TerrainPhysics } from '../physics/terrainPhysics'
 const _aim = new Vector3()
 
-function disposeMeshWithLights(m: Mesh): void {
-  m.traverse((o) => {
+const BANANA_GLB = new URL('../../Assets/Props/Banana_Pickup.glb', import.meta.url).href
+
+/** Pickup visual height above terrain contact point (matches prior crate lift). */
+const PICKUP_Y_OFFSET = 0.35
+
+function disposeBananaVisual(root: Object3D): void {
+  root.traverse((o) => {
     if (o instanceof PointLight) o.dispose()
+    if (o instanceof Mesh) {
+      o.geometry?.dispose?.()
+      const mat = o.material
+      if (Array.isArray(mat)) for (const m of mat) m?.dispose?.()
+      else mat?.dispose?.()
+    }
   })
-  m.geometry.dispose()
-  ;(m.material as MeshStandardMaterial).dispose()
 }
 
 export type BananaPeelRecord = {
@@ -27,7 +36,7 @@ export type BananaPeelRecord = {
   x: number
   y: number
   z: number
-  mesh: Mesh
+  mesh: Object3D
 }
 
 export type BananaPickupRecord = {
@@ -36,73 +45,7 @@ export type BananaPickupRecord = {
   y: number
   z: number
   baseY: number
-  mesh: Mesh
-}
-
-function makePickupMesh(): Mesh {
-  const geo = new BoxGeometry(0.55, 0.55, 0.55)
-  const mat = new MeshStandardMaterial({
-    color: new Color(0xffd12a),
-    emissive: new Color(0xffa800),
-    emissiveIntensity: 1.2,
-    metalness: 0.1,
-    roughness: 0.36,
-  })
-  const m = new Mesh(geo, mat)
-  m.name = 'bananaPickupCrate'
-  const glow = new PointLight(0xffe588, 0.85, 5.2, 1.35)
-  glow.name = 'bananaPickupGlow'
-  m.add(glow)
-  m.castShadow = true
-  m.receiveShadow = true
-  return m
-}
-
-function makePeelMesh(): Mesh {
-  const geo = new BoxGeometry(0.9, 0.05, 0.55)
-  const mat = new MeshStandardMaterial({
-    color: new Color(0xffe14a),
-    emissive: new Color(0xffc820),
-    emissiveIntensity: 0.72,
-    metalness: 0.1,
-    roughness: 0.44,
-  })
-  const m = new Mesh(geo, mat)
-  m.name = 'bananaPeel'
-  m.castShadow = true
-  m.receiveShadow = true
-  return m
-}
-
-function makeFlyingMesh(): Mesh {
-  const geo = new BoxGeometry(0.32, 0.12, 0.4)
-  const mat = new MeshStandardMaterial({
-    color: new Color(0xffe22a),
-    emissive: new Color(0xffb800),
-    emissiveIntensity: 0.6,
-    metalness: 0.08,
-    roughness: 0.45,
-  })
-  const m = new Mesh(geo, mat)
-  m.castShadow = true
-  m.name = 'bananaFlight'
-  return m
-}
-
-function makeHandProp(): Group {
-  const g = new Group()
-  g.name = 'bananaHandProp'
-  const body = new Mesh(
-    new BoxGeometry(0.2, 0.08, 0.32),
-    new MeshStandardMaterial({
-      color: new Color(0xffe24a),
-      emissive: new Color(0xccaa20),
-      emissiveIntensity: 0.3,
-    }),
-  )
-  g.add(body)
-  g.visible = false
-  return g
+  mesh: Object3D
 }
 
 /**
@@ -161,11 +104,91 @@ export class BananaWorld {
   private nextId = 0
   pickups: BananaPickupRecord[] = []
   peels: BananaPeelRecord[] = []
-  private flying: { pos: Vector3; vel: Vector3; mesh: Mesh; start: Vector3 } | null = null
+  private flying: { pos: Vector3; vel: Vector3; mesh: Object3D; start: Vector3 } | null = null
+
+  /** Normalized banana (bottom on y=0, ~0.55 units tall); clones only, never added to scene. */
+  private bananaPivot: Group | null = null
+  private bananaLoadPromise: Promise<Group> | null = null
+  private handBananaFilled = false
 
   constructor(scene: Scene) {
     this.scene = scene
-    this.handGroup = makeHandProp()
+    this.handGroup = new Group()
+    this.handGroup.name = 'bananaHandProp'
+    this.handGroup.visible = false
+    void this.loadBananaTemplate().then(() => this.ensureHandBananaClone())
+  }
+
+  /**
+   * Loads `Banana_Pickup.glb` once; scales so max extent ~0.55 and rests pivot on ground plane.
+   */
+  private loadBananaTemplate(): Promise<Group> {
+    if (this.bananaPivot) return Promise.resolve(this.bananaPivot)
+    if (!this.bananaLoadPromise) {
+      const loader = new GLTFLoader()
+      this.bananaLoadPromise = loader.loadAsync(BANANA_GLB).then((gltf) => {
+        const root = gltf.scene as Group
+        root.name = 'bananaPickupModel'
+        root.updateMatrixWorld(true)
+        root.traverse((o) => {
+          if (o instanceof Mesh) {
+            o.castShadow = true
+            o.receiveShadow = true
+          }
+        })
+        const box = new Box3().setFromObject(root)
+        const size = new Vector3()
+        box.getSize(size)
+        const maxDim = Math.max(size.x, size.y, size.z, 1e-6)
+        root.scale.multiplyScalar(0.55 / maxDim)
+        root.updateMatrixWorld(true)
+        const box2 = new Box3().setFromObject(root)
+        root.position.y -= box2.min.y
+        this.bananaPivot = root
+        return root
+      })
+    }
+    return this.bananaLoadPromise
+  }
+
+  private async clonePickupVisual(): Promise<Object3D> {
+    const pivot = await this.loadBananaTemplate()
+    const node = pivot.clone(true)
+    node.name = 'bananaPickupCrate'
+    const glow = new PointLight(0xffe588, 0.85, 5.2, 1.35)
+    glow.name = 'bananaPickupGlow'
+    node.add(glow)
+    return node
+  }
+
+  private async clonePeelVisual(): Promise<Object3D> {
+    const pivot = await this.loadBananaTemplate()
+    const node = pivot.clone(true)
+    node.name = 'bananaPeel'
+    /* Lay the banana on the ground (model +Y up → face -Z). */
+    node.rotation.x = Math.PI / 2
+    node.rotation.y = Math.PI * 0.15
+    node.scale.multiplyScalar(1.08)
+    return node
+  }
+
+  private async cloneFlyingVisual(): Promise<Object3D> {
+    const pivot = await this.loadBananaTemplate()
+    const node = pivot.clone(true)
+    node.name = 'bananaFlight'
+    node.scale.multiplyScalar(0.72)
+    return node
+  }
+
+  /** In-hand prop: same mesh as pickup, slightly smaller. */
+  private ensureHandBananaClone(): void {
+    if (this.handBananaFilled || !this.bananaPivot) return
+    const node = this.bananaPivot.clone(true)
+    node.name = 'bananaHandMesh'
+    node.scale.multiplyScalar(0.88)
+    this.handGroup.clear()
+    this.handGroup.add(node)
+    this.handBananaFilled = true
   }
 
   attachHandToCamera(camera: PerspectiveCamera): void {
@@ -177,16 +200,17 @@ export class BananaWorld {
       gameConfig.bananaHandLocalZ,
     )
     camera.add(g)
+    void this.loadBananaTemplate().then(() => this.ensureHandBananaClone())
   }
 
   clear(): void {
     for (const p of this.pickups) {
       this.scene.remove(p.mesh)
-      disposeMeshWithLights(p.mesh)
+      disposeBananaVisual(p.mesh)
     }
     for (const p of this.peels) {
       this.scene.remove(p.mesh)
-      disposeMeshWithLights(p.mesh)
+      disposeBananaVisual(p.mesh)
     }
     this.pickups = []
     this.peels = []
@@ -196,18 +220,18 @@ export class BananaWorld {
   clearFlying(): void {
     if (!this.flying) return
     this.scene.remove(this.flying.mesh)
-    disposeMeshWithLights(this.flying.mesh)
+    disposeBananaVisual(this.flying.mesh)
     this.flying = null
   }
 
   /**
    * Full local reset: candidates + raycast to terrain.
    */
-  respawnLocal(
+  async respawnLocal(
     map: MapHandle,
     terrain: TerrainPhysics,
     count: number,
-  ): { id: string; x: number; y: number; z: number }[] {
+  ): Promise<{ id: string; x: number; y: number; z: number }[]> {
     this.clear()
     const candidates = getBananaSpawnCandidates(map.id)
     const placed: { x: number; y: number; z: number }[] = []
@@ -215,15 +239,16 @@ export class BananaWorld {
     const out: { id: string; x: number; y: number; z: number }[] = []
     for (const pos of placed) {
       const id = `p${this.nextId++}`
-      const m = makePickupMesh()
-      m.position.set(pos.x, pos.y + 0.35, pos.z)
+      const m = await this.clonePickupVisual()
+      const yVis = pos.y + PICKUP_Y_OFFSET
+      m.position.set(pos.x, yVis, pos.z)
       this.scene.add(m)
       this.pickups.push({
         id,
         x: pos.x,
         y: pos.y,
         z: pos.z,
-        baseY: pos.y + 0.35,
+        baseY: yVis,
         mesh: m,
       })
       out.push({ id, x: pos.x, y: pos.y, z: pos.z })
@@ -234,20 +259,21 @@ export class BananaWorld {
   /**
    * Apply network init (host sends positions).
    */
-  applyInitPickups(
+  async applyInitPickups(
     list: { id: string; x: number; y: number; z: number }[],
-  ): void {
+  ): Promise<void> {
     this.clear()
     for (const it of list) {
-      const m = makePickupMesh()
-      m.position.set(it.x, it.y + 0.35, it.z)
+      const m = await this.clonePickupVisual()
+      const yVis = it.y + PICKUP_Y_OFFSET
+      m.position.set(it.x, yVis, it.z)
       this.scene.add(m)
       this.pickups.push({
         id: it.id,
         x: it.x,
         y: it.y,
         z: it.z,
-        baseY: it.y + 0.35,
+        baseY: yVis,
         mesh: m,
       })
     }
@@ -266,22 +292,26 @@ export class BananaWorld {
     if (i < 0) return
     const p = this.pickups[i]!
     this.scene.remove(p.mesh)
-    disposeMeshWithLights(p.mesh)
+    disposeBananaVisual(p.mesh)
     this.pickups.splice(i, 1)
   }
 
-  addPeel(
+  private async addPeelAsync(
     x: number,
     y: number,
     z: number,
     id: string,
-  ): BananaPeelRecord {
-    const m = makePeelMesh()
+  ): Promise<BananaPeelRecord> {
+    const m = await this.clonePeelVisual()
     m.position.set(x, y + 0.04, z)
     this.scene.add(m)
     const r: BananaPeelRecord = { id, x, y, z, mesh: m }
     this.peels.push(r)
     return r
+  }
+
+  addPeel(x: number, y: number, z: number, id: string): void {
+    void this.addPeelAsync(x, y, z, id)
   }
 
   addPeelFromId(id: string, x: number, y: number, z: number): void {
@@ -293,16 +323,16 @@ export class BananaWorld {
     if (i < 0) return
     const p = this.peels[i]!
     this.scene.remove(p.mesh)
-    disposeMeshWithLights(p.mesh)
+    disposeBananaVisual(p.mesh)
     this.peels.splice(i, 1)
   }
 
   /**
    * Local start throw: flying mesh + will land via tickFlying.
    */
-  beginLocalThrow(muzzle: Vector3, cam: PerspectiveCamera): void {
+  private async beginLocalThrowAsync(muzzle: Vector3, cam: PerspectiveCamera): Promise<void> {
     this.clearFlying()
-    const mesh = makeFlyingMesh()
+    const mesh = await this.cloneFlyingVisual()
     this.scene.add(mesh)
     mesh.position.copy(muzzle)
     cam.getWorldDirection(_aim)
@@ -312,6 +342,10 @@ export class BananaWorld {
     _aim.normalize()
     _aim.multiplyScalar(gameConfig.bananaThrowSpeed)
     this.flying = { pos: muzzle.clone(), vel: _aim.clone(), mesh, start: muzzle.clone() }
+  }
+
+  beginLocalThrow(muzzle: Vector3, cam: PerspectiveCamera): void {
+    void this.beginLocalThrowAsync(muzzle, cam)
   }
 
   /**
@@ -359,7 +393,7 @@ export class BananaWorld {
         o.geometry?.dispose?.()
         const mat = o.material
         if (Array.isArray(mat)) for (const m of mat) m?.dispose?.()
-        else (mat as MeshStandardMaterial | undefined)?.dispose?.()
+        else mat?.dispose?.()
       }
     })
   }

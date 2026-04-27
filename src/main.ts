@@ -935,7 +935,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     bananaWorld.handGroup.visible = getMyBananaHeld() && !isPlayerBananaSlipNow()
   }
 
-  function initBananaRound(): void {
+  async function initBananaRound(): Promise<void> {
     const n = Math.max(0, Math.round(gameConfig.bananaPickupCount))
     playerBananaSlipUntil = 0
     localHasBanana = false
@@ -945,17 +945,17 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     bananaWorld.handGroup.visible = false
     if (n <= 0) return
     if (!isPvp()) {
-      bananaWorld.respawnLocal(map, terrainPhysics, n)
+      await bananaWorld.respawnLocal(map, terrainPhysics, n)
       return
     }
     if (lobby.mode === 'online' && lobby.role === 'host') {
-      const list = bananaWorld.respawnLocal(map, terrainPhysics, n)
+      const list = await bananaWorld.respawnLocal(map, terrainPhysics, n)
       pvpHostBroadcastAndApply({ type: 'bananaInit', pickups: list })
     }
   }
 
   function applyBananaInit(pickups: { id: string; x: number; y: number; z: number }[]): void {
-    bananaWorld.applyInitPickups(pickups)
+    void bananaWorld.applyInitPickups(pickups)
   }
 
   function applyBananaAuthPickup(
@@ -1775,7 +1775,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     await runMatchBeginCountdown()
     mpPhase = 'live'
     updateMicBlockedUi()
-    initBananaRound()
+    void initBananaRound()
     tryPointerLock()
     hideHardRematchReloadOverlay()
     window.setTimeout(() => {
@@ -3141,7 +3141,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     flushPvpSpawnPose()
     applySunShadowFrustum()
     syncBlastBoundsLine()
-    initBananaRound()
+    void initBananaRound()
   }
 
   type WinFinisherState =
