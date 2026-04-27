@@ -14,7 +14,7 @@ export type WebRtcGameApi = {
    * Send a **clone** of the same mic the game uses (not the main track, so we can mute for peer
    * during voice-shot recording without breaking MediaRecorder).
    */
-  attachLocalProximityVoipTrack: (track: MediaStreamTrack) => void
+  attachLocalProximityVoipTrack: (track: MediaStreamTrack) => boolean
   setLocalVoipGameRecordingBlock: (blocked: boolean) => void
   dispose: () => void
 }
@@ -52,8 +52,8 @@ export function createWebRtcGameChannel(opts: {
     }
   }
 
-  function attachLocalProximityVoipTrack(track: MediaStreamTrack): void {
-    if (!opts.includeProximityVoip) return
+  function attachLocalProximityVoipTrack(track: MediaStreamTrack): boolean {
+    if (!opts.includeProximityVoip) return false
     if (localVoipTrack) {
       try {
         localVoipTrack.stop()
@@ -66,16 +66,36 @@ export function createWebRtcGameChannel(opts: {
     try {
       if (opts.role === 'host' && hostAudioTrans) {
         void hostAudioTrans.sender.replaceTrack(localVoipTrack)
-      } else {
-        let g: RTCRtpTransceiver | undefined = pc
+        return true
+      }
+      let g: RTCRtpTransceiver | undefined = pc
+        .getTransceivers()
+        .find(
+          (t) =>
+            t.sender &&
+            t.receiver &&
+            (t.receiver.track === null || t.receiver.track.kind === 'audio'),
+        )
+      if (!g) {
+        g = pc
           .getTransceivers()
           .find((t) => t.sender && t.receiver && t.currentDirection && t.currentDirection !== 'inactive')
-        if (!g) g = pc.getTransceivers().find((t) => t.sender && t.receiver)
-        if (g?.sender) void g.sender.replaceTrack(localVoipTrack)
+      }
+      if (!g) g = pc.getTransceivers().find((t) => t.sender && t.receiver)
+      if (g?.sender) {
+        void g.sender.replaceTrack(localVoipTrack)
+        return true
       }
     } catch {
       /* replaceTrack can fail on odd states */
     }
+    try {
+      track.stop()
+    } catch {
+      /* ignore */
+    }
+    localVoipTrack = null
+    return false
   }
 
   function setLocalVoipGameRecordingBlock(blocked: boolean): void {

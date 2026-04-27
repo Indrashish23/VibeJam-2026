@@ -408,7 +408,6 @@ function takeOnlineRematchReloadLobby(): LobbyResult | null {
   let raw: string | null = null
   try {
     raw = sessionStorage.getItem(ONLINE_REMATCH_RELOAD_KEY)
-    sessionStorage.removeItem(ONLINE_REMATCH_RELOAD_KEY)
   } catch {
     raw = null
   }
@@ -423,6 +422,11 @@ function takeOnlineRematchReloadLobby(): LobbyResult | null {
       isMapId(data.mapId)
     ) {
       showHardRematchReloadOverlay()
+      try {
+        sessionStorage.removeItem(ONLINE_REMATCH_RELOAD_KEY)
+      } catch {
+        /* ignore */
+      }
       return {
         mode: 'online',
         role: data.role,
@@ -436,6 +440,11 @@ function takeOnlineRematchReloadLobby(): LobbyResult | null {
     }
   } catch {
     /* ignore malformed rematch state */
+  }
+  try {
+    sessionStorage.removeItem(ONLINE_REMATCH_RELOAD_KEY)
+  } catch {
+    /* ignore */
   }
   return null
 }
@@ -476,7 +485,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (voiceInputBlocked) return
     const t = voice.cloneAudioTrackForVoip()
     if (!t) return
-    rtcGame.attachLocalProximityVoipTrack(t)
+    if (!rtcGame.attachLocalProximityVoipTrack(t)) return
     if (voice.isChargeRecordingNow()) rtcGame.setLocalVoipGameRecordingBlock(true)
     proxVoipLocalAttached = true
   }
@@ -4183,6 +4192,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       mpSocket = createMultiplayerSocket(onlineLobby.roomId)
       mpSocket.addEventListener('open', () => {
         debugMpLog('ws open')
+        hideHardRematchReloadOverlay()
         mpSocket?.send(
           JSON.stringify({
             type: 'hello',
@@ -4198,6 +4208,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       )
       mpSocket.addEventListener('error', () => {
         debugMpLog('ws error')
+        hideHardRematchReloadOverlay()
         console.warn(
           '[multiplayer] socket error — check network and that the site was built with online enabled',
         )
@@ -4210,6 +4221,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       })
       mpSocket.addEventListener('close', () => {
         debugMpLog('ws close')
+        hideHardRematchReloadOverlay()
         if (leavingToLobby) return
         if (peerSeenInRoom && lobby.mode === 'online') {
           showOpponentForfeitAndReturn()
@@ -4224,6 +4236,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       })
     } catch {
       console.warn('[multiplayer] no transport configured at build time')
+      hideHardRematchReloadOverlay()
       if (mpToast) {
         mpToast.textContent =
           'Online isn’t available right now. Refresh and choose Play offline.'
@@ -4402,4 +4415,5 @@ runUsernameGate()
   })
   .catch((err) => {
     console.error('[vibejam] init failed', err)
+    hideHardRematchReloadOverlay()
   })
