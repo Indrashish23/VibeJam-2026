@@ -4097,6 +4097,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         break
       case 'Space':
         e.preventDefault()
+        if (e.repeat || jumpHeld) break
         jumpHeld = true
         jumpBufferTimer = Math.max(0, gameConfig.jumpBufferTime)
         tryJump()
