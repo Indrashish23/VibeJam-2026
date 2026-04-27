@@ -77,6 +77,7 @@ import {
 /** Stunned FX SVGs live in `public/ui/` so Vercel/production resolves them without bundling `../Assets/`. */
 const stunnedEffectBgUrl = `${import.meta.env.BASE_URL}ui/StunnedEffectBg.svg`
 const stunnedStarUrl = `${import.meta.env.BASE_URL}ui/StunnedStar.svg`
+const proxVoiceActiveUrl = new URL('../Assets/UI/Prox_voicechat_active.svg', import.meta.url).href
 
 /** Production without baked host: open once with `?pk=your-deployment.partykit.dev` (stored in session). */
 try {
@@ -173,6 +174,8 @@ const mpCodeHud = document.getElementById('mp-code-hud') as HTMLDivElement | nul
 const mpCodeValue = document.getElementById('mp-code-value') as HTMLElement | null
 const mpCodeCopy = document.getElementById('mp-code-copy') as HTMLButtonElement | null
 const mpToast = document.getElementById('mp-toast') as HTMLDivElement | null
+const proxVoiceActiveEl = document.getElementById('prox-voice-active') as HTMLImageElement | null
+if (proxVoiceActiveEl) proxVoiceActiveEl.src = proxVoiceActiveUrl
 
 const debugMpPanel = document.getElementById('debug-mp-panel') as HTMLDivElement | null
 const debugMpPre = document.getElementById('debug-mp-pre') as HTMLPreElement | null
@@ -350,6 +353,93 @@ function runUsernameGate(): Promise<void> {
   })
 }
 
+const ONLINE_REMATCH_RELOAD_KEY = 'vibejam_online_rematch_reload_lobby'
+
+function showHardRematchReloadOverlay(): void {
+  let el = document.getElementById('hard-rematch-reload-overlay') as HTMLDivElement | null
+  if (!el) {
+    el = document.createElement('div')
+    el.id = 'hard-rematch-reload-overlay'
+    el.style.position = 'fixed'
+    el.style.inset = '0'
+    el.style.zIndex = '99999'
+    el.style.display = 'flex'
+    el.style.alignItems = 'center'
+    el.style.justifyContent = 'center'
+    el.style.background = '#020617'
+    el.style.color = '#f8fafc'
+    el.style.fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+    el.style.fontSize = 'clamp(2rem, 7vw, 5.5rem)'
+    el.style.fontWeight = '900'
+    el.style.letterSpacing = '0.08em'
+    el.style.textTransform = 'uppercase'
+    el.textContent = 'Rematching...'
+    document.body.appendChild(el)
+  }
+  el.hidden = false
+}
+
+function hideHardRematchReloadOverlay(): void {
+  const el = document.getElementById('hard-rematch-reload-overlay') as HTMLDivElement | null
+  if (el) el.hidden = true
+}
+
+function saveOnlineRematchReloadLobby(l: LobbyResult): void {
+  if (l.mode !== 'online') return
+  try {
+    sessionStorage.setItem(
+      ONLINE_REMATCH_RELOAD_KEY,
+      JSON.stringify({
+        mode: 'online',
+        role: l.role,
+        roomId: l.roomId,
+        shortCode: l.shortCode,
+        mapId: l.mapId,
+        lobbyVisibility: l.lobbyVisibility ?? 'private',
+        listingHostName: l.listingHostName,
+      }),
+    )
+  } catch {
+    /* ignore */
+  }
+}
+
+function takeOnlineRematchReloadLobby(): LobbyResult | null {
+  let raw: string | null = null
+  try {
+    raw = sessionStorage.getItem(ONLINE_REMATCH_RELOAD_KEY)
+    sessionStorage.removeItem(ONLINE_REMATCH_RELOAD_KEY)
+  } catch {
+    raw = null
+  }
+  if (!raw) return null
+  try {
+    const data = JSON.parse(raw) as Partial<Extract<LobbyResult, { mode: 'online' }>>
+    if (
+      data.mode === 'online' &&
+      (data.role === 'host' || data.role === 'guest') &&
+      typeof data.roomId === 'string' &&
+      typeof data.shortCode === 'string' &&
+      isMapId(data.mapId)
+    ) {
+      showHardRematchReloadOverlay()
+      return {
+        mode: 'online',
+        role: data.role,
+        roomId: data.roomId,
+        shortCode: data.shortCode,
+        mapId: data.mapId,
+        lobbyVisibility: data.lobbyVisibility === 'public' ? 'public' : 'private',
+        listingHostName:
+          typeof data.listingHostName === 'string' ? data.listingHostName : undefined,
+      }
+    }
+  } catch {
+    /* ignore malformed rematch state */
+  }
+  return null
+}
+
 async function initGame(lobby: LobbyResult): Promise<void> {
   if (DEBUG_MP)
     debugMpLog(
@@ -377,6 +467,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let proxVoip3d: ProxVoip3d | null = null
   const _voipFwd = new Vector3()
   let proxVoipLocalAttached = false
+  let proxVoipRemoteAttached = false
 
   function tryAttachProximityVoip(): void {
     if (proxVoipLocalAttached) return
@@ -402,10 +493,12 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       /* ignore */
     }
     proxVoip3d = null
+    proxVoipRemoteAttached = false
   }
 
   function onRemoteProximityVoipStream(stream: MediaStream): void {
     disposeProxVoip3dPlayer()
+    proxVoipRemoteAttached = true
     proxVoip3d = createProximityVoip3d(
       stream,
       () => camera.position,
@@ -416,6 +509,20 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       () => bot.bodyCenter,
     )
     void proxVoip3d.resume()
+  }
+
+  function updateProxVoiceActiveIcon(): void {
+    if (!proxVoiceActiveEl) return
+    const active =
+      isOnline &&
+      lobby.mode === 'online' &&
+      mpPhase === 'live' &&
+      gameConfig.proximityVoipEnabled >= 0.5 &&
+      proxVoipLocalAttached &&
+      proxVoipRemoteAttached &&
+      !voice.isChargeRecordingNow()
+    proxVoiceActiveEl.hidden = !active
+    proxVoiceActiveEl.classList.toggle('prox-voice-active--on', active)
   }
   /** Host-only authority when using browser P2P (no Node `pvp-host`). */
   let browserHost: ReturnType<typeof createBrowserHostAuthority> | null = null
@@ -1544,6 +1651,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     updateMicBlockedUi()
     initBananaRound()
     tryPointerLock()
+    hideHardRematchReloadOverlay()
     window.setTimeout(() => {
       if (mpToast) mpToast.hidden = true
     }, 4200)
@@ -1675,6 +1783,21 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }, 1450)
   }
 
+  function startOnlineRematchHardReload(): void {
+    if (lobby.mode !== 'online') {
+      void runRematchSequence()
+      return
+    }
+    saveOnlineRematchReloadLobby(lobby)
+    showHardRematchReloadOverlay()
+    try {
+      controls.unlock()
+    } catch {
+      /* ignore */
+    }
+    window.setTimeout(() => window.location.reload(), 320)
+  }
+
   function beginOnlineRematchRequest(): void {
     if (!isOnline || lobby.mode !== 'online' || !matchOutcome) return
     if (pendingIncomingRematchId !== null) return
@@ -1710,7 +1833,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       pendingOutgoingRematchId = null
       pendingIncomingRematchId = null
       hideMatchEndAndRematchUiFully()
-      void runRematchSequence()
+      startOnlineRematchHardReload()
       return
     }
     pendingIncomingRematchId = roundId
@@ -1728,7 +1851,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       pendingOutgoingRematchId = null
       pendingIncomingRematchId = null
       hideMatchEndAndRematchUiFully()
-      void runRematchSequence()
+      startOnlineRematchHardReload()
     }
   }
 
@@ -3765,6 +3888,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       tryAttachProximityVoip()
     }
     proxVoip3d?.tick()
+    updateProxVoiceActiveIcon()
     const wantsUnlit = gameConfig.lightingUnlitMode >= 0.5
     if (wantsUnlit !== lastUnlitMode) {
       applyLightingModeToScene(wantsUnlit)
@@ -4183,7 +4307,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     pendingIncomingRematchId = null
     pendingOutgoingRematchId = null
     hideMatchEndAndRematchUiFully()
-    void runRematchSequence()
+    startOnlineRematchHardReload()
   })
   matchRematchDeclineBtnEl?.addEventListener('click', () => {
     sendGameTraffic({ type: 'rematchDeclineToLobby' })
@@ -4271,7 +4395,7 @@ wireBackgroundMusicToFirstGesture()
 }
 
 runUsernameGate()
-  .then(() => runLobbyGate(readStoredPlayerName()?.trim() || 'Angler'))
+  .then(() => takeOnlineRematchReloadLobby() ?? runLobbyGate(readStoredPlayerName()?.trim() || 'Angler'))
   .then((lobby) => {
     gameRoot.hidden = false
     return initGame(lobby)

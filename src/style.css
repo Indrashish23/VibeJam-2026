@@ -606,6 +606,43 @@ body {
   user-select: none;
 }
 
+.prox-voice-active {
+  position: absolute;
+  left: 1rem;
+  top: 4.25rem;
+  z-index: 72;
+  width: 3.1rem;
+  height: 3.1rem;
+  object-fit: contain;
+  pointer-events: none;
+  filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.85))
+    drop-shadow(0 0 20px rgba(34, 211, 238, 0.35));
+  opacity: 0;
+}
+
+.prox-voice-active[hidden] {
+  display: none !important;
+}
+
+.prox-voice-active--on {
+  animation: prox-voice-flash 0.72s ease-in-out infinite;
+}
+
+@keyframes prox-voice-flash {
+  0%,
+  100% {
+    opacity: 0.42;
+    transform: scale(0.94);
+    filter: drop-shadow(0 0 5px rgba(56, 189, 248, 0.55));
+  }
+  45% {
+    opacity: 1;
+    transform: scale(1.08);
+    filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.95))
+      drop-shadow(0 0 26px rgba(34, 211, 238, 0.58));
+  }
+}
+
 .mp-toast {
   position: absolute;
   top: 14px;
