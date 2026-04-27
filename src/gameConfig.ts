@@ -453,7 +453,7 @@ export const defaultGameConfig = {
   voiceRecordSfxVolumeMul: 0.22,
   /** 0 = off. Local only: one-shot when a voice **projectile** is launched (not dry-fire). */
   voiceReleaseSfxEnabled: 1,
-  /** Dev level × (0–1) for `ReleaseSound.ogg`; × master SFX in Settings. */
+  /** Dev level × (0–1) for `ReleaseSound.mp3`; × master SFX in Settings. */
   voiceReleaseSfxVolumeMul: 0.26,
 } as const
 

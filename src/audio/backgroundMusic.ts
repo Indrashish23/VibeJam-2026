@@ -1,16 +1,7 @@
 import { gameConfig } from '../gameConfig'
 import { getBgmMul } from '../userSettingsStorage'
 
-const TRACKS = [
-  new URL(
-    '../../Assets/Music/The Dark Bean - imboredbutidontreallywanttodoanything (breakcore).mp3',
-    import.meta.url,
-  ).href,
-  new URL(
-    '../../Assets/Music/The Dark Bean - wizen_says_this_sounds_like_persona_3_a_little_bit.mp3.mp3',
-    import.meta.url,
-  ).href,
-] as const
+const TRACKS = [new URL('../../Assets/Music/BGMain.mp3', import.meta.url).href] as const
 
 let audio: HTMLAudioElement | null = null
 let currentIndex = 0

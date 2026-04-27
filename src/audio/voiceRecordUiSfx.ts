@@ -1,8 +1,7 @@
 import { gameConfig } from '../gameConfig'
 import { getSfxChainMul } from './sfxChain'
 
-const URL_RECORD = new URL('../../Assets/SFX/Footsteps/RecordingSound.mp3', import.meta.url).href
-const URL_RELEASE = new URL('../../Assets/SFX/Footsteps/ReleaseSound.ogg', import.meta.url).href
+const URL_RELEASE = new URL('../../Assets/SFX/Footsteps/ReleaseSound.mp3', import.meta.url).href
 
 let currentRecording: HTMLAudioElement | null = null
 
@@ -21,26 +20,10 @@ export function stopLocalVoiceRecordUiSfx(): void {
 }
 
 /**
- * One-shot when the local player actually starts mic capture for a charge (not networked).
- * Does not loop.
+ * Recording-start sound removed by design; keep API as a no-op.
  */
 export function playLocalVoiceRecordStartSfx(): void {
-  const g = level(gameConfig.voiceRecordSfxEnabled, gameConfig.voiceRecordSfxVolumeMul)
-  if (g <= 0) return
   stopLocalVoiceRecordUiSfx()
-  const a = new Audio(URL_RECORD)
-  currentRecording = a
-  a.volume = Math.max(
-    0,
-    Math.min(1, g * Math.max(0, Math.min(1, gameConfig.voiceRecordSfxBaseMul))),
-  )
-  a.loop = false
-  const clear = () => {
-    if (currentRecording === a) currentRecording = null
-  }
-  a.addEventListener('ended', clear)
-  a.addEventListener('error', clear)
-  void a.play().catch(clear)
 }
 
 /**

@@ -557,7 +557,7 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   voiceRecordSfxVolumeMul:
     'Gain for the record-start one-shot, after `voiceRecordSfxBaseMul` and the SFX chain in Settings / Tweaks.',
   voiceReleaseSfxEnabled:
-    '0 = no one-shot. 1 = play ReleaseSound.ogg when a voice projectile is actually created (not dry-fires).',
+    '0 = no one-shot. 1 = play ReleaseSound.mp3 when a voice projectile is actually created (not dry-fires).',
   voiceReleaseSfxVolumeMul: 'Gain for that launch one-shot; multiplied by the SFX chain (Settings × Tweaks SFX).',
 
   ambientIntensity: 'Fill light strength from all directions (shadow softness).',
