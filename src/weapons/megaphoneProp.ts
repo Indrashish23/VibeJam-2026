@@ -30,6 +30,10 @@ export type MegaphoneUpdateOpts = {
   charging: boolean
   /** Smoothed charge 0–1 (`voiceChargeSmoothed`). */
   charge01: number
+  /** 0–1 locomotion intensity for subtle hand sway (grounded movement). */
+  presentationMove01?: number
+  /** −1..+1 strafe (A=left +1 toward roll convention used in main). */
+  presentationStrafe?: number
 }
 
 /**
@@ -106,15 +110,24 @@ export class MegaphoneFpProp {
       megaphoneShakeFreqHz,
       megaphoneShakeFreq2Hz,
       megaphoneShakeRampPow,
+      megaphoneSwayMul,
+      megaphonePullSmoothSec,
       voiceMinChargeToFire,
+      fpWeaponSwayMul,
     } = gameConfig
 
     this.visualRoot.scale.setScalar(Math.max(0.05, megaphoneScaleMul))
 
-    /* Pull pose snaps on as soon as recording starts; return to rest still eases (see `megaphoneRestReturnSec`). */
+    /* Pull pose: snap (default) or ease in via `megaphonePullSmoothSec`; return to rest still eases (`megaphoneRestReturnSec`). */
     const targetPose = opts.charging ? 1 : 0
     if (opts.charging) {
-      this.poseSmooth = 1
+      const pullTau = Math.max(0, megaphonePullSmoothSec)
+      if (pullTau <= 1e-5) {
+        this.poseSmooth = 1
+      } else {
+        const alpha = 1 - Math.exp(-delta / pullTau)
+        this.poseSmooth += (1 - this.poseSmooth) * alpha
+      }
     } else {
       const restTau = Math.max(0.02, megaphoneRestReturnSec)
       const alpha = 1 - Math.exp(-delta / restTau)
@@ -171,6 +184,30 @@ export class MegaphoneFpProp {
     )
     _qShake.setFromEuler(_eShake)
     this.root.quaternion.multiply(_qShake)
+
+    const pm = opts.presentationMove01 ?? 0
+    const ps = opts.presentationStrafe ?? 0
+    const wm = Math.max(
+      0,
+      Math.min(2, fpWeaponSwayMul * Math.max(0, megaphoneSwayMul)),
+    )
+    if (wm > 1e-4) {
+      const sway = wm * Math.min(1, Math.abs(pm) + 0.35 * Math.abs(ps))
+      if (sway > 1e-4) {
+        const tt = performance.now() * 0.001
+        this.root.position.x += Math.sin(tt * 2.15 + ps * 0.45) * 0.0036 * sway
+        this.root.position.y += Math.cos(tt * 2.55) * 0.0029 * sway
+        this.root.position.z += Math.sin(tt * 1.95 - ps * 0.35) * 0.0024 * sway
+        _eShake.set(
+          Math.sin(tt * 1.35 + ps * 0.2) * 0.022 * sway,
+          Math.cos(tt * 1.15) * 0.017 * sway,
+          Math.sin(tt * 1.75 + pm * 1.2) * 0.019 * sway,
+          'YXZ',
+        )
+        _qShake.setFromEuler(_eShake)
+        this.root.quaternion.multiply(_qShake)
+      }
+    }
   }
 
   dispose(): void {

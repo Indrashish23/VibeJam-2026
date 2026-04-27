@@ -58,6 +58,21 @@ export const defaultGameConfig = {
   lightingUnlitMode: 0,
   movementMaxDelta: 0.1,
 
+  /** 0/1: walking head bob + A/D strafe camera roll (presentation only). Tweaks → FPS view & weapons. */
+  fpViewBobEnabled: 1,
+  /** Pitch bob amplitude (deg) while moving on the ground. */
+  fpHeadbobPitchDeg: 1.05,
+  /** Secondary roll wobble from the walk cycle (deg). */
+  fpHeadbobRollDeg: 0.42,
+  /** Walk-cycle frequency scale (Hz × move speed blend). */
+  fpHeadbobHz: 2.25,
+  /** Max camera roll when holding **A** or **D** alone (deg). */
+  fpStrafeTiltDeg: 3.1,
+  /** Strafe-roll smoothing rate (higher = snappier). */
+  fpStrafeTiltEaseHz: 12,
+  /** Scales idle in-hand sway on megaphone + banana (0 = off). */
+  fpWeaponSwayMul: 0.55,
+
   gravity: 38,
   jumpForce: 25,
   jumpCooldownMs: 480,
@@ -414,9 +429,14 @@ export const defaultGameConfig = {
   /** Peels: feet must be within this radius to slip. */
   bananaPeelRadius: 1.1,
   /** Y tolerance feet vs baked peel Y (island / slopes). */
-  bananaPeelYTolerance: 1.25,
+  bananaPeelYTolerance: 2.5,
+  /**
+   * Online PvP guest only: added to authoritative peel Y when placing synced peels locally.
+   * Host keeps broadcast Y (slip simulation). Use to fix peel float/sink vs terrain on guest.
+   */
+  bananaPeelNetworkYOffset: 0,
   /** How long a slip stuns movement (ms). Vulnerable to hits. */
-  bananaSlipMs: 2000,
+  bananaSlipMs: 1700,
   /** 0/1: one-shot slip_sound.ogg when **you** slip on a peel (local). */
   bananaSlipSfxEnabled: 1,
   /** Gain × for slip one-shot (× SFX chain). */
@@ -434,12 +454,12 @@ export const defaultGameConfig = {
   /** Max throw distance on XZ from throw start. */
   bananaThrowMaxRange: 48,
   /** Arc bias on aim vector before normalize. */
-  bananaThrowUpMul: 1,
+  bananaThrowUpMul: 0.6,
   /** Hover bob amplitude (m) on pickups. */
-  bananaHoverAmp: 0.12,
+  bananaHoverAmp: 0.24,
   /** Local-space offset for the in-hand banana (camera parent). */
-  bananaHandLocalX: -0.38,
-  bananaHandLocalY: -0.2,
+  bananaHandLocalX: -0.42,
+  bananaHandLocalY: -0.4,
   bananaHandLocalZ: -0.52,
 
   /**
@@ -447,27 +467,35 @@ export const defaultGameConfig = {
    * Tweaks → Player weapon.
    */
   megaphoneScaleMul: 1.31,
-  megaphoneRestLocalX: 0.34,
-  megaphoneRestLocalY: -0.4,
+  megaphoneRestLocalX: 0.26,
+  megaphoneRestLocalY: -0.44,
   megaphoneRestLocalZ: -0.48,
-  megaphoneRestPitchDeg: -23,
-  megaphoneRestYawDeg: 75,
-  megaphoneRestRollDeg: 10,
+  megaphoneRestPitchDeg: 5,
+  megaphoneRestYawDeg: 80,
+  megaphoneRestRollDeg: -11,
   /** Charge-tween target (camera-local); Y/pitch match rest, X/Z/yaw/roll tuned vs rest for pull-in. */
   megaphonePullLocalX: 0.14,
-  megaphonePullLocalY: -0.4,
-  megaphonePullLocalZ: -0.36,
-  megaphonePullPitchDeg: -23,
-  megaphonePullYawDeg: 87,
-  megaphonePullRollDeg: 7,
+  megaphonePullLocalY: -0.44,
+  megaphonePullLocalZ: -0.48,
+  megaphonePullPitchDeg: 5,
+  megaphonePullYawDeg: 80,
+  megaphonePullRollDeg: -11,
   /** Time constant (s) for easing megaphone back to rest after release (pull snaps on when recording starts). */
-  megaphoneRestReturnSec: 0.05,
-  megaphoneShakePosAmp: 0.014,
-  megaphoneShakeRotDeg: 3.2,
-  megaphoneShakeFreqHz: 38,
-  megaphoneShakeFreq2Hz: 71,
+  megaphoneRestReturnSec: 0.23,
+  megaphoneShakePosAmp: 0.006,
+  megaphoneShakeRotDeg: 1,
+  megaphoneShakeFreqHz: 19,
+  megaphoneShakeFreq2Hz: 42,
   /** Curves shake intensity vs charge above min-fire (higher = snappier ramp). */
-  megaphoneShakeRampPow: 0.4,
+  megaphoneShakeRampPow: 2.25,
+  /**
+   * Scales FP hand sway on the megaphone only (× global `fpWeaponSwayMul`). 1 = match banana relative intensity.
+   */
+  megaphoneSwayMul: 1,
+  /**
+   * Seconds to ease into the pull/charge pose when recording starts; 0 = snap (legacy).
+   */
+  megaphonePullSmoothSec: 0,
 
   /** Debug Room: when 1, slider edits do NOT trigger a round reset; teleports you + dummy to a side arena. */
   debugRoomActive: 0,

@@ -191,6 +191,13 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   stunnedStarSpinMul: { min: 0.45, max: 5, step: 0.05 },
   stunnedStarSpreadMul: { min: 0.45, max: 2.35, step: 0.02 },
   movementMaxDelta: { min: 0.002, max: 2, step: 0.01 },
+  fpViewBobEnabled: { min: 0, max: 1, step: 1 },
+  fpHeadbobPitchDeg: { min: 0, max: 6, step: 0.05 },
+  fpHeadbobRollDeg: { min: 0, max: 4, step: 0.05 },
+  fpHeadbobHz: { min: 0.5, max: 5, step: 0.05 },
+  fpStrafeTiltDeg: { min: 0, max: 12, step: 0.1 },
+  fpStrafeTiltEaseHz: { min: 2, max: 28, step: 0.5 },
+  fpWeaponSwayMul: { min: 0, max: 2, step: 0.05 },
 
   gravity: { min: 0, max: CAP, step: 1 },
   jumpForce: { min: 0, max: CAP, step: 0.5 },
@@ -204,6 +211,7 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   bananaPickupRadius: { min: 0.2, max: 6, step: 0.05 },
   bananaPeelRadius: { min: 0.2, max: 6, step: 0.05 },
   bananaPeelYTolerance: { min: 0.2, max: 4, step: 0.05 },
+  bananaPeelNetworkYOffset: { min: -2, max: 2, step: 0.02 },
   bananaSlipMs: { min: 200, max: 8000, step: 50 },
   bananaSlipSfxEnabled: { min: 0, max: 1, step: 1 },
   bananaSlipSfxVolumeMul: { min: 0, max: 1, step: 0.02 },
@@ -238,6 +246,8 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   megaphoneShakeFreqHz: { min: 4, max: 120, step: 1 },
   megaphoneShakeFreq2Hz: { min: 4, max: 140, step: 1 },
   megaphoneShakeRampPow: { min: 0.2, max: 4, step: 0.05 },
+  megaphoneSwayMul: { min: 0, max: 2, step: 0.05 },
+  megaphonePullSmoothSec: { min: 0, max: 0.8, step: 0.01 },
 
   bgmVolume: { min: 0, max: 1, step: 0.1 },
   footstepMinHoldSec: { min: 0, max: 0.2, step: 0.005 },
@@ -274,6 +284,13 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   jumpFxShake: 'Jump screen shake',
   jumpFxWhiteFlash: 'Jump white flash',
   movementMaxDelta: 'Physics max delta',
+  fpViewBobEnabled: 'FPS head bob',
+  fpHeadbobPitchDeg: 'Head bob pitch (deg)',
+  fpHeadbobRollDeg: 'Head bob roll wobble (deg)',
+  fpHeadbobHz: 'Head bob cadence (Hz)',
+  fpStrafeTiltDeg: 'Strafe head tilt (deg)',
+  fpStrafeTiltEaseHz: 'Strafe tilt smoothing (Hz)',
+  fpWeaponSwayMul: 'Weapon sway intensity',
   dashImpulse: 'Shift dash distance target',
   dashVelocityMul: 'Shift dash distance multiplier ×',
   dashDecay: 'Slide decay',
@@ -449,6 +466,7 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   bananaPickupRadius: 'Banana: pickup collection radius',
   bananaPeelRadius: 'Banana: peel trigger radius (feet)',
   bananaPeelYTolerance: 'Banana: peel Y tolerance (slopes)',
+  bananaPeelNetworkYOffset: 'Banana: peel Y offset (guest, online)',
   bananaSlipMs: 'Banana: slip stun (ms, still hittable)',
   bananaSlipSfxEnabled: 'Banana: slip SFX (0/1, you only)',
   bananaSlipSfxVolumeMul: 'Banana: slip SFX level ×',
@@ -483,6 +501,8 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   megaphoneShakeFreqHz: 'Megaphone shake: freq A (Hz)',
   megaphoneShakeFreq2Hz: 'Megaphone shake: freq B (Hz)',
   megaphoneShakeRampPow: 'Megaphone shake: ramp exponent vs charge',
+  megaphoneSwayMul: 'Megaphone: sway × (vs banana)',
+  megaphonePullSmoothSec: 'Megaphone: pull ease-in (s)',
   bgmVolume: 'Background music (dev) × player Music in Settings',
   footstepMinHoldSec: 'Footstep: min WASD hold (s)',
   footstepIntervalSec: 'Footstep: step interval (s)',
@@ -522,6 +542,14 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   jumpFxShake: 'Camera shake amplitude when you jump (double jump uses ~20% more).',
   jumpFxWhiteFlash: 'Brief white overlay mixed with punch hit-flash when you jump.',
   movementMaxDelta: 'Caps each simulation step length for stability (also limits slow-motion spikes).',
+  fpViewBobEnabled:
+    'When 1, first-person camera gets walking head bob (pitch + light roll). Strafe roll still applies when off.',
+  fpHeadbobPitchDeg: 'Vertical nod amplitude while moving (degrees, scaled by speed).',
+  fpHeadbobRollDeg: 'Secondary roll wobble while moving (degrees, scaled by speed).',
+  fpHeadbobHz: 'Bob frequency at full stride (walk phase advances with speed).',
+  fpStrafeTiltDeg: 'Max camera roll toward the strafe direction (A/D) in degrees.',
+  fpStrafeTiltEaseHz: 'How quickly strafe tilt catches up / eases when you change direction.',
+  fpWeaponSwayMul: 'Scales subtle in-hand motion on the megaphone and banana (0 = off).',
 
   groundWidth: 'Half the stage is this wide in X; larger = more room before ring-out.',
   groundDepth: 'Half the stage depth in Z.',
@@ -626,6 +654,8 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   bananaSlipCamRollRecoverSec: 'Quadratic ease from peak → 0 after the snap.',
   bananaPeelRadius: 'Horizontal distance from feet to a peel to trigger a slip.',
   bananaPeelYTolerance: 'Vertical tolerance on peel contact (sloped stages / island).',
+  bananaPeelNetworkYOffset:
+    'Online PvP **guest only**: adds this to synced peel landing Y when placing peels locally. Host keeps authoritative Y for slip checks. Tune if peels visually float or sink on your machine.',
   bananaThrowSpeed: 'Initial speed of the thrown banana arc.',
   bananaThrowMaxRange: 'Max horizontal travel from throw start before the shot is forced to land.',
   bananaThrowUpMul: 'Arc “up” component before normalizing the throw direction.',
@@ -652,7 +682,7 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   megaphonePullYawDeg: 'Recording pose yaw °.',
   megaphonePullRollDeg: 'Recording pose roll °.',
   megaphoneRestReturnSec:
-    'Ease back to holstered pose after you release LMB/RMB (seconds). Pull pose jumps to full recording pose immediately when charging starts; lower = snappier holster.',
+    'Ease back to holstered pose after you release LMB/RMB (seconds). Into pull pose: instant unless Megaphone pull ease-in > 0; lower = snappier holster.',
   megaphoneShakePosAmp:
     'When charge is at/above Min charge to fire, additive camera-local shake amplitude (units). 0 = off.',
   megaphoneShakeRotDeg: 'Matching rotational jitter in degrees (scaled by same intensity as position).',
@@ -660,6 +690,10 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   megaphoneShakeFreq2Hz: 'Secondary frequency mixed in for less repetitive vibration.',
   megaphoneShakeRampPow:
     'Exponent on shake intensity between min-fire charge and full charge (higher = kicks in faster).',
+  megaphoneSwayMul:
+    'Extra multiplier on first-person hand sway for the megaphone only (× Camera → weapon sway). Banana sway unchanged.',
+  megaphonePullSmoothSec:
+    'Seconds to ease into the recording/pull pose after charge starts; 0 = instant snap (default).',
 
   bgmVolume:
     'Dev multiplier on shuffled BGM from Assets/Music. Final volume = this × player Music in Settings. Default dev level starts at 0.1.',
@@ -1061,7 +1095,18 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
   {
     id: 'camera',
     title: 'Camera',
-    keys: ['cameraFov', 'cameraNear', 'cameraFar'],
+    keys: [
+      'cameraFov',
+      'cameraNear',
+      'cameraFar',
+      'fpViewBobEnabled',
+      'fpHeadbobPitchDeg',
+      'fpHeadbobRollDeg',
+      'fpHeadbobHz',
+      'fpStrafeTiltDeg',
+      'fpStrafeTiltEaseHz',
+      'fpWeaponSwayMul',
+    ],
   },
   {
     id: 'shaders',
@@ -1141,6 +1186,7 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'bananaPickupRadius',
       'bananaPeelRadius',
       'bananaPeelYTolerance',
+      'bananaPeelNetworkYOffset',
       'bananaSlipMs',
       'bananaSlipSfxEnabled',
       'bananaSlipSfxVolumeMul',
@@ -1191,6 +1237,8 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'megaphoneShakeFreqHz',
       'megaphoneShakeFreq2Hz',
       'megaphoneShakeRampPow',
+      'megaphoneSwayMul',
+      'megaphonePullSmoothSec',
     ],
   },
   {

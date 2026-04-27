@@ -654,6 +654,18 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   setUserSettingsPointerControls(controls)
   controls.pointerSpeed = gameConfig.mouseSensitivity
 
+  /** Strip/reapply each frame; PointerLock clears presentation when the mouse moves (`change`). */
+  const fpPresentationState = {
+    storedPitchBob: 0,
+    storedRollTotal: 0,
+    walkPhase: 0,
+    strafeTiltRad: 0,
+  }
+  controls.addEventListener('change', () => {
+    fpPresentationState.storedPitchBob = 0
+    fpPresentationState.storedRollTotal = 0
+  })
+
   const ambient = new AmbientLight(0xffffff, gameConfig.ambientIntensity)
   scene.add(ambient)
 
@@ -917,7 +929,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let nextBananaPeelId = 1
   let bananaSlipCamRollStartMs = 0
   let bananaSlipCamRollPlaying = false
-  const _slipEuler = new Euler(0, 0, 0, 'YXZ')
+  const _fpViewEuler = new Euler(0, 0, 0, 'YXZ')
 
   function startBananaSlipCamRoll(): void {
     if (gameConfig.bananaSlipCamRollEnabled < 0.5) return
@@ -927,18 +939,14 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   function resetBananaSlipCamRoll(): void {
     bananaSlipCamRollPlaying = false
-    _slipEuler.setFromQuaternion(camera.quaternion, 'YXZ')
-    if (Math.abs(_slipEuler.z) < 1e-7) return
-    _slipEuler.z = 0
-    camera.quaternion.setFromEuler(_slipEuler)
   }
 
-  function applyBananaSlipCamRoll(): void {
+  function computeBananaSlipRollRad(): number {
     if (gameConfig.bananaSlipCamRollEnabled < 0.5) {
-      if (bananaSlipCamRollPlaying) resetBananaSlipCamRoll()
-      return
+      bananaSlipCamRollPlaying = false
+      return 0
     }
-    if (!bananaSlipCamRollPlaying) return
+    if (!bananaSlipCamRollPlaying) return 0
 
     const now = performance.now()
     const elapsed = (now - bananaSlipCamRollStartMs) / 1000
@@ -946,21 +954,74 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     const rec = Math.max(0.04, gameConfig.bananaSlipCamRollRecoverSec)
     const peak = MathUtils.degToRad(gameConfig.bananaSlipCamRollPeakDeg)
 
-    let zOff = 0
     if (elapsed < snap) {
-      zOff = peak * (elapsed / snap)
-    } else if (elapsed < snap + rec) {
+      return peak * (elapsed / snap)
+    }
+    if (elapsed < snap + rec) {
       const u = (elapsed - snap) / rec
       const easeOut = 1 - (1 - u) * (1 - u)
-      zOff = peak * (1 - easeOut)
+      return peak * (1 - easeOut)
+    }
+    bananaSlipCamRollPlaying = false
+    return 0
+  }
+
+  function applyFpCameraPresentation(delta: number): void {
+    _fpViewEuler.setFromQuaternion(camera.quaternion, 'YXZ')
+    _fpViewEuler.x -= fpPresentationState.storedPitchBob
+    _fpViewEuler.z -= fpPresentationState.storedRollTotal
+
+    const slipRoll = computeBananaSlipRollRad()
+
+    let bobPitch = 0
+    let bobRoll = 0
+    if (gameConfig.fpViewBobEnabled >= 0.5) {
+      const slip = isPlayerBananaSlipNow()
+      const canWalk = playerHurt === 'none' && !slip
+      const moving =
+        canWalk &&
+        grounded &&
+        (keys.forward || keys.back || keys.left || keys.right)
+      const spd = Math.hypot(velocity.x, velocity.z)
+      const spd01 = Math.min(1, spd / Math.max(1e-4, gameConfig.moveSpeed))
+      if (moving && grounded) {
+        fpPresentationState.walkPhase +=
+          delta * Math.PI * 2 * gameConfig.fpHeadbobHz * Math.max(0.28, spd01)
+      } else {
+        fpPresentationState.walkPhase *= Math.exp(-delta * 5.5)
+      }
+      bobPitch =
+        Math.sin(fpPresentationState.walkPhase) *
+        MathUtils.degToRad(gameConfig.fpHeadbobPitchDeg) *
+        spd01
+      bobRoll =
+        Math.cos(fpPresentationState.walkPhase * 2) *
+        MathUtils.degToRad(gameConfig.fpHeadbobRollDeg) *
+        spd01 *
+        0.48
     } else {
-      bananaSlipCamRollPlaying = false
-      zOff = 0
+      fpPresentationState.walkPhase *= Math.exp(-delta * 6)
     }
 
-    _slipEuler.setFromQuaternion(camera.quaternion, 'YXZ')
-    _slipEuler.z = zOff
-    camera.quaternion.setFromEuler(_slipEuler)
+    let targetStrafe = 0
+    if (keys.left && !keys.right) targetStrafe = 1
+    else if (keys.right && !keys.left) targetStrafe = -1
+    const tiltMax = MathUtils.degToRad(gameConfig.fpStrafeTiltDeg)
+    const ease = 1 - Math.exp(-delta * Math.max(0.5, gameConfig.fpStrafeTiltEaseHz))
+    fpPresentationState.strafeTiltRad += (targetStrafe * tiltMax - fpPresentationState.strafeTiltRad) * ease
+
+    if (gameConfig.fpViewBobEnabled < 0.5) {
+      bobPitch = 0
+      bobRoll = 0
+    }
+
+    const totalRoll = slipRoll + fpPresentationState.strafeTiltRad + bobRoll
+    fpPresentationState.storedPitchBob = bobPitch
+    fpPresentationState.storedRollTotal = totalRoll
+
+    _fpViewEuler.x += fpPresentationState.storedPitchBob
+    _fpViewEuler.z += fpPresentationState.storedRollTotal
+    camera.quaternion.setFromEuler(_fpViewEuler)
   }
   function pvpHostBroadcastAndApply(msg: Record<string, unknown>): void {
     if (rtcGame) rtcGame.sendGameJson(msg)
@@ -990,6 +1051,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     const n = Math.max(0, Math.round(gameConfig.bananaPickupCount))
     playerBananaSlipUntil = 0
     resetBananaSlipCamRoll()
+    fpPresentationState.storedPitchBob = 0
+    fpPresentationState.storedRollTotal = 0
+    fpPresentationState.walkPhase = 0
+    fpPresentationState.strafeTiltRad = 0
     localHasBanana = false
     pvpBananaInventory = { host: 0, guest: 0 }
     nextBananaPeelId = 1
@@ -1021,7 +1086,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   function applyBananaAuthPeel(peelId: string, x: number, y: number, z: number): void {
     if (bananaWorld.peels.some((p) => p.id === peelId)) return
-    bananaWorld.addPeelFromId(peelId, x, y, z)
+    const yNet =
+      isPvp() && lobby.mode === 'online' && lobby.role === 'guest'
+        ? gameConfig.bananaPeelNetworkYOffset
+        : 0
+    bananaWorld.addPeelFromId(peelId, x, y + yNet, z)
   }
 
   function applyBananaAuthSlip(
@@ -3166,6 +3235,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
     dashTiltDeg = 0
     resetBananaSlipCamRoll()
+    fpPresentationState.storedPitchBob = 0
+    fpPresentationState.storedRollTotal = 0
+    fpPresentationState.walkPhase = 0
+    fpPresentationState.strafeTiltRad = 0
     slideAnimUntilMs = 0
     gameRoot.classList.remove('game-root--dash-tilt')
     gameRoot.style.transform = ''
@@ -4355,11 +4428,26 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
     const megaphoneCanCharge =
       !voiceInputBlocked && !voiceResumeCountdownActive && !multiplayerBlocksPlay()
+    const slipForPres = isPlayerBananaSlipNow()
+    const canPresMove =
+      playerHurt === 'none' && !slipForPres && !multiplayerBlocksPlay()
+    let presMove01 = 0
+    let presStrafe = 0
+    if (canPresMove && grounded) {
+      presMove01 = Math.min(
+        1,
+        Math.hypot(velocity.x, velocity.z) / Math.max(1e-4, gameConfig.moveSpeed),
+      )
+      presStrafe = Number(keys.right) - Number(keys.left)
+    }
     megaphoneFp.update(delta, {
       charging: megaphoneCanCharge && (chargingLmb || chargingRmb),
       charge01: voiceChargeSmoothed,
+      presentationMove01: presMove01,
+      presentationStrafe: presStrafe,
     })
     bananaWorld.syncHandPoseFromConfig()
+    bananaWorld.applyHandPresentationSway(presMove01, presStrafe)
 
     const dashSpd = dashVel.length()
     dashTiltDeg *= Math.exp(-13.5 * delta)
@@ -4479,7 +4567,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       }
     }
 
-    applyBananaSlipCamRoll()
+    applyFpCameraPresentation(delta)
     composer.render()
   }
 
