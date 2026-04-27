@@ -408,7 +408,7 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   voiceSilenceBeforeDecaySec: 'Quiet mic seconds before charge decays',
   voiceChargeDecayPerSec: 'Charge units lost per sec while decaying',
   voiceChargeRisePerSec: 'Max charge rise per sec at full loudness (LMB)',
-  winRingoutPresentDelayMs: 'GAME splash min hold before rematch UI (ms)',
+  winRingoutPresentDelayMs: 'GAME splash min hold before match-end screen (ms)',
   voiceOverloadThreshold: 'Overload UI shake',
   voiceShooterReplayFadeSec: 'Hit replay fade (s)',
   voiceDeliveryPlaybackRate: 'Hit voice delivery pitch (×)',
@@ -1039,7 +1039,7 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   voiceHitRolloff: 'How sharp the falloff is between ref and max distance.',
 
   winRingoutPresentDelayMs:
-    'Minimum time the GAME splash stays up before the match-end / rematch UI appears.',
+    'Minimum time the GAME splash stays up before the match-end screen appears.',
   botBodyRadius: 'Enemy capsule radius (bigger = easier to hit, harder to ring-out).',
   botPunchRange: 'Distance at which the smart bot tries to throw a fist.',
   botHitRadius: 'Hit detection radius on the bot’s projectile.',

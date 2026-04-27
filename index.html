@@ -267,9 +267,6 @@
           <p id="series-score-line" class="series-score-line" aria-live="polite"></p>
         </div>
       </div>
-      <div id="rematch-sequence" class="rematch-sequence" hidden>
-        <div id="rematch-black-sheet" class="rematch-black-sheet"></div>
-      </div>
       <div id="countdown-overlay" class="countdown-overlay" hidden>
         <p id="countdown-title" class="countdown-title" hidden>Match begins in</p>
         <span id="countdown-num" class="countdown-num">3</span>
@@ -393,24 +390,10 @@
         <div class="match-end-card" role="dialog" aria-labelledby="match-end-title">
           <h2 id="match-end-title" class="match-end-title">You win!</h2>
           <p id="match-end-sub" class="match-end-sub"></p>
-          <div id="match-rematch-primary-actions" class="match-end-actions">
-            <button type="button" id="match-rematch-btn" class="match-end-btn match-end-btn--primary">
-              Rematch
+          <div id="match-end-actions" class="match-end-actions">
+            <button type="button" id="match-end-lobby-btn" class="match-end-btn match-end-btn--primary">
+              Back to lobby
             </button>
-            <button type="button" id="match-close-btn" class="match-end-btn match-end-btn--secondary">Lobby</button>
-          </div>
-          <p id="match-rematch-status" class="match-rematch-status" hidden></p>
-          <button type="button" id="match-rematch-cancel-btn" class="match-end-btn" hidden>
-            Cancel request
-          </button>
-          <div id="match-rematch-incoming" class="match-rematch-incoming" hidden>
-            <p class="match-rematch-incoming-label">Your opponent wants a rematch.</p>
-            <div class="match-end-actions">
-              <button type="button" id="match-rematch-accept-btn" class="match-end-btn match-end-btn--primary">
-                Accept
-              </button>
-              <button type="button" id="match-rematch-decline-btn" class="match-end-btn">Decline</button>
-            </div>
           </div>
         </div>
       </div>

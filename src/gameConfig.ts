@@ -289,7 +289,7 @@ export const defaultGameConfig = {
   /** Fall below this Y on blast zone (death plane). */
   blastY: -38,
 
-  /** Stocks per fighter at match start / after rematch reset (Smash-style ring-outs). */
+  /** Stocks per fighter at match start / round reset (Smash-style ring-outs). */
   startStocks: 2,
   /** Hold KO name + stock HUD punch animation before teleport respawn (ms). */
   koAnnounceHoldMs: 1000,

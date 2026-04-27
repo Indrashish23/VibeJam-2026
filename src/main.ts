@@ -148,26 +148,7 @@ const matchEndTitle = document.getElementById('match-end-title')
 const matchEndSub = document.getElementById('match-end-sub')
 const matchEndCardEl =
   matchEndOverlay?.querySelector('.match-end-card') as HTMLDivElement | null
-const matchRematchPrimaryActionsEl = document.getElementById(
-  'match-rematch-primary-actions',
-) as HTMLDivElement | null
-const matchRematchBtnEl = document.getElementById('match-rematch-btn') as HTMLButtonElement | null
-const matchCloseBtnEl = document.getElementById('match-close-btn') as HTMLButtonElement | null
-const matchRematchStatusEl = document.getElementById(
-  'match-rematch-status',
-) as HTMLParagraphElement | null
-const matchRematchCancelBtnEl = document.getElementById(
-  'match-rematch-cancel-btn',
-) as HTMLButtonElement | null
-const matchRematchIncomingEl = document.getElementById(
-  'match-rematch-incoming',
-) as HTMLDivElement | null
-const matchRematchAcceptBtnEl = document.getElementById(
-  'match-rematch-accept-btn',
-) as HTMLButtonElement | null
-const matchRematchDeclineBtnEl = document.getElementById(
-  'match-rematch-decline-btn',
-) as HTMLButtonElement | null
+const matchEndLobbyBtnEl = document.getElementById('match-end-lobby-btn') as HTMLButtonElement | null
 const leaveMatchOverlay = document.getElementById('leave-match-overlay') as HTMLDivElement | null
 const leaveMatchConfirmBtn = document.getElementById('leave-match-confirm') as HTMLButtonElement | null
 const leaveMatchCancelBtn = document.getElementById('leave-match-cancel') as HTMLButtonElement | null
@@ -180,8 +161,6 @@ const invulnShineEl = document.getElementById('invuln-shine') as HTMLDivElement 
 const winGameSplashEl = document.getElementById('win-game-splash') as HTMLDivElement | null
 const winGameSplashTxtEl =
   winGameSplashEl?.querySelector('.win-game-splash__txt') as HTMLDivElement | null
-const rematchSeqLayer = document.getElementById('rematch-sequence') as HTMLDivElement | null
-const rematchBlackSheet = document.getElementById('rematch-black-sheet') as HTMLDivElement | null
 const countdownOverlay = document.getElementById('countdown-overlay') as HTMLDivElement | null
 const countdownNumEl = document.getElementById('countdown-num') as HTMLSpanElement | null
 const dashScanEl = document.getElementById('dash-scanlines') as HTMLDivElement | null
@@ -468,63 +447,8 @@ function runUsernameGate(): Promise<void> {
   })
 }
 
+/** Legacy sessionStorage key from older builds (rematch reload) — still read so stale keys clear. */
 const ONLINE_REMATCH_RELOAD_KEY = 'vibejam_online_rematch_reload_lobby'
-
-function showHardRematchReloadOverlay(): void {
-  let el = document.getElementById('hard-rematch-reload-overlay') as HTMLDivElement | null
-  if (!el) {
-    el = document.createElement('div')
-    el.id = 'hard-rematch-reload-overlay'
-    el.style.position = 'fixed'
-    el.style.inset = '0'
-    el.style.zIndex = '99999'
-    el.style.display = 'flex'
-    el.style.alignItems = 'center'
-    el.style.justifyContent = 'center'
-    el.style.background = '#020617'
-    el.style.color = '#f8fafc'
-    el.style.fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
-    el.style.fontSize = 'clamp(2rem, 7vw, 5.5rem)'
-    el.style.fontWeight = '900'
-    el.style.letterSpacing = '0.08em'
-    el.style.textTransform = 'uppercase'
-    el.textContent = 'Rematching...'
-    el.setAttribute('aria-live', 'polite')
-    el.setAttribute('role', 'status')
-    document.body.appendChild(el)
-  }
-  el.hidden = false
-  el.style.display = 'flex'
-  el.style.pointerEvents = 'auto'
-}
-
-function hideHardRematchReloadOverlay(): void {
-  const el = document.getElementById('hard-rematch-reload-overlay') as HTMLDivElement | null
-  if (!el) return
-  el.hidden = true
-  el.style.display = 'none'
-  el.style.pointerEvents = 'none'
-}
-
-function saveOnlineRematchReloadLobby(l: LobbyResult): void {
-  if (l.mode !== 'online') return
-  try {
-    sessionStorage.setItem(
-      ONLINE_REMATCH_RELOAD_KEY,
-      JSON.stringify({
-        mode: 'online',
-        role: l.role,
-        roomId: l.roomId,
-        shortCode: l.shortCode,
-        mapId: l.mapId,
-        lobbyVisibility: l.lobbyVisibility ?? 'private',
-        listingHostName: l.listingHostName,
-      }),
-    )
-  } catch {
-    /* ignore */
-  }
-}
 
 function takeOnlineRematchReloadLobby(): LobbyResult | null {
   let raw: string | null = null
@@ -543,7 +467,6 @@ function takeOnlineRematchReloadLobby(): LobbyResult | null {
       typeof data.shortCode === 'string' &&
       isMapId(data.mapId)
     ) {
-      showHardRematchReloadOverlay()
       try {
         sessionStorage.removeItem(ONLINE_REMATCH_RELOAD_KEY)
       } catch {
@@ -590,8 +513,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   const isOnline = lobby.mode === 'online'
-  /* Rematch full-page overlay: hide as soon as the game boots so we never depend only on ws `open`. */
-  if (isOnline) hideHardRematchReloadOverlay()
   let mpPhase: 'waiting' | 'starting' | 'live' = isOnline ? 'waiting' : 'live'
   /** Online lobby only: Tweaks "Practice with Dummy" — move and fight vs dummy while still waiting for a peer. */
   let lobbyDummyPractice = false
@@ -661,7 +582,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   function openTextChat(): void {
     if (!textChatWrapEl || !textChatInputEl) return
     if (!isOnline || lobby.mode !== 'online') return
-    if (multiplayerBlocksPlay() || leaveMatchDialogOpen || tweaksPanelOpen || rematchSequenceActive) return
+    if (multiplayerBlocksPlay() || leaveMatchDialogOpen || tweaksPanelOpen) return
     textChatOpen = true
     textChatWrapEl.hidden = false
     textChatInputEl.hidden = false
@@ -689,10 +610,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let mpSeqStarted = false
   let mpBeginTimer: ReturnType<typeof setTimeout> | null = null
   let poseSendAcc = 0
-  /** Online rematch consent: offer id we sent while waiting on opponent. */
-  let pendingOutgoingRematchId: string | null = null
-  /** Online rematch: latest offer id from peer (we can accept or decline). */
-  let pendingIncomingRematchId: string | null = null
   const seenVoiceShotIds = new Set<string>()
   /** Peer voice clips keyed by shotId — play when authoritative authDamage confirms a hit. */
   const pendingPeerShotAudioById = new Map<string, AudioBuffer>()
@@ -1715,11 +1632,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
   }
 
-  /** Blocks gameplay during KO rematch cinematic (black → swipe → countdown). */
-  let rematchSequenceActive = false
   /**
-   * Bumps when a PvP rematch/reset runs so a slower async `concludeRoundElimination`
-   * (awaiting win splash) cannot call `endMatch` after a new round has already started.
+   * Bumps on (future) in-PvP match restarts so a slower async `concludeRoundElimination`
+   * cannot call `endMatch` after a new round has already started.
    */
   let pvpMatchEpoch = 0
 
@@ -1986,8 +1901,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   async function resetRoundAfterTweakEdit(): Promise<void> {
-    while (rematchSequenceActive) await sleepMs(55)
-
     chargingLmb = false
     clearPistolState()
     voice.resetChargeMeter()
@@ -2100,7 +2013,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   async function runPvpCountdown321(): Promise<void> {
     if (!countdownOverlay || !countdownNumEl) return
-    hideMatchEndAndRematchUiFully()
+    hideMatchEndOverlayFully()
     if (matchEndOverlay) matchEndOverlay.hidden = true
     countdownOverlay.classList.add('countdown-overlay--opaque')
     if (countdownTitleEl) {
@@ -2207,7 +2120,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     void initBananaRound()
     flushPendingBananaMsgs()
     tryPointerLock()
-    hideHardRematchReloadOverlay()
     window.setTimeout(() => {
       if (mpToast) mpToast.hidden = true
     }, 4200)
@@ -2246,47 +2158,15 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }, 550)
   }
 
-  function generateRematchRoundId(): string {
-    return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
-  }
-
-  /** Hide match-end overlay and all rematch negotiation UI (incoming / waiting / cancel). */
-  function hideMatchEndAndRematchUiFully(): void {
+  function hideMatchEndOverlayFully(): void {
     if (matchEndOverlay) matchEndOverlay.hidden = true
     matchEndCardEl?.classList.remove('match-end-card--forfeit')
-    if (matchRematchIncomingEl) matchRematchIncomingEl.hidden = true
-    if (matchRematchPrimaryActionsEl) matchRematchPrimaryActionsEl.hidden = true
-    if (matchRematchBtnEl) matchRematchBtnEl.hidden = true
-    if (matchCloseBtnEl) matchCloseBtnEl.hidden = true
-    if (matchRematchStatusEl) {
-      matchRematchStatusEl.hidden = true
-      matchRematchStatusEl.textContent = ''
-    }
-    if (matchRematchCancelBtnEl) matchRematchCancelBtnEl.hidden = true
+    if (matchEndLobbyBtnEl) matchEndLobbyBtnEl.hidden = true
   }
 
-  /** After a match ends: show Rematch + Continue (no incoming offer). */
-  function showMatchEndRematchControlsDefault(): void {
+  function showMatchEndLobbyControls(): void {
     if (!matchOutcome) return
-    if (matchRematchIncomingEl) matchRematchIncomingEl.hidden = true
-    if (matchRematchPrimaryActionsEl) matchRematchPrimaryActionsEl.hidden = false
-    if (matchRematchBtnEl) matchRematchBtnEl.hidden = false
-    if (matchCloseBtnEl) {
-      matchCloseBtnEl.hidden = isPvp()
-    }
-    if (matchRematchStatusEl) {
-      matchRematchStatusEl.hidden = true
-      matchRematchStatusEl.textContent = ''
-    }
-    if (matchRematchCancelBtnEl) matchRematchCancelBtnEl.hidden = true
-  }
-
-  function syncMatchEndRematchControlsIdle(): void {
-    if (matchOutcome) {
-      showMatchEndRematchControlsDefault()
-    } else {
-      hideMatchEndAndRematchUiFully()
-    }
+    if (matchEndLobbyBtnEl) matchEndLobbyBtnEl.hidden = false
   }
 
   function returnToLobbyReload(notifyOpponent: boolean = false): void {
@@ -2321,7 +2201,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     hideWinGameSplash()
     winFinisher = null
     matchOutcome = null
-    hideMatchEndAndRematchUiFully()
+    hideMatchEndOverlayFully()
     try {
       controls.unlock()
     } catch {
@@ -2337,90 +2217,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     window.setTimeout(() => {
       returnToLobbyReload(false)
     }, 1450)
-  }
-
-  function startOnlineRematchHardReload(): void {
-    if (lobby.mode !== 'online') {
-      void runRematchSequence()
-      return
-    }
-    saveOnlineRematchReloadLobby(lobby)
-    showHardRematchReloadOverlay()
-    try {
-      controls.unlock()
-    } catch {
-      /* ignore */
-    }
-    window.setTimeout(() => window.location.reload(), 320)
-  }
-
-  function beginOnlineRematchRequest(): void {
-    if (!isOnline || lobby.mode !== 'online' || !matchOutcome) return
-    if (pendingIncomingRematchId !== null) return
-    const id = generateRematchRoundId()
-    pendingOutgoingRematchId = id
-    sendGameTraffic({ type: 'rematchOffer', roundId: id })
-    if (matchRematchBtnEl) matchRematchBtnEl.hidden = true
-    if (matchRematchStatusEl) {
-      matchRematchStatusEl.hidden = false
-      matchRematchStatusEl.textContent = 'Waiting for rematch…'
-    }
-    if (matchRematchCancelBtnEl) matchRematchCancelBtnEl.hidden = false
-  }
-
-  function dismissMatchEndOnline(): void {
-    if (pendingOutgoingRematchId) {
-      sendGameTraffic({ type: 'rematchWithdraw', roundId: pendingOutgoingRematchId })
-    }
-    if (pendingIncomingRematchId) {
-      sendGameTraffic({ type: 'rematchWithdraw', roundId: pendingIncomingRematchId })
-    }
-    pendingOutgoingRematchId = null
-    pendingIncomingRematchId = null
-    syncMatchEndRematchControlsIdle()
-    if (matchEndOverlay) matchEndOverlay.hidden = true
-    controls.unlock()
-  }
-
-  function handleRematchOfferFromPeer(roundId: string): void {
-    if (!matchOutcome) return
-    if (pendingOutgoingRematchId !== null) {
-      sendGameTraffic({ type: 'rematchAccept', roundId })
-      pendingOutgoingRematchId = null
-      pendingIncomingRematchId = null
-      hideMatchEndAndRematchUiFully()
-      startOnlineRematchHardReload()
-      return
-    }
-    pendingIncomingRematchId = roundId
-    if (matchRematchPrimaryActionsEl) matchRematchPrimaryActionsEl.hidden = true
-    if (matchRematchBtnEl) matchRematchBtnEl.hidden = true
-    if (matchRematchIncomingEl) matchRematchIncomingEl.hidden = false
-    if (matchRematchStatusEl) {
-      matchRematchStatusEl.hidden = false
-      matchRematchStatusEl.textContent = 'Your opponent wants a rematch.'
-    }
-  }
-
-  function handleRematchAcceptFromPeer(roundId: string): void {
-    if (pendingOutgoingRematchId === roundId) {
-      pendingOutgoingRematchId = null
-      pendingIncomingRematchId = null
-      hideMatchEndAndRematchUiFully()
-      startOnlineRematchHardReload()
-    }
-  }
-
-  function handleRematchWithdrawFromPeer(roundId: string): void {
-    if (pendingIncomingRematchId === roundId) {
-      pendingIncomingRematchId = null
-      if (matchRematchIncomingEl) matchRematchIncomingEl.hidden = true
-      syncMatchEndRematchControlsIdle()
-    }
-    if (pendingOutgoingRematchId === roundId) {
-      pendingOutgoingRematchId = null
-      syncMatchEndRematchControlsIdle()
-    }
   }
 
   function dispatchPeerGamePayload(data: Record<string, unknown>): void {
@@ -2639,7 +2435,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
 
     if (ty === 'authMatchEnd' && lobby.mode === 'online' && typeof data.winnerRole === 'string') {
-      if (!matchOutcome && !seriesTransitionActive && !rematchSequenceActive) {
+      if (!matchOutcome && !seriesTransitionActive) {
         const wr =
           data.winnerRole === 'host' || data.winnerRole === 'guest' ? data.winnerRole : undefined
         if (wr) void concludeRoundElimination(wr === lobby.role)
@@ -2647,20 +2443,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       return
     }
 
-    if (ty === 'rematchOffer' && typeof data.roundId === 'string') {
-      handleRematchOfferFromPeer(data.roundId)
-      return
-    }
-    if (ty === 'rematchAccept' && typeof data.roundId === 'string') {
-      handleRematchAcceptFromPeer(data.roundId)
-      return
-    }
-    if (ty === 'rematchWithdraw' && typeof data.roundId === 'string') {
-      handleRematchWithdrawFromPeer(data.roundId)
+    /* Rematch wire types — shelved; ignore for protocol compatibility with older peers. */
+    if (ty === 'rematchOffer' || ty === 'rematchAccept' || ty === 'rematchWithdraw') {
       return
     }
     if (ty === 'rematchDeclineToLobby') {
-      hideMatchEndAndRematchUiFully()
       returnToLobbyReload()
       return
     }
@@ -4047,67 +3834,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     flashIntensity = Math.max(flashIntensity, 1)
   }
 
-  async function runRematchSequence(): Promise<void> {
-    pvpMatchEpoch += 1
-    seriesTransitionActive = false
-    rematchSequenceActive = true
-    try {
-      pendingOutgoingRematchId = null
-      pendingIncomingRematchId = null
-      matchOutcome = null
-      resetMatchStockState()
-      hideMatchEndAndRematchUiFully()
-      chargingLmb = false
-      clearPistolState()
-      controls.unlock()
-      keys.forward = false
-      keys.back = false
-      keys.left = false
-      keys.right = false
-      winFinisher = null
-      hideWinGameSplash()
-      playerPercent = 0
-      enemyPercent = 0
-      syncHud()
-      browserHost?.reset()
-      if (lobby.mode === 'online' && lobby.role === 'host') {
-        sendGameTraffic({ type: 'seriesHostBeginNext' })
-      }
-      hideMatchEndAndRematchUiFully()
-
-      if (rematchSeqLayer && rematchBlackSheet) {
-        rematchSeqLayer.hidden = false
-        rematchBlackSheet.classList.remove('rematch-black-sheet--slide')
-        rematchBlackSheet.style.transform = 'translateX(0)'
-        await sleepMs(320)
-      }
-
-      spawnActors()
-      syncHud()
-
-      if (rematchBlackSheet) {
-        void rematchBlackSheet.offsetWidth
-        rematchBlackSheet.classList.add('rematch-black-sheet--slide')
-        await sleepMs(900)
-        if (rematchSeqLayer) rematchSeqLayer.hidden = true
-        rematchBlackSheet.classList.remove('rematch-black-sheet--slide')
-      }
-
-      await runPvpCountdown321()
-    } finally {
-      rematchSequenceActive = false
-      hideMatchEndAndRematchUiFully()
-      if (matchEndOverlay) matchEndOverlay.hidden = true
-    }
-    tryPointerLock()
-  }
-
-  /** Full cinematic (black → swipe → 3-2-1) — used from match-end overlay. */
-  function resetMatch(): void {
-    void runRematchSequence()
-  }
-
-  /** In-round rematch button: instant restart without transition. */
+  /** In-round: instant round reset without match-end overlay (offline / dev). */
   function instantHudRematch(): void {
     if (isPvp()) return
     applyRoundReset()
@@ -4134,12 +3861,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (matchEndSub) {
       matchEndSub.textContent =
         outcome === 'win'
-          ? 'Opponent ran out of stocks. Hit Rematch for another round.'
-          : 'You ran out of stocks. Rematch to try again.'
+          ? 'The other fighter ran out of stocks. Return to the lobby to play again.'
+          : 'You ran out of stocks.'
     }
-    if (isOnline && lobby.mode === 'online') {
-      showMatchEndRematchControlsDefault()
-    }
+    showMatchEndLobbyControls()
   }
 
   function recreateBot(mode: BotMode): void {
@@ -4236,7 +3961,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       leaveMatchDialogOpen ||
       matchOutcome ||
       winFinisher ||
-      rematchSequenceActive ||
       multiplayerBlocksPlay() ||
       playerHurt !== 'none' ||
       isPlayerBananaSlipNow()
@@ -4293,7 +4017,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (
       matchOutcome ||
       winFinisher ||
-      rematchSequenceActive ||
       multiplayerBlocksPlay() ||
       dashCdMs > 0 ||
       tweaksPanelOpen ||
@@ -4327,7 +4050,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   function resolveCombat(delta: number): void {
     if (
       matchOutcome ||
-      rematchSequenceActive ||
       voiceResumeCountdownActive ||
       multiplayerBlocksPlay() ||
       seriesTransitionActive
@@ -4573,11 +4295,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       if (textChatOpen) return
     }
 
-    /** 1 dummy · 2 smart · 3 toggle bot · R restart (also when match-end overlay is open). */
+    /** 1 dummy · 2 smart · 3 toggle bot · R = lobby reload after match end, else round reset (offline). */
     const shortcutBlock =
       tweaksPanelOpen ||
       leaveMatchDialogOpen ||
-      rematchSequenceActive ||
       winFinisher ||
       multiplayerBlocksPlay() ||
       seriesTransitionActive
@@ -4597,11 +4318,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           return
         case 'KeyR':
           e.preventDefault()
-          if (isOnline && lobby.mode === 'online' && matchOutcome) {
-            beginOnlineRematchRequest()
-          } else {
-            instantHudRematch()
+          if (matchOutcome) {
+            returnToLobbyReload(isOnline && lobby.mode === 'online')
+            return
           }
+          instantHudRematch()
           return
         default:
           break
@@ -4615,7 +4336,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       leaveMatchDialogOpen ||
       matchOutcome ||
       winFinisher ||
-      rematchSequenceActive ||
       multiplayerBlocksPlay() ||
       seriesTransitionActive ||
       playerHurt !== 'none'
@@ -4662,7 +4382,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       leaveMatchDialogOpen ||
       matchOutcome !== null ||
       winFinisher !== null ||
-      rematchSequenceActive ||
       seriesTransitionActive ||
       playerHurt !== 'none' ||
       isPlayerBananaSlipNow()
@@ -4671,7 +4390,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   function tryBananaRmb(): boolean {
     if (!getMyBananaHeld() || isPlayerBananaSlipNow()) return false
-    if (matchOutcome || rematchSequenceActive || winFinisher) return false
+    if (matchOutcome || winFinisher) return false
     if (multiplayerBlocksPlay() && !lobbyDummyPractice) return false
     if (tweaksPanelOpen || leaveMatchDialogOpen) return false
     if (Math.round(gameConfig.bananaPickupCount) <= 0) return false
@@ -5198,11 +4917,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
 
     if (!tweaksPanelOpen && !leaveMatchDialogOpen) {
-      if (
-        !matchOutcome &&
-        !rematchSequenceActive &&
-        !multiplayerBlocksPlay()
-      ) {
+      if (!matchOutcome && !multiplayerBlocksPlay()) {
         updateMovement(delta)
         resolveCombat(delta)
         if (isPvp() && lobby.mode === 'online' && lobby.role === 'host') {
@@ -5210,10 +4925,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         }
         syncBananaHandVis()
         syncOpponentBananaHandVis()
-      } else if (rematchSequenceActive && !matchOutcome) {
-        const playerProjActive = arms.isProjectileActive()
-        arms.update(delta)
-        bot.update(delta, camera.position, terrainPhysics, playerProjActive)
       } else if (matchOutcome) {
         arms.update(delta)
       }
@@ -5332,7 +5043,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       leaveMatchDialogOpen ||
       matchOutcome ||
       winFinisher ||
-      rematchSequenceActive ||
       voiceInputBlocked ||
       voiceResumeCountdownActive ||
       multiplayerBlocksPlay() ||
@@ -5384,7 +5094,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         if (mpSocketOpenHandled) return
         mpSocketOpenHandled = true
         debugMpLog('ws open')
-        hideHardRematchReloadOverlay()
         mpSocket?.send(
           JSON.stringify({
             type: 'hello',
@@ -5404,7 +5113,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       )
       mpSocket.addEventListener('error', () => {
         debugMpLog('ws error')
-        hideHardRematchReloadOverlay()
         console.warn(
           '[multiplayer] socket error — check network and that the site was built with online enabled',
         )
@@ -5417,7 +5125,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       })
       mpSocket.addEventListener('close', () => {
         debugMpLog('ws close')
-        hideHardRematchReloadOverlay()
         if (leavingToLobby) return
         if (peerSeenInRoom && lobby.mode === 'online') {
           showOpponentForfeitAndReturn()
@@ -5432,7 +5139,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       })
     } catch {
       console.warn('[multiplayer] no transport configured at build time')
-      hideHardRematchReloadOverlay()
       if (mpToast) {
         mpToast.textContent =
           'Online isn’t available right now. Refresh and choose Play offline.'
@@ -5488,50 +5194,14 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     void initVoiceInput()
   })
 
-  matchRematchBtnEl?.addEventListener('click', () => {
-    if (isOnline && lobby.mode === 'online') {
-      beginOnlineRematchRequest()
-    } else {
-      resetMatch()
-    }
-  })
-  matchCloseBtnEl?.addEventListener('click', () => {
-    if (isOnline && lobby.mode === 'online') {
-      dismissMatchEndOnline()
-    } else {
-      resetMatch()
-    }
-  })
-  matchRematchCancelBtnEl?.addEventListener('click', () => {
-    if (pendingOutgoingRematchId) {
-      sendGameTraffic({ type: 'rematchWithdraw', roundId: pendingOutgoingRematchId })
-    }
-    pendingOutgoingRematchId = null
-    syncMatchEndRematchControlsIdle()
-  })
-  matchRematchAcceptBtnEl?.addEventListener('click', () => {
-    const id = pendingIncomingRematchId
-    if (!id) return
-    sendGameTraffic({ type: 'rematchAccept', roundId: id })
-    pendingIncomingRematchId = null
-    pendingOutgoingRematchId = null
-    hideMatchEndAndRematchUiFully()
-    startOnlineRematchHardReload()
-  })
-  matchRematchDeclineBtnEl?.addEventListener('click', () => {
-    sendGameTraffic({ type: 'rematchDeclineToLobby' })
-    pendingIncomingRematchId = null
-    pendingOutgoingRematchId = null
-    hideMatchEndAndRematchUiFully()
-    returnToLobbyReload()
+  matchEndLobbyBtnEl?.addEventListener('click', () => {
+    returnToLobbyReload(isOnline && lobby.mode === 'online')
   })
 
   leaveMatchCancelBtn?.addEventListener('click', () => hideLeaveMatchDialog())
   leaveMatchConfirmBtn?.addEventListener('click', () => {
     hideLeaveMatchDialog()
-    if (lobby.mode === 'online') dismissMatchEndOnline()
-    if (lobby.mode === 'online') returnToLobbyReload(true)
-    else returnToLobbyReload(false)
+    returnToLobbyReload(lobby.mode === 'online')
   })
   matchCancelledOkBtn?.addEventListener('click', () => {
     returnToLobbyReload(false)
@@ -5721,5 +5391,4 @@ runUsernameGate()
   })
   .catch((err) => {
     console.error('[vibejam] init failed', err)
-    hideHardRematchReloadOverlay()
   })
