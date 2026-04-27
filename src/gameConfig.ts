@@ -16,6 +16,14 @@ export const defaultGameConfig = {
   retroPixelScale: 2.35,
   /** Pixel pass edge hint strength (subtle retro contour). */
   retroEdgeStrength: 0.12,
+  /** Cel post-pass color quantization bands (higher = smoother, lower = flatter toon steps). */
+  celShadeLevels: 5,
+  /** Cel post-pass local-contrast threshold for black outlines. */
+  celOutlineThreshold: 0.19,
+  /** Cel post-pass edge softness around threshold. */
+  celOutlineSoftness: 0.1,
+  /** Cel post-pass black outline intensity (0 = off). */
+  celOutlineStrength: 1,
   /** Skybox base color channels (0–1) for the procedural sky dome. */
   skyboxColorR: 0.14,
   skyboxColorG: 0.58,

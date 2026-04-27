@@ -619,10 +619,15 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     depthEdgeStrength: Math.max(0, gameConfig.retroEdgeStrength),
   })
   const celOutlinePass = new ShaderPass(CelOutlineShader)
-  ;(celOutlinePass.uniforms as Record<string, { value: unknown }>).resolution.value = [
-    window.innerWidth,
-    Math.max(window.innerHeight, 1),
-  ]
+  const celUniforms = celOutlinePass.uniforms as Record<string, { value: unknown }>
+  celUniforms.resolution.value = [window.innerWidth, Math.max(window.innerHeight, 1)]
+  function syncCelOutlineConfig(): void {
+    celUniforms.levels.value = Math.max(2, Math.round(gameConfig.celShadeLevels))
+    celUniforms.edgeThreshold.value = Math.max(0.001, gameConfig.celOutlineThreshold)
+    celUniforms.edgeSoftness.value = Math.max(0.001, gameConfig.celOutlineSoftness)
+    celUniforms.outlineStrength.value = Math.max(0, gameConfig.celOutlineStrength)
+  }
+  syncCelOutlineConfig()
   composer.addPass(pixelPass)
   composer.addPass(new OutputPass())
   composer.addPass(celOutlinePass)
@@ -3859,7 +3864,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     camera.updateProjectionMatrix()
     renderer.setSize(w, h)
     composer.setSize(w, h)
-    ;(celOutlinePass.uniforms as Record<string, { value: unknown }>).resolution.value = [w, h]
+    celUniforms.resolution.value = [w, h]
   }
   window.addEventListener('resize', onResize)
 
@@ -4241,6 +4246,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     )
     pixelPass.depthEdgeStrength = Math.max(0, gameConfig.retroEdgeStrength)
     pixelPass.normalEdgeStrength = Math.max(0, gameConfig.retroEdgeStrength * 0.65)
+    syncCelOutlineConfig()
     skyDome.update(delta, camera.position)
 
     /* Debug capsule visualization (red wireframe). Same radius/height/offset for player and foe. */
