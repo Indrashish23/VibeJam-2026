@@ -34,6 +34,16 @@ const MAX_CHARACTER_TRANSLATION_PER_SOLVE = 0.42
 /** Avoid huge single-frame impulses (knockback) exploding substep count. */
 const MAX_DESIRED_MOVEMENT_PER_FRAME = 7.5
 
+/** Rapier typings differ across releases (`toi` vs older names); runtime exposes time-of-impact. */
+function rayColliderIntersectionToi(hit: {
+  toi?: number
+  timeOfImpact?: number
+}): number {
+  if (typeof hit.toi === 'number') return hit.toi
+  if (typeof hit.timeOfImpact === 'number') return hit.timeOfImpact
+  return 0
+}
+
 function attrAsPosition(geometry: BufferGeometry): BufferAttribute | null {
   const pos = geometry.getAttribute('position')
   return pos ? (pos as BufferAttribute) : null
@@ -297,8 +307,9 @@ export class TerrainPhysics {
       (collider) => this.terrainHandles.has(collider.handle),
     )
     if (!hit) return null
+    const toi = rayColliderIntersectionToi(hit)
     return {
-      point: new Vector3(x, y - hit.toi, z),
+      point: new Vector3(x, y - toi, z),
       normal: new Vector3(hit.normal.x, hit.normal.y, hit.normal.z),
     }
   }
