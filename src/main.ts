@@ -984,21 +984,54 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let bananaSlipCamRollStartMs = 0
   let bananaSlipCamRollPlaying = false
   const _fpViewEuler = new Euler(0, 0, 0, 'YXZ')
+  /** Stored camera baseline at slip start; used to ease back after slip ends. */
+  const slipCamStoredQuat = new Quaternion()
+  let slipCamStoredY = 0
+  let slipCamHasStoredBaseline = false
+  let slipCamRestoreStartMs = 0
+  let slipCamRestoring = false
+  let slipCamWasActive = false
 
   function startBananaSlipCamRoll(): void {
     if (gameConfig.bananaSlipCamRollEnabled < 0.5) return
+    if (!slipCamHasStoredBaseline) {
+      if (cameraSpringArm.initialized) {
+        slipCamStoredQuat.copy(cameraSpringArm.displayQuat)
+        slipCamStoredY = cameraSpringArm.displayY
+      } else {
+        slipCamStoredQuat.copy(camera.quaternion)
+        slipCamStoredY = camera.position.y
+      }
+      slipCamHasStoredBaseline = true
+    }
+    slipCamRestoring = false
     bananaSlipCamRollStartMs = performance.now()
     bananaSlipCamRollPlaying = true
+    slipCamWasActive = true
   }
 
   function resetBananaSlipCamRoll(): void {
     bananaSlipCamRollPlaying = false
+    slipCamRestoring = false
+    slipCamWasActive = false
+    slipCamHasStoredBaseline = false
   }
 
   function computeBananaSlipRollRad(): number {
     if (gameConfig.bananaSlipCamRollEnabled < 0.5) {
       bananaSlipCamRollPlaying = false
+      slipCamRestoring = false
+      slipCamWasActive = false
+      slipCamHasStoredBaseline = false
       return 0
+    }
+    const activeNow = isPlayerBananaSlipNow()
+    if (activeNow) {
+      slipCamWasActive = true
+    } else if (slipCamWasActive && !slipCamRestoring && slipCamHasStoredBaseline) {
+      slipCamRestoring = true
+      slipCamRestoreStartMs = performance.now()
+      slipCamWasActive = false
     }
     if (!bananaSlipCamRollPlaying) return 0
 
@@ -1088,6 +1121,18 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   function tickCameraSpringArm(delta: number): void {
     cameraSpringArm.intendedQuat.copy(camera.quaternion)
     cameraSpringArm.intendedY = camera.position.y
+
+    if (slipCamRestoring && slipCamHasStoredBaseline) {
+      const recSec = Math.max(0.06, gameConfig.bananaSlipCamRollRecoverSec)
+      const t = Math.min(1, (performance.now() - slipCamRestoreStartMs) / 1000 / recSec)
+      const ease = 1 - Math.pow(1 - t, 3)
+      cameraSpringArm.intendedQuat.slerp(slipCamStoredQuat, ease)
+      cameraSpringArm.intendedY = MathUtils.lerp(cameraSpringArm.intendedY, slipCamStoredY, ease)
+      if (t >= 1) {
+        slipCamRestoring = false
+        slipCamHasStoredBaseline = false
+      }
+    }
 
     if (!cameraSpringArm.initialized) {
       cameraSpringArm.displayQuat.copy(cameraSpringArm.intendedQuat)
