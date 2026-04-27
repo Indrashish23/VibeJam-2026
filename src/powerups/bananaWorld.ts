@@ -15,9 +15,12 @@ import type { TerrainPhysics } from '../physics/terrainPhysics'
 const _aim = new Vector3()
 
 const BANANA_GLB = new URL('../../Assets/Props/Banana_Pickup.glb', import.meta.url).href
+const OPENED_BANANA_GLB = new URL('../../Assets/Props/OpenedBanana.glb', import.meta.url).href
 
 /** Pickup visual height above terrain contact point (matches prior crate lift). */
 const PICKUP_Y_OFFSET = 0.35
+/** Peel mesh sits slightly above the hit point so it does not clip into the floor. */
+const PEEL_Y_OFFSET = 0.07
 
 function disposeBananaVisual(root: Object3D): void {
   root.traverse((o) => {
@@ -109,6 +112,9 @@ export class BananaWorld {
   /** Normalized banana (bottom on y=0, ~0.55 units tall); clones only, never added to scene. */
   private bananaPivot: Group | null = null
   private bananaLoadPromise: Promise<Group> | null = null
+  /** Opened-peel model for landed throws only (same size normalization as pickup). */
+  private openedBananaPivot: Group | null = null
+  private openedBananaLoadPromise: Promise<Group> | null = null
   private handBananaFilled = false
 
   constructor(scene: Scene) {
@@ -151,6 +157,38 @@ export class BananaWorld {
     return this.bananaLoadPromise
   }
 
+  /**
+   * Landed peel uses `OpenedBanana.glb`; normalized like the pickup so scale matches gameplay.
+   */
+  private loadOpenedBananaTemplate(): Promise<Group> {
+    if (this.openedBananaPivot) return Promise.resolve(this.openedBananaPivot)
+    if (!this.openedBananaLoadPromise) {
+      const loader = new GLTFLoader()
+      this.openedBananaLoadPromise = loader.loadAsync(OPENED_BANANA_GLB).then((gltf) => {
+        const root = gltf.scene as Group
+        root.name = 'openedBananaPeelModel'
+        root.updateMatrixWorld(true)
+        root.traverse((o) => {
+          if (o instanceof Mesh) {
+            o.castShadow = true
+            o.receiveShadow = true
+          }
+        })
+        const box = new Box3().setFromObject(root)
+        const size = new Vector3()
+        box.getSize(size)
+        const maxDim = Math.max(size.x, size.y, size.z, 1e-6)
+        root.scale.multiplyScalar(0.55 / maxDim)
+        root.updateMatrixWorld(true)
+        const box2 = new Box3().setFromObject(root)
+        root.position.y -= box2.min.y
+        this.openedBananaPivot = root
+        return root
+      })
+    }
+    return this.openedBananaLoadPromise
+  }
+
   private async clonePickupVisual(): Promise<Object3D> {
     const pivot = await this.loadBananaTemplate()
     const node = pivot.clone(true)
@@ -162,11 +200,9 @@ export class BananaWorld {
   }
 
   private async clonePeelVisual(): Promise<Object3D> {
-    const pivot = await this.loadBananaTemplate()
+    const pivot = await this.loadOpenedBananaTemplate()
     const node = pivot.clone(true)
     node.name = 'bananaPeel'
-    /* Lay the banana on the ground (model +Y up → face -Z). */
-    node.rotation.x = Math.PI / 2
     node.rotation.y = Math.PI * 0.15
     node.scale.multiplyScalar(1.08)
     return node
@@ -303,7 +339,7 @@ export class BananaWorld {
     id: string,
   ): Promise<BananaPeelRecord> {
     const m = await this.clonePeelVisual()
-    m.position.set(x, y + 0.04, z)
+    m.position.set(x, y + PEEL_Y_OFFSET, z)
     this.scene.add(m)
     const r: BananaPeelRecord = { id, x, y, z, mesh: m }
     this.peels.push(r)
