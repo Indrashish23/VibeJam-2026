@@ -458,7 +458,8 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   megaphonePullPitchDeg: 'Megaphone pull: pitch °',
   megaphonePullYawDeg: 'Megaphone pull: yaw °',
   megaphonePullRollDeg: 'Megaphone pull: roll °',
-  megaphoneRestReturnSec: 'Megaphone: seconds to ease back to rest',
+  megaphoneRestReturnSec:
+    'Megaphone pose ease (s): toward pull while charging & back to rest — same smoothing both ways',
   megaphoneShakePosAmp: 'Megaphone shake: position amplitude (cam units)',
   megaphoneShakeRotDeg: 'Megaphone shake: rotation amplitude °',
   megaphoneShakeFreqHz: 'Megaphone shake: freq A (Hz)',
@@ -619,7 +620,7 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   megaphonePullYawDeg: 'Recording pose yaw °.',
   megaphonePullRollDeg: 'Recording pose roll °.',
   megaphoneRestReturnSec:
-    'After you release LMB/RMB, approximate seconds for the megaphone to ease back to the rest pose.',
+    'Approximate time constant (seconds) for exponential smoothing of the megaphone blend (0 = rest pose, 1 = full pull pose). Applies both while charge pulls the prop toward the pull pose and after release when returning to rest — lower = snappier both ways.',
   megaphoneShakePosAmp:
     'When charge is at/above Min charge to fire, additive camera-local shake amplitude (units). 0 = off.',
   megaphoneShakeRotDeg: 'Matching rotational jitter in degrees (scaled by same intensity as position).',

@@ -445,14 +445,14 @@ export const defaultGameConfig = {
   megaphonePullPitchDeg: -23,
   megaphonePullYawDeg: 87,
   megaphonePullRollDeg: 7,
-  /** Seconds (approx) to ease megaphone back to rest after release. */
-  megaphoneRestReturnSec: 0.22,
-  megaphoneShakePosAmp: 0.018,
+  /** Time constant (s) for easing megaphone toward pull while charging and back to rest (same value). */
+  megaphoneRestReturnSec: 0.05,
+  megaphoneShakePosAmp: 0.014,
   megaphoneShakeRotDeg: 3.2,
   megaphoneShakeFreqHz: 38,
   megaphoneShakeFreq2Hz: 71,
   /** Curves shake intensity vs charge above min-fire (higher = snappier ramp). */
-  megaphoneShakeRampPow: 1.28,
+  megaphoneShakeRampPow: 0.4,
 
   /** Debug Room: when 1, slider edits do NOT trigger a round reset; teleports you + dummy to a side arena. */
   debugRoomActive: 0,

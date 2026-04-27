@@ -116,9 +116,10 @@ export class MegaphoneFpProp {
 
     const chargeEase = MegaphoneFpProp.smooth01(opts.charge01)
     const targetPose = opts.charging ? chargeEase : 0
-    const followUp = opts.charging ? 18 : 1 / Math.max(0.04, megaphoneRestReturnSec)
-    const k = Math.min(1, followUp * delta)
-    this.poseSmooth += (targetPose - this.poseSmooth) * k
+    /* One time constant for both easing toward pull (recording) and back to rest — `megaphoneRestReturnSec`. */
+    const easeTauSec = Math.max(0.02, megaphoneRestReturnSec)
+    const alpha = 1 - Math.exp(-delta / easeTauSec)
+    this.poseSmooth += (targetPose - this.poseSmooth) * alpha
 
     const t = this.poseSmooth
     _tmpPos.set(megaphoneRestLocalX, megaphoneRestLocalY, megaphoneRestLocalZ)
@@ -151,20 +152,20 @@ export class MegaphoneFpProp {
     }
 
     const w = performance.now() * 0.001
-    const tau = Math.PI * 2
+    const twoPi = Math.PI * 2
     const f1 = megaphoneShakeFreqHz
     const f2 = megaphoneShakeFreq2Hz
     const pa = shakeMix * megaphoneShakePosAmp
     const rd = shakeMix * MathUtils.degToRad(megaphoneShakeRotDeg)
 
-    this.root.position.x += Math.sin(w * tau * f1) * pa
-    this.root.position.y += Math.cos(w * tau * f2 * 0.97) * pa * 0.85
-    this.root.position.z += Math.sin(w * tau * f2 * 1.03) * pa * 0.55
+    this.root.position.x += Math.sin(w * twoPi * f1) * pa
+    this.root.position.y += Math.cos(w * twoPi * f2 * 0.97) * pa * 0.85
+    this.root.position.z += Math.sin(w * twoPi * f2 * 1.03) * pa * 0.55
 
     _eShake.set(
-      Math.sin(w * tau * f2 * 0.88) * rd * 0.22,
-      Math.cos(w * tau * f1 * 1.07) * rd * 0.35,
-      Math.sin(w * tau * (f1 + f2) * 0.31) * rd * 0.18,
+      Math.sin(w * twoPi * f2 * 0.88) * rd * 0.22,
+      Math.cos(w * twoPi * f1 * 1.07) * rd * 0.35,
+      Math.sin(w * twoPi * (f1 + f2) * 0.31) * rd * 0.18,
       'YXZ',
     )
     this.root.rotation.x += _eShake.x
