@@ -36,6 +36,7 @@ import { RenderPixelatedPass } from 'three/addons/postprocessing/RenderPixelated
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js'
 import { gameConfig } from './gameConfig'
+import { applyPlayerRecordToHud, bumpPlayerRecord } from './playerRecord'
 import { isMapId, loadMap, type MapHandle, type MapId, type SpawnSlot } from './maps'
 import { BotFighter, type BotMode } from './boxing/bot'
 import { PlayerArms } from './boxing/playerArms'
@@ -214,6 +215,7 @@ if (chargeBarWrap) {
 }
 restoreHudElementPosition(percentHudEl, 'percentHud')
 restoreHudElementPosition(chargeBarWrap, 'chargeHud')
+applyPlayerRecordToHud()
 
 function setChargeBarDisplayPct(pct0to100: number): void {
   if (!chargeBarWrap) return
@@ -3779,6 +3781,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     hideWinGameSplash()
     winFinisher = null
     matchOutcome = outcome
+    bumpPlayerRecord(outcome)
+    applyPlayerRecordToHud()
     matchEndCardEl?.classList.remove('match-end-card--forfeit')
     triggerHitImpactFx()
     voice.resumeAudio()

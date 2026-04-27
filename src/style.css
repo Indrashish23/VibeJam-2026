@@ -1000,6 +1000,58 @@ body {
   transform-origin: bottom right;
 }
 
+.player-record-hud {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.2rem;
+  margin-bottom: 0.15rem;
+  padding: 0.35rem 0.5rem 0.3rem;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+}
+
+.player-record-hud__row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  font-size: 13pt;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  color: #cbd5e1;
+}
+
+.player-record-hud__n {
+  color: #f1f5f9;
+}
+
+.player-record-hud__s {
+  font-size: 0.78em;
+  font-weight: 800;
+  opacity: 0.75;
+}
+
+.player-record-hud__sep {
+  opacity: 0.45;
+  user-select: none;
+}
+
+.player-record-hud__rank {
+  font-size: 10.5pt;
+  line-height: 1.25;
+  text-align: right;
+  font-weight: 700;
+  font-style: italic;
+  letter-spacing: 0.03em;
+  color: #fde68a;
+  text-shadow: 0 0 10px rgba(251, 191, 36, 0.25);
+  max-width: 17rem;
+}
+
 .game-root.game-root--hud-drag .percent-hud,
 .game-root.game-root--hud-drag #charge-bar-wrap {
   pointer-events: auto !important;
