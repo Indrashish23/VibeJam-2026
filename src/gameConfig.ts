@@ -100,10 +100,10 @@ export const defaultGameConfig = {
   /** Shared gravity for non-player simulations (bot / banana projectile arc). */
   gravity: 38,
   /** Upward-phase gravity while vy > 0 (jump ascent). */
-  jumpGravity: 45,
+  jumpGravity: 147,
   /** Downward-phase gravity while vy <= 0 (fall / fast descent). */
   fallGravity: 70,
-  jumpForce: 40,
+  jumpForce: 45,
   /**
    * Variable-jump cut strength while jump is released and vy > 0.
    * Applied as `vy *= jumpCutMultiplier^(delta*60)`; lower = harder cut.
@@ -114,7 +114,7 @@ export const defaultGameConfig = {
   /** Time window to queue a jump press before landing (seconds). */
   jumpBufferTime: 0.1,
   /** Terminal downward speed clamp for player vy (negative = downward). */
-  maxFallSpeed: -65,
+  maxFallSpeed: -72,
   jumpCooldownMs: 480,
   /** How many extra mid-air jumps you get per landing cycle (1 = double jump). */
   airJumpsMax: 1,
@@ -535,7 +535,7 @@ export const defaultGameConfig = {
   /**
    * Scales FP hand sway on the megaphone only (× global `fpWeaponSwayMul`). 1 = match banana relative intensity.
    */
-  megaphoneSwayMul: 1,
+  megaphoneSwayMul: 2,
   /**
    * Seconds to ease into the pull/charge pose when recording starts; 0 = snap (legacy).
    */
