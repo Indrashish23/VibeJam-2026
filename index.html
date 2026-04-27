@@ -232,13 +232,18 @@
         <span class="mp-code-shortcut" aria-hidden="true">C</span>
       </div>
       <div id="mp-toast" class="mp-toast" hidden role="status" aria-live="polite"></div>
-      <img
-        id="prox-voice-active"
-        class="prox-voice-active"
-        alt="Proximity voice chat active"
-        hidden
-        decoding="async"
-      />
+      <div id="text-chat-wrap" class="text-chat-wrap" hidden>
+        <div id="text-chat-log" class="text-chat-log" aria-live="polite"></div>
+        <input
+          id="text-chat-input"
+          class="text-chat-input"
+          type="text"
+          maxlength="180"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="Type message... Enter=send / T=close"
+        />
+      </div>
       <div id="win-game-splash" class="win-game-splash" hidden>
         <span class="win-game-splash__txt" aria-live="polite">GAME</span>
       </div>

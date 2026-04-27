@@ -80,7 +80,6 @@ import {
 import { playFootstepOneShot } from './audio/footstepsSfx'
 import { playHitmarkerOneShot } from './audio/combatSfx'
 import { playBananaSlipOneShot, playJumpOneShot, playLandOneShot } from './audio/playerMoveSfx'
-import { createProximityVoip3d } from './audio/proximityVoip3d'
 import { playEnemySfxSpatialAt, resumeEnemySfxAudio, type SfxKind } from './audio/enemySfx'
 import { mountUserSettingsPanel, setUserSettingsPointerControls } from './userSettingsUI'
 import { setPartyKitHostSession, getPartyKitHost } from './net/partyKitHost'
@@ -94,7 +93,6 @@ import {
 /** Stunned FX SVGs live in `public/ui/` so Vercel/production resolves them without bundling `../Assets/`. */
 const stunnedEffectBgUrl = `${import.meta.env.BASE_URL}ui/StunnedEffectBg.svg`
 const stunnedStarUrl = `${import.meta.env.BASE_URL}ui/StunnedStar.svg`
-const proxVoiceActiveUrl = new URL('../Assets/UI/Prox_voicechat_active.svg', import.meta.url).href
 
 /** Production without baked host: open once with `?pk=your-deployment.partykit.dev` (stored in session). */
 try {
@@ -191,8 +189,9 @@ const mpCodeHud = document.getElementById('mp-code-hud') as HTMLDivElement | nul
 const mpCodeValue = document.getElementById('mp-code-value') as HTMLElement | null
 const mpCodeCopy = document.getElementById('mp-code-copy') as HTMLButtonElement | null
 const mpToast = document.getElementById('mp-toast') as HTMLDivElement | null
-const proxVoiceActiveEl = document.getElementById('prox-voice-active') as HTMLImageElement | null
-if (proxVoiceActiveEl) proxVoiceActiveEl.src = proxVoiceActiveUrl
+const textChatWrapEl = document.getElementById('text-chat-wrap') as HTMLDivElement | null
+const textChatLogEl = document.getElementById('text-chat-log') as HTMLDivElement | null
+const textChatInputEl = document.getElementById('text-chat-input') as HTMLInputElement | null
 
 const debugMpPanel = document.getElementById('debug-mp-panel') as HTMLDivElement | null
 const debugMpPre = document.getElementById('debug-mp-pre') as HTMLPreElement | null
@@ -502,66 +501,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let mpSocket: MultiplayerWire | null = null
   /** When set, game JSON prefers WebRTC data channel; signaling stays on `mpSocket`. */
   let rtcGame: WebRtcGameApi | null = null
-  type ProxVoip3d = ReturnType<typeof createProximityVoip3d>
-  let proxVoip3d: ProxVoip3d | null = null
-  const _voipFwd = new Vector3()
-  let proxVoipLocalAttached = false
-  let proxVoipRemoteAttached = false
-
-  function tryAttachProximityVoip(): void {
-    if (proxVoipLocalAttached) return
-    if (!isOnline || lobby.mode !== 'online' || !rtcGame) return
-    if (rtcGame.channel?.readyState !== 'open') return
-    if (voiceInputBlocked) return
-    const t = voice.cloneAudioTrackForVoip()
-    if (!t) return
-    if (!rtcGame.attachLocalProximityVoipTrack(t)) return
-    if (voice.isChargeRecordingNow()) rtcGame.setLocalVoipGameRecordingBlock(true)
-    proxVoipLocalAttached = true
-  }
 
   function setLocalVoipRecordingBlocked(blocked: boolean): void {
-    tryAttachProximityVoip()
     rtcGame?.setLocalVoipGameRecordingBlock(blocked)
-  }
-
-  function disposeProxVoip3dPlayer(): void {
-    try {
-      proxVoip3d?.dispose()
-    } catch {
-      /* ignore */
-    }
-    proxVoip3d = null
-    proxVoipRemoteAttached = false
-  }
-
-  function onRemoteProximityVoipStream(stream: MediaStream): void {
-    disposeProxVoip3dPlayer()
-    proxVoipRemoteAttached = true
-    proxVoip3d = createProximityVoip3d(
-      stream,
-      () => camera.position,
-      () => {
-        camera.getWorldDirection(_voipFwd)
-        return _voipFwd
-      },
-      () => bot.bodyCenter,
-    )
-    void proxVoip3d.resume()
-  }
-
-  function updateProxVoiceActiveIcon(): void {
-    if (!proxVoiceActiveEl) return
-    const active =
-      isOnline &&
-      lobby.mode === 'online' &&
-      mpPhase === 'live' &&
-      gameConfig.proximityVoipEnabled >= 0.5 &&
-      proxVoipLocalAttached &&
-      proxVoipRemoteAttached &&
-      !voice.isChargeRecordingNow()
-    proxVoiceActiveEl.hidden = !active
-    proxVoiceActiveEl.classList.toggle('prox-voice-active--on', active)
   }
   /** Host-only authority when using browser P2P (no Node `pvp-host`). */
   let browserHost: ReturnType<typeof createBrowserHostAuthority> | null = null
@@ -584,6 +526,57 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       }
     }
     return 'Opponent'
+  }
+
+  let textChatOpen = false
+
+  function appendTextChatLine(sender: string, message: string): void {
+    if (!textChatLogEl) return
+    const line = document.createElement('p')
+    line.className = 'text-chat-line'
+    line.textContent = `${sender}: ${message}`
+    textChatLogEl.appendChild(line)
+    while (textChatLogEl.childElementCount > 18) {
+      textChatLogEl.removeChild(textChatLogEl.firstElementChild!)
+    }
+    textChatLogEl.scrollTop = textChatLogEl.scrollHeight
+  }
+
+  function closeTextChat(restorePointerLock = true): void {
+    textChatOpen = false
+    if (textChatWrapEl) textChatWrapEl.hidden = true
+    if (textChatInputEl) {
+      textChatInputEl.blur()
+      textChatInputEl.value = ''
+    }
+    if (restorePointerLock) tryPointerLock()
+  }
+
+  function openTextChat(): void {
+    if (!textChatWrapEl || !textChatInputEl) return
+    if (!isOnline || lobby.mode !== 'online') return
+    if (multiplayerBlocksPlay() || leaveMatchDialogOpen || tweaksPanelOpen || rematchSequenceActive) return
+    textChatOpen = true
+    textChatWrapEl.hidden = false
+    clearMovementKeys()
+    try {
+      controls.unlock()
+    } catch {
+      /* ignore */
+    }
+    requestAnimationFrame(() => textChatInputEl.focus())
+  }
+
+  function sendTextChatMessage(raw: string): void {
+    if (lobby.mode !== 'online') return
+    const msg = raw.trim().replace(/\s+/g, ' ').slice(0, 180)
+    if (!msg) return
+    appendTextChatLine('You', msg)
+    sendGameTraffic({
+      type: 'textChat',
+      fromRole: lobby.role,
+      text: msg,
+    })
   }
 
   let mpSeqStarted = false
@@ -1368,8 +1361,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     rtcGame = createWebRtcGameChannel({
       role: lobby.role,
       signalSend: (o) => sendMp(o),
-      includeProximityVoip: true,
-      onRemoteVoipStream: onRemoteProximityVoipStream,
+      includeProximityVoip: false,
       onGameJsonString: (raw) => {
         let data: Record<string, unknown>
         try {
@@ -1381,7 +1373,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       },
       onChannelOpen: () => {
         debugMpLog('rtc dataChannel open')
-        tryAttachProximityVoip()
         /* PvP just started: warm up the enemy-SFX context so peer footsteps play immediately. */
         resumeEnemySfxAudio()
       },
@@ -1459,6 +1450,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let vy = 0
   let grounded = false
   let lastJumpAt = 0
+  let jumpHeld = false
+  let coyoteTimer = 0
+  let jumpBufferTimer = 0
   /** One look-down voice shot hop per airborne cycle; reset on landing. */
   let voiceDownBoostReady = true
   /** One Shift dash while airborne per flight; reset on landing. */
@@ -1491,6 +1485,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     keys.back = false
     keys.left = false
     keys.right = false
+    jumpHeld = false
     footstepHoldSec = 0
     footstepLastMs = 0
   }
@@ -1954,9 +1949,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     updateMicBlockedUi()
     window.clearInterval(micPollId)
     if (ok) {
-      if (isOnline) {
-        tryAttachProximityVoip()
-      } else {
+      if (!isOnline) {
         await runVoiceResumeCountdown()
         tryPointerLock()
       }
@@ -1969,9 +1962,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
             voiceInputBlocked = false
             updateMicBlockedUi()
             window.clearInterval(micPollId)
-            if (isOnline) {
-              tryAttachProximityVoip()
-            } else {
+            if (!isOnline) {
               await runVoiceResumeCountdown()
               tryPointerLock()
             }
@@ -2118,8 +2109,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         /* ignore */
       }
     }
-    disposeProxVoip3dPlayer()
-    proxVoipLocalAttached = false
     try {
       rtcGame?.dispose()
     } catch {
@@ -2275,6 +2264,16 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         const kind = data.sfx as SfxKind
         playEnemySfxSpatialAt(kind, bot.bodyCenter, camera)
       }
+      return
+    }
+
+    if (ty === 'textChat' && typeof data.text === 'string') {
+      const fromRole =
+        data.fromRole === 'host' || data.fromRole === 'guest' ? data.fromRole : undefined
+      if (!fromRole || fromRole === lobby.role) return
+      const msg = data.text.trim().replace(/\s+/g, ' ').slice(0, 180)
+      if (!msg) return
+      appendTextChatLine(opponentHudName(), msg)
       return
     }
 
@@ -3400,6 +3399,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     voiceDownBoostReady = true
     airDashReady = true
     airJumpsLeft = Math.max(0, Math.round(gameConfig.airJumpsMax))
+    coyoteTimer = 0
+    jumpBufferTimer = 0
+    jumpHeld = false
     warpRapierCapsulesToCurrentActors()
     flushPvpSpawnPose()
     applySunShadowFrustum()
@@ -3719,7 +3721,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       return
     const now = performance.now()
     if (now - lastJumpAt < gameConfig.jumpCooldownMs) return
-    if (grounded) {
+    const canGroundJump = grounded || coyoteTimer > 0
+    if (canGroundJump) {
+      coyoteTimer = 0
+      jumpBufferTimer = 0
       vy = gameConfig.jumpForce
       grounded = false
       lastJumpAt = now
@@ -3731,6 +3736,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
     /* Mid-air double jump: replace (not add to) vertical velocity for a clean second pop. */
     if (airJumpsLeft > 0) {
+      jumpBufferTimer = 0
       vy = gameConfig.jumpForce
       airJumpsLeft -= 1
       lastJumpAt = now
@@ -4014,6 +4020,25 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   function onKeyDown(e: KeyboardEvent) {
+    if (isOnline && lobby.mode === 'online') {
+      if (e.code === 'Enter') {
+        e.preventDefault()
+        if (textChatOpen) {
+          sendTextChatMessage(textChatInputEl?.value ?? '')
+          closeTextChat(true)
+        } else {
+          openTextChat()
+        }
+        return
+      }
+      if ((e.code === 'KeyT' || e.key === 't' || e.key === 'T') && textChatOpen) {
+        e.preventDefault()
+        closeTextChat(true)
+        return
+      }
+      if (textChatOpen) return
+    }
+
     /** 1 dummy · 2 smart · 3 toggle bot · R restart (also when match-end overlay is open). */
     const shortcutBlock =
       tweaksPanelOpen ||
@@ -4072,6 +4097,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         break
       case 'Space':
         e.preventDefault()
+        jumpHeld = true
+        jumpBufferTimer = Math.max(0, gameConfig.jumpBufferTime)
         tryJump()
         break
       default:
@@ -4080,7 +4107,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   function onKeyUp(e: KeyboardEvent) {
+    if (textChatOpen) return
     onMovementKeyUp(e)
+    if (e.code === 'Space') jumpHeld = false
   }
 
   window.addEventListener('keydown', onKeyDown)
@@ -4151,7 +4180,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       if (tryBananaRmb()) return
     }
     if (gameplayInputBlocked()) return
-    void proxVoip3d?.resume()
     /* Enemy SFX shares an AudioContext that needs the user-gesture chain to resume + decode. */
     resumeEnemySfxAudio()
 
@@ -4265,8 +4293,15 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     const groundedBeforeResolve = grounded
     _moveStart.copy(camera.position)
 
-    vy -= gameConfig.gravity * delta
+    vy -= (vy > 0 ? gameConfig.jumpGravity : gameConfig.fallGravity) * delta
+    if (!jumpHeld && vy > 0) {
+      vy *= Math.pow(Math.max(0, Math.min(1, gameConfig.jumpCutMultiplier)), delta * 60)
+    }
+    vy = Math.max(vy, gameConfig.maxFallSpeed)
     camera.position.y += vy * delta
+    if (grounded) coyoteTimer = Math.max(0, gameConfig.coyoteTime)
+    else coyoteTimer = Math.max(0, coyoteTimer - delta)
+    jumpBufferTimer = Math.max(0, jumpBufferTimer - delta)
 
     const slip = isPlayerBananaSlipNow()
     const canWalk = playerHurt === 'none' && !slip
@@ -4340,6 +4375,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       voiceDownBoostReady = true
       airDashReady = true
       airJumpsLeft = Math.max(0, Math.round(gameConfig.airJumpsMax))
+      if (jumpBufferTimer > 0) {
+        jumpBufferTimer = 0
+        tryJump()
+      }
     }
 
     if (playerHurt === 'air') {
@@ -4435,11 +4474,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let debugMpHb = 0
   function animate() {
     const delta = Math.min(clock.getDelta(), gameConfig.movementMaxDelta)
-    if (isOnline && lobby.mode === 'online' && !proxVoipLocalAttached) {
-      tryAttachProximityVoip()
-    }
-    proxVoip3d?.tick()
-    updateProxVoiceActiveIcon()
     const wantsUnlit = gameConfig.lightingUnlitMode >= 0.5
     const wantsSelfModelUnlit = gameConfig.lightingUnlitSelfModel >= 0.5
     const wantsEnemyModelUnlit = gameConfig.lightingUnlitEnemyModel >= 0.5
@@ -4712,6 +4746,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   function tryPointerLock(): void {
     if (
+      textChatOpen ||
       tweaksPanelOpen ||
       leaveMatchDialogOpen ||
       matchOutcome ||

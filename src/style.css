@@ -606,41 +606,53 @@ body {
   user-select: none;
 }
 
-.prox-voice-active {
+.text-chat-wrap {
   position: absolute;
   left: 1rem;
-  top: 4.25rem;
-  z-index: 72;
-  width: 3.1rem;
-  height: 3.1rem;
-  object-fit: contain;
-  pointer-events: none;
-  filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.85))
-    drop-shadow(0 0 20px rgba(34, 211, 238, 0.35));
-  opacity: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: min(28rem, calc(100vw - 2rem));
+  z-index: 86;
+  background: rgba(0, 0, 0, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+  padding: 0.5rem;
 }
 
-.prox-voice-active[hidden] {
+.text-chat-wrap[hidden] {
   display: none !important;
 }
 
-.prox-voice-active--on {
-  animation: prox-voice-flash 0.72s ease-in-out infinite;
+.text-chat-log {
+  max-height: 8.8rem;
+  overflow-y: auto;
+  margin-bottom: 0.45rem;
+  color: #fff;
+  font-size: 0.9rem;
+  line-height: 1.35;
 }
 
-@keyframes prox-voice-flash {
-  0%,
-  100% {
-    opacity: 0.42;
-    transform: scale(0.94);
-    filter: drop-shadow(0 0 5px rgba(56, 189, 248, 0.55));
-  }
-  45% {
-    opacity: 1;
-    transform: scale(1.08);
-    filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.95))
-      drop-shadow(0 0 26px rgba(34, 211, 238, 0.58));
-  }
+.text-chat-line {
+  color: #fff;
+  margin: 0.12rem 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.text-chat-input {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 6px;
+  background: #000;
+  color: #fff;
+  font: inherit;
+  padding: 0.45rem 0.55rem;
+  outline: none;
+}
+
+.text-chat-input::placeholder {
+  color: rgba(255, 255, 255, 0.65);
 }
 
 .mp-toast {
@@ -1978,7 +1990,7 @@ body {
 .game-root.game-root--hide-hud #crosshair,
 .game-root.game-root--hide-hud #mp-code-hud,
 .game-root.game-root--hide-hud #mp-toast,
-.game-root.game-root--hide-hud #prox-voice-active,
+.game-root.game-root--hide-hud #text-chat-wrap,
 .game-root.game-root--hide-hud #series-score-overlay,
 .game-root.game-root--hide-hud #mp-wait-layer,
 .game-root.game-root--hide-hud #win-game-splash {
