@@ -170,10 +170,7 @@ const percentHudEl = document.getElementById('percent-hud') as HTMLDivElement | 
 const stockStripYouEl = document.getElementById('stock-strip-you') as HTMLDivElement | null
 const stockStripFoeEl = document.getElementById('stock-strip-foe') as HTMLDivElement | null
 const koAnnounceOverlayEl = document.getElementById('ko-announce-overlay') as HTMLDivElement | null
-const koAnnounceNameEl = document.getElementById('ko-announce-name') as HTMLParagraphElement | null
-const koAnnounceStocksFromEl = document.getElementById('ko-announce-stocks-from') as HTMLSpanElement | null
-const koAnnounceStocksToEl = document.getElementById('ko-announce-stocks-to') as HTMLSpanElement | null
-const koAnnounceStocksWrapEl = document.getElementById('ko-announce-stocks') as HTMLDivElement | null
+const koAnnounceLineEl = document.getElementById('ko-announce-line') as HTMLParagraphElement | null
 const chargeBarWrap = document.getElementById('charge-bar-wrap') as HTMLDivElement | null
 const chargeBarFill = document.getElementById('charge-bar-fill') as HTMLDivElement | null
 const chargeBarMinMark = document.getElementById('charge-bar-min') as HTMLDivElement | null
@@ -1921,6 +1918,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   function applyRoundReset(): void {
     matchOutcome = null
     winFinisher = null
+    hideKoAnnouncementImmediate()
     hideWinGameSplash()
     resetMatchStockState()
     playerPercent = 0
@@ -1991,6 +1989,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   async function concludeRoundElimination(iWonRound: boolean): Promise<void> {
     if (seriesTransitionActive || matchOutcome) return
+    hideKoAnnouncementImmediate()
     console.info('[matchEnd] concludeRoundElimination', {
       iWonRound,
       stocksYou,
@@ -2013,6 +2012,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   async function runPvpCountdown321(): Promise<void> {
     if (!countdownOverlay || !countdownNumEl) return
+    hideKoAnnouncementImmediate()
     hideMatchEndOverlayFully()
     if (matchEndOverlay) matchEndOverlay.hidden = true
     countdownOverlay.classList.add('countdown-overlay--opaque')
@@ -2328,6 +2328,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           after,
         )
         animateKoStockLoss(isYouVictim ? 'you' : 'foe')
+        scheduleKoAnnouncementDismiss(gameConfig.koAnnounceHoldMs)
         if (lobby.role === 'host') {
           scheduleAuthRespawnHost(vr)
         }
@@ -3288,21 +3289,36 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     return roleNet === lobby.role ? slots.player : slots.opponent
   }
 
+  let koAnnounceHoldTimer: ReturnType<typeof window.setTimeout> | null = null
+  let koAnnounceFadeTimer: ReturnType<typeof window.setTimeout> | null = null
+
+  function clearKoAnnouncementTimers(): void {
+    if (koAnnounceHoldTimer !== null) {
+      window.clearTimeout(koAnnounceHoldTimer)
+      koAnnounceHoldTimer = null
+    }
+    if (koAnnounceFadeTimer !== null) {
+      window.clearTimeout(koAnnounceFadeTimer)
+      koAnnounceFadeTimer = null
+    }
+  }
+
+  /** Clears KO overlay immediately — used before match-end / countdown / lobby so UI stacks correctly. */
+  function hideKoAnnouncementImmediate(): void {
+    clearKoAnnouncementTimers()
+    if (!koAnnounceOverlayEl) return
+    koAnnounceOverlayEl.classList.remove('ko-announce-overlay--visible')
+    koAnnounceOverlayEl.hidden = true
+  }
+
   function showKoAnnouncement(displayName: string, stocksBefore: number, stocksAfter: number): void {
-    if (!koAnnounceOverlayEl || !koAnnounceNameEl) return
-    koAnnounceNameEl.textContent = displayName.toUpperCase()
-    if (koAnnounceStocksWrapEl) {
-      const showStocks = stocksBefore > stocksAfter
-      koAnnounceStocksWrapEl.hidden = !showStocks
-      if (showStocks) {
-        if (koAnnounceStocksFromEl) koAnnounceStocksFromEl.textContent = `×${stocksBefore}`
-        if (koAnnounceStocksToEl) koAnnounceStocksToEl.textContent = `×${stocksAfter}`
-        koAnnounceStocksFromEl?.classList.remove('ko-announce-stocks__from')
-        koAnnounceStocksToEl?.classList.remove('ko-announce-stocks__to')
-        void koAnnounceStocksWrapEl.offsetWidth
-        koAnnounceStocksFromEl?.classList.add('ko-announce-stocks__from')
-        koAnnounceStocksToEl?.classList.add('ko-announce-stocks__to')
-      }
+    if (!koAnnounceOverlayEl || !koAnnounceLineEl) return
+    clearKoAnnouncementTimers()
+    const nm = displayName.trim()
+    if (stocksBefore > stocksAfter) {
+      koAnnounceLineEl.textContent = `${nm.toUpperCase()}  ×${stocksBefore} → ×${stocksAfter}`
+    } else {
+      koAnnounceLineEl.textContent = nm.toUpperCase()
     }
     koAnnounceOverlayEl.hidden = false
     koAnnounceOverlayEl.classList.remove('ko-announce-overlay--visible')
@@ -3310,12 +3326,22 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     koAnnounceOverlayEl.classList.add('ko-announce-overlay--visible')
   }
 
-  function hideKoAnnouncementDeferred(): void {
-    if (!koAnnounceOverlayEl) return
-    koAnnounceOverlayEl.classList.remove('ko-announce-overlay--visible')
-    window.setTimeout(() => {
-      if (koAnnounceOverlayEl) koAnnounceOverlayEl.hidden = true
-    }, 380)
+  /**
+   * Fade and remove the stock-loss overlay after `delayMs` (aligns with `koAnnounceHoldMs`).
+   * Optional callback runs when the fade begins (offline respawn applies here).
+   */
+  function scheduleKoAnnouncementDismiss(delayMs: number, onFadeBegin?: () => void): void {
+    clearKoAnnouncementTimers()
+    koAnnounceHoldTimer = window.setTimeout(() => {
+      koAnnounceHoldTimer = null
+      if (!koAnnounceOverlayEl) return
+      koAnnounceOverlayEl.classList.remove('ko-announce-overlay--visible')
+      onFadeBegin?.()
+      koAnnounceFadeTimer = window.setTimeout(() => {
+        koAnnounceFadeTimer = null
+        if (koAnnounceOverlayEl) koAnnounceOverlayEl.hidden = true
+      }, 400)
+    }, delayMs)
   }
 
   function scheduleAuthRespawnHost(victimRole: 'host' | 'guest'): void {
@@ -3365,6 +3391,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   function applyAuthRespawnPayload(data: Record<string, unknown>): void {
     const vr = data.victimRole === 'host' || data.victimRole === 'guest' ? data.victimRole : undefined
     if (!vr || lobby.mode !== 'online') return
+    hideKoAnnouncementImmediate()
     const x = typeof data.x === 'number' ? data.x : 0
     const fy = typeof data.fy === 'number' ? data.fy : 0
     const z = typeof data.z === 'number' ? data.z : 0
@@ -3453,11 +3480,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     )
     animateKoStockLoss(victim)
 
-    window.setTimeout(() => {
-      hideKoAnnouncementDeferred()
+    scheduleKoAnnouncementDismiss(gameConfig.koAnnounceHoldMs, () => {
       applyOfflineRespawnFeet(victim)
       offlineBlastKoPending = null
-    }, gameConfig.koAnnounceHoldMs)
+    })
   }
 
   function applyOfflineRespawnFeet(victim: 'you' | 'foe'): void {
@@ -3782,11 +3808,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     offlineBlastKoPending = 'foe'
     showKoAnnouncement(opponentHudName(), before, stocksFoe)
     animateKoStockLoss('foe')
-    window.setTimeout(() => {
-      hideKoAnnouncementDeferred()
+    scheduleKoAnnouncementDismiss(gameConfig.koAnnounceHoldMs, () => {
       applyOfflineRespawnFeet('foe')
       offlineBlastKoPending = null
-    }, gameConfig.koAnnounceHoldMs)
+    })
   }
 
   /**
@@ -3843,6 +3868,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   function endMatch(outcome: 'win' | 'lose'): void {
     if (matchOutcome) return
+    hideKoAnnouncementImmediate()
     clearMovementKeys()
     hideWinGameSplash()
     winFinisher = null
