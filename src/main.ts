@@ -25,6 +25,7 @@ import {
   Points,
   PointsMaterial,
   PerspectiveCamera,
+  Quaternion,
   Scene,
   Vector3,
   WebGLRenderer,
@@ -655,34 +656,46 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   setUserSettingsPointerControls(controls)
   controls.pointerSpeed = gameConfig.mouseSensitivity
 
-  /** Strip/reapply each frame; PointerLock clears presentation when the mouse moves (`change`). */
+  /**
+   * FP camera presentation offsets that are applied at the *end* of a frame and stripped on
+   * PointerLock `change` so mouse-look reads from the clean intended state. Camera spring-arm
+   * lag (rotation slerp, Y position lerp) is handled separately in `cameraSpringArm` and only
+   * swaps `camera.quaternion` / `camera.position.y` during the render call itself.
+   */
   const fpPresentationState = {
     storedPitchBob: 0,
     storedRollTotal: 0,
     walkPhase: 0,
     /** Vertical camera bob applied at end of frame; stripped at start of movement for clean physics. */
     storedCamBobY: 0,
-    storedCamLagY: 0,
-    lookLagPitchRad: 0,
-    lookLagRollRad: 0,
-    jumpLagPitchRad: 0,
-    jumpLandLagY: 0,
-    rawYawPrev: 0,
-    rawPitchPrev: 0,
-    landedKickY: 0,
   }
-  fpPresentationState.rawYawPrev = camera.rotation.y
-  fpPresentationState.rawPitchPrev = camera.rotation.x
   controls.addEventListener('change', () => {
     camera.position.y -= fpPresentationState.storedCamBobY
-    camera.position.y -= fpPresentationState.storedCamLagY
     fpPresentationState.storedCamBobY = 0
-    fpPresentationState.storedCamLagY = 0
     fpPresentationState.storedPitchBob = 0
     fpPresentationState.storedRollTotal = 0
-    fpPresentationState.rawYawPrev = camera.rotation.y
-    fpPresentationState.rawPitchPrev = camera.rotation.x
   })
+
+  /**
+   * Unreal-style spring-arm camera lag. The "intended" target each frame is whatever
+   * physics + bob/walk-roll wrote into the camera; we lerp/slerp a separate `display*`
+   * state toward it, swap to display only during `composer.render()`, then restore the
+   * intended values so PointerLockControls continues reading from a drift-free state.
+   */
+  const cameraSpringArm = {
+    /** Rendered camera rotation (slerps toward `camera.quaternion`). */
+    displayQuat: new Quaternion(),
+    /** Rendered camera Y position (lerps toward `camera.position.y`). */
+    displayY: 0,
+    /** Snapshot of the intended (target) quaternion captured before the swap. */
+    intendedQuat: new Quaternion(),
+    /** Snapshot of the intended camera Y captured before the swap. */
+    intendedY: 0,
+    initialized: false,
+  }
+  function resetCameraSpringArm(): void {
+    cameraSpringArm.initialized = false
+  }
 
   const ambient = new AmbientLight(0xffffff, gameConfig.ambientIntensity)
   scene.add(ambient)
@@ -1037,7 +1050,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   function applyFpCameraPresentation(
-    delta: number,
+    _delta: number,
     fpWalk: { moving: boolean; spd01: number },
   ): void {
     _fpViewEuler.setFromQuaternion(camera.quaternion, 'YXZ')
@@ -1046,7 +1059,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
     const slipRoll = computeBananaSlipRollRad()
 
-    let bobPitch = 0
     let bobRoll = 0
     let camBobY = 0
     if (gameConfig.fpViewBobEnabled >= 0.5) {
@@ -1064,65 +1076,75 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         : 0
     }
 
-    const dragMul = Math.max(0, Math.min(2.5, gameConfig.fpCameraDragMul))
-
-    const rawYaw = _fpViewEuler.y
-    const rawPitch = _fpViewEuler.x
-    const dyaw = MathUtils.euclideanModulo(rawYaw - fpPresentationState.rawYawPrev + Math.PI, Math.PI * 2) - Math.PI
-    const dpitch = rawPitch - fpPresentationState.rawPitchPrev
-    fpPresentationState.rawYawPrev = rawYaw
-    fpPresentationState.rawPitchPrev = rawPitch
-    const lookDragRollTarget = MathUtils.clamp(
-      -dyaw * (0.78 * dragMul),
-      -MathUtils.degToRad(2.2 * dragMul),
-      MathUtils.degToRad(2.2 * dragMul),
-    )
-    const lookDragPitchTarget = MathUtils.clamp(
-      -dpitch * (0.48 * dragMul),
-      -MathUtils.degToRad(1.7 * dragMul),
-      MathUtils.degToRad(1.7 * dragMul),
-    )
-    const lookFollow = 1 - Math.exp(-delta * 22)
-    fpPresentationState.lookLagRollRad +=
-      (lookDragRollTarget - fpPresentationState.lookLagRollRad) * lookFollow
-    fpPresentationState.lookLagPitchRad +=
-      (lookDragPitchTarget - fpPresentationState.lookLagPitchRad) * lookFollow
-
-    const jumpLagTargetY = MathUtils.clamp(
-      -vy * (0.0016 * dragMul),
-      -0.032 * dragMul,
-      0.022 * dragMul,
-    )
-    const jumpLagPitchTarget = MathUtils.clamp(
-      -vy * (0.00085 * dragMul),
-      -MathUtils.degToRad(2.6 * dragMul),
-      MathUtils.degToRad(1.6 * dragMul),
-    )
-    fpPresentationState.jumpLandLagY +=
-      (jumpLagTargetY - fpPresentationState.jumpLandLagY) * (1 - Math.exp(-delta * 19))
-    fpPresentationState.jumpLagPitchRad +=
-      (jumpLagPitchTarget - fpPresentationState.jumpLagPitchRad) * (1 - Math.exp(-delta * 19))
-    fpPresentationState.landedKickY *= Math.exp(-delta * 24)
-
-    if (gameConfig.fpViewBobEnabled < 0.5) {
-      bobPitch = 0
-      bobRoll = 0
-      camBobY = 0
-    }
-
-    const camLagY = fpPresentationState.jumpLandLagY + fpPresentationState.landedKickY
-    const totalRoll = slipRoll + bobRoll + fpPresentationState.lookLagRollRad
-    fpPresentationState.storedPitchBob =
-      bobPitch + fpPresentationState.lookLagPitchRad + fpPresentationState.jumpLagPitchRad
+    const totalRoll = slipRoll + bobRoll
+    fpPresentationState.storedPitchBob = 0
     fpPresentationState.storedRollTotal = totalRoll
     fpPresentationState.storedCamBobY = camBobY
-    fpPresentationState.storedCamLagY = camLagY
 
-    _fpViewEuler.x += fpPresentationState.storedPitchBob
     _fpViewEuler.z += fpPresentationState.storedRollTotal
     camera.quaternion.setFromEuler(_fpViewEuler)
     camera.position.y += fpPresentationState.storedCamBobY
-    camera.position.y += fpPresentationState.storedCamLagY
+  }
+
+  /**
+   * Unreal-style spring-arm camera lag.
+   * Treats `camera.quaternion` / `camera.position.y` as the **target** (intended) state
+   * and lerps a separate display state toward it each frame.
+   * Y-only position lag — XZ stay locked to the player capsule.
+   */
+  function tickCameraSpringArm(delta: number): void {
+    cameraSpringArm.intendedQuat.copy(camera.quaternion)
+    cameraSpringArm.intendedY = camera.position.y
+
+    if (!cameraSpringArm.initialized) {
+      cameraSpringArm.displayQuat.copy(cameraSpringArm.intendedQuat)
+      cameraSpringArm.displayY = cameraSpringArm.intendedY
+      cameraSpringArm.initialized = true
+      return
+    }
+
+    /* Rotation: `displayQuat.slerp(intendedQuat, rotationLagSpeed * delta)`. */
+    if (gameConfig.fpCamRotLagEnabled >= 0.5) {
+      const tRot = Math.min(1, Math.max(0, gameConfig.fpCamRotLagSpeed) * delta)
+      cameraSpringArm.displayQuat.slerp(cameraSpringArm.intendedQuat, tRot)
+    } else {
+      cameraSpringArm.displayQuat.copy(cameraSpringArm.intendedQuat)
+    }
+
+    /* Y position: `displayY = lerp(displayY, intendedY, lagSpeed * delta)`, then clamp by maxLagDistance. */
+    if (gameConfig.fpCamYLagEnabled >= 0.5) {
+      const tPos = Math.min(1, Math.max(0, gameConfig.fpCamYLagSpeed) * delta)
+      cameraSpringArm.displayY +=
+        (cameraSpringArm.intendedY - cameraSpringArm.displayY) * tPos
+      const maxLag = Math.max(0, gameConfig.fpCamYMaxLag)
+      if (maxLag > 0) {
+        const diff = cameraSpringArm.displayY - cameraSpringArm.intendedY
+        if (Math.abs(diff) > maxLag) {
+          cameraSpringArm.displayY = cameraSpringArm.intendedY + Math.sign(diff) * maxLag
+        }
+      }
+    } else {
+      cameraSpringArm.displayY = cameraSpringArm.intendedY
+    }
+  }
+
+  /**
+   * Render with the spring-arm display state applied, then restore intended state so
+   * PointerLockControls (which mutates `camera.quaternion` between frames) reads from
+   * a drift-free baseline.
+   */
+  const _camRenderBackupQuat = new Quaternion()
+  function renderCameraWithSpringArm(): void {
+    const yBackup = camera.position.y
+    _camRenderBackupQuat.copy(camera.quaternion)
+
+    camera.position.y = cameraSpringArm.displayY
+    camera.quaternion.copy(cameraSpringArm.displayQuat)
+
+    composer.render()
+
+    camera.position.y = yBackup
+    camera.quaternion.copy(_camRenderBackupQuat)
   }
   function pvpHostBroadcastAndApply(msg: Record<string, unknown>): void {
     if (rtcGame) rtcGame.sendGameJson(msg)
@@ -1156,12 +1178,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     fpPresentationState.storedRollTotal = 0
     fpPresentationState.walkPhase = 0
     fpPresentationState.storedCamBobY = 0
-    fpPresentationState.storedCamLagY = 0
-    fpPresentationState.lookLagPitchRad = 0
-    fpPresentationState.lookLagRollRad = 0
-    fpPresentationState.jumpLagPitchRad = 0
-    fpPresentationState.jumpLandLagY = 0
-    fpPresentationState.landedKickY = 0
+    resetCameraSpringArm()
     localHasBanana = false
     pvpBananaInventory = { host: 0, guest: 0 }
     nextBananaPeelId = 1
@@ -3351,12 +3368,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     fpPresentationState.storedRollTotal = 0
     fpPresentationState.walkPhase = 0
     fpPresentationState.storedCamBobY = 0
-    fpPresentationState.storedCamLagY = 0
-    fpPresentationState.lookLagPitchRad = 0
-    fpPresentationState.lookLagRollRad = 0
-    fpPresentationState.jumpLagPitchRad = 0
-    fpPresentationState.jumpLandLagY = 0
-    fpPresentationState.landedKickY = 0
+    resetCameraSpringArm()
     slideAnimUntilMs = 0
     gameRoot.classList.remove('game-root--dash-tilt')
     gameRoot.style.transform = ''
@@ -4246,7 +4258,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   function updateMovement(delta: number) {
     camera.position.y -= fpPresentationState.storedCamBobY
-    camera.position.y -= fpPresentationState.storedCamLagY
 
     /* Online lobby / pre-live: freeze local player. Voice resume countdown still runs physics so grounded / jump stay consistent. */
     if (multiplayerBlocksPlay()) return
@@ -4326,11 +4337,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         playLandOneShot()
         broadcastActorSfxIfPvp('land')
       }
-      const dragMul = Math.max(0, Math.min(2.5, gameConfig.fpCameraDragMul))
-      fpPresentationState.landedKickY = Math.min(
-        0.028 * dragMul,
-        fpPresentationState.landedKickY + 0.022 * dragMul,
-      )
       voiceDownBoostReady = true
       airDashReady = true
       airJumpsLeft = Math.max(0, Math.round(gameConfig.airJumpsMax))
@@ -4698,7 +4704,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     bananaWorld.applyHandPresentationSway(idleWeaponSway)
 
     applyFpCameraPresentation(delta, fpWalk)
-    composer.render()
+    tickCameraSpringArm(delta)
+    renderCameraWithSpringArm()
   }
 
   renderer.setAnimationLoop(animate)

@@ -72,8 +72,31 @@ export const defaultGameConfig = {
   fpHeadbobHz: 1.6,
   /** Scales continuous idle hand sway loop on megaphone + banana (0 = off; not movement-gated). */
   fpWeaponSwayMul: 1.05,
-  /** First-person camera drag / lag intensity (look, jump, land); 0 = off. */
-  fpCameraDragMul: 1,
+  /**
+   * Spring-arm camera **rotation** lag toggle.
+   * 1 = camera quaternion slerps toward the player's intended look (subtle drag while turning).
+   */
+  fpCamRotLagEnabled: 1,
+  /**
+   * Rotation lag follow rate (Unreal SpringArm `rotationLagSpeed`).
+   * Per-frame slerp `t = clamp(rotLagSpeed * delta, 0, 1)`. Higher = snappier (less drag).
+   */
+  fpCamRotLagSpeed: 8,
+  /**
+   * Spring-arm camera **Y position** lag toggle.
+   * Camera position lerps toward the player capsule's Y so jumping dips the camera and landing pops it up.
+   */
+  fpCamYLagEnabled: 1,
+  /**
+   * Y-position lag follow rate (Unreal SpringArm `lagSpeed`).
+   * Per-frame lerp `t = clamp(yLagSpeed * delta, 0, 1)`. Higher = snappier.
+   */
+  fpCamYLagSpeed: 5,
+  /**
+   * Maximum allowed Y lag distance in meters (Unreal SpringArm `maxLagDistance`).
+   * If `displayY` falls more than this behind the player capsule it snaps to the clamp.
+   */
+  fpCamYMaxLag: 3,
   gravity: 38,
   jumpForce: 25,
   jumpCooldownMs: 480,

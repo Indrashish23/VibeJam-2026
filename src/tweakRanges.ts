@@ -198,7 +198,11 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   fpHeadbobRollDeg: { min: 0, max: 4, step: 0.05 },
   fpHeadbobHz: { min: 0.5, max: 5, step: 0.05 },
   fpWeaponSwayMul: { min: 0, max: 2, step: 0.05 },
-  fpCameraDragMul: { min: 0, max: 2.5, step: 0.05 },
+  fpCamRotLagEnabled: { min: 0, max: 1, step: 1 },
+  fpCamRotLagSpeed: { min: 0, max: 40, step: 0.5 },
+  fpCamYLagEnabled: { min: 0, max: 1, step: 1 },
+  fpCamYLagSpeed: { min: 0, max: 40, step: 0.5 },
+  fpCamYMaxLag: { min: 0, max: 5, step: 0.05 },
   gravity: { min: 0, max: CAP, step: 1 },
   jumpForce: { min: 0, max: CAP, step: 0.5 },
   jumpCooldownMs: { min: 0, max: CAP, step: 100 },
@@ -291,7 +295,11 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   fpHeadbobRollDeg: 'Walk bob roll ±deg (fixed vs speed)',
   fpHeadbobHz: 'Head bob cadence (Hz)',
   fpWeaponSwayMul: 'Weapon sway intensity',
-  fpCameraDragMul: 'Camera drag intensity',
+  fpCamRotLagEnabled: 'Camera rotation lag (0/1)',
+  fpCamRotLagSpeed: 'Camera rotation lag speed',
+  fpCamYLagEnabled: 'Camera Y lag (0/1)',
+  fpCamYLagSpeed: 'Camera Y lag speed',
+  fpCamYMaxLag: 'Camera Y max lag (m)',
   dashImpulse: 'Shift dash distance target',
   dashVelocityMul: 'Shift dash distance multiplier ×',
   dashDecay: 'Slide decay',
@@ -556,8 +564,16 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   fpHeadbobHz: 'Bob frequency at full stride (walk phase advances with speed).',
   fpWeaponSwayMul:
     'Sway on megaphone + banana in first-person (0 = off).',
-  fpCameraDragMul:
-    'Scales first-person camera drag/lag (look drag + jump/land lag). 0 disables the effect; ~1 is snappy.',
+  fpCamRotLagEnabled:
+    'Unreal-style spring-arm rotation lag. 1 = displayed camera quaternion slerps toward the player\'s intended look each frame, giving a subtle drag while turning. 0 = no rotation lag (1:1 mouse).',
+  fpCamRotLagSpeed:
+    'Rotation slerp rate (Unreal SpringArm rotationLagSpeed). Per-frame `slerp(t = rotLagSpeed * delta)`. ~8 is snappy; lower = more drag, higher = snappier.',
+  fpCamYLagEnabled:
+    'Unreal-style spring-arm Y-position lag. 1 = camera Y lerps toward the player capsule, so jumps dip the camera below the head and landings pop it up briefly. 0 = camera locked to capsule Y.',
+  fpCamYLagSpeed:
+    'Y-position lerp rate (Unreal SpringArm lagSpeed). Per-frame `lerp(t = yLagSpeed * delta)`. ~5 is snappy; lower = more lag on jumps/landings.',
+  fpCamYMaxLag:
+    'Max allowed Y lag distance in meters (Unreal SpringArm maxLagDistance). If the camera falls more than this behind the player capsule, it snaps to the clamp.',
   groundWidth: 'Half the stage is this wide in X; larger = more room before ring-out.',
   groundDepth: 'Half the stage depth in Z.',
   blastMargin: 'Extra distance beyond the deck edge before the blast zone counts (XZ).',
@@ -1120,7 +1136,11 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'fpHeadbobRollDeg',
       'fpHeadbobHz',
       'fpWeaponSwayMul',
-      'fpCameraDragMul',
+      'fpCamRotLagEnabled',
+      'fpCamRotLagSpeed',
+      'fpCamYLagEnabled',
+      'fpCamYLagSpeed',
+      'fpCamYMaxLag',
     ],
   },
   {
