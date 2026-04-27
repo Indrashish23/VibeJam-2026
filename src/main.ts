@@ -76,7 +76,7 @@ import {
   wireBackgroundMusicToFirstGesture,
 } from './audio/backgroundMusic'
 import { playFootstepOneShot } from './audio/footstepsSfx'
-import { playJumpOneShot, playLandOneShot } from './audio/playerMoveSfx'
+import { playBananaSlipOneShot, playJumpOneShot, playLandOneShot } from './audio/playerMoveSfx'
 import { createProximityVoip3d } from './audio/proximityVoip3d'
 import { playEnemySfxSpatialAt, resumeEnemySfxAudio, type SfxKind } from './audio/enemySfx'
 import { mountUserSettingsPanel, setUserSettingsPointerControls } from './userSettingsUI'
@@ -983,6 +983,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (victimRole === myPvpRole()) {
       playerBananaSlipUntil = performance.now() + Math.max(0, durationMs)
       triggerStunnedHitOverlay()
+      playBananaSlipOneShot()
     } else {
       bot.applyBananaSlipMs(durationMs)
     }
@@ -3704,6 +3705,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
             ) {
               playerBananaSlipUntil = performance.now() + gameConfig.bananaSlipMs
               triggerStunnedHitOverlay()
+              playBananaSlipOneShot()
               bananaWorld.removePeelById(pl.id)
             } else if (
               !bot.isBananaSlipNow() &&
@@ -4299,7 +4301,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     megaphoneFp.update(delta, {
       charging: megaphoneCanCharge && (chargingLmb || chargingRmb),
       charge01: voiceChargeSmoothed,
-      hideForBanana: getMyBananaHeld() && !isPlayerBananaSlipNow(),
     })
 
     const dashSpd = dashVel.length()

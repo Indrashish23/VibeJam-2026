@@ -20,7 +20,7 @@ const OPENED_BANANA_GLB = new URL('../../Assets/Props/OpenedBanana.glb', import.
 /** Pickup visual height above terrain contact point (matches prior crate lift). */
 const PICKUP_Y_OFFSET = 0.35
 /** Peel mesh sits slightly above the hit point so it does not clip into the floor. */
-const PEEL_Y_OFFSET = 0.07
+const PEEL_Y_OFFSET = 0.077
 
 function disposeBananaVisual(root: Object3D): void {
   root.traverse((o) => {

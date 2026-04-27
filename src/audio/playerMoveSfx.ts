@@ -3,6 +3,7 @@ import { getSfxChainMul } from './sfxChain'
 
 const JUMP = new URL('../../Assets/SFX/Footsteps/JumpSound.ogg', import.meta.url).href
 const LAND = new URL('../../Assets/SFX/Footsteps/LandingonGround.ogg', import.meta.url).href
+const SLIP = new URL('../../Assets/SFX/slip_sound.ogg', import.meta.url).href
 
 function playLocal(enabled: number, devMul: number, url: string): void {
   if (enabled < 0.5) return
@@ -29,5 +30,13 @@ export function playLandOneShot(): void {
     gameConfig.landSfxEnabled,
     Math.max(0, Math.min(1, gameConfig.landSfxVolumeMul)),
     LAND,
+  )
+}
+
+export function playBananaSlipOneShot(): void {
+  playLocal(
+    gameConfig.bananaSlipSfxEnabled,
+    Math.max(0, Math.min(1, gameConfig.bananaSlipSfxVolumeMul)),
+    SLIP,
   )
 }

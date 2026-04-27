@@ -417,6 +417,10 @@ export const defaultGameConfig = {
   bananaPeelYTolerance: 1.25,
   /** How long a slip stuns movement (ms). Vulnerable to hits. */
   bananaSlipMs: 2000,
+  /** 0/1: one-shot slip_sound.ogg when **you** slip on a peel (local). */
+  bananaSlipSfxEnabled: 1,
+  /** Gain × for slip one-shot (× SFX chain). */
+  bananaSlipSfxVolumeMul: 0.55,
   /** Initial throw speed (world; × physics frame feel). */
   bananaThrowSpeed: 32,
   /** Max throw distance on XZ from throw start. */

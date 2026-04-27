@@ -25,13 +25,11 @@ export type MegaphoneUpdateOpts = {
   charging: boolean
   /** Smoothed charge 0–1 (`voiceChargeSmoothed`). */
   charge01: number
-  /** Hide megaphone while banana is in hand (same moment as banana hand mesh). */
-  hideForBanana: boolean
 }
 
 /**
  * First-person megaphone prop: GLB parented to camera, lerps rest→pull with charge,
- * shakes when charge is above `voiceMinChargeToFire`.
+ * shakes when charge is above `voiceMinChargeToFire`. Stays visible with the in-hand banana.
  */
 export class MegaphoneFpProp {
   readonly root = new Group()
@@ -168,8 +166,6 @@ export class MegaphoneFpProp {
     this.root.rotation.x += _eShake.x
     this.root.rotation.y += _eShake.y
     this.root.rotation.z += _eShake.z
-
-    this.root.visible = !opts.hideForBanana
   }
 
   dispose(): void {
