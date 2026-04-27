@@ -8,8 +8,13 @@ import {
   Group,
   Material,
   Mesh,
+  MeshLambertMaterial,
+  MeshPhysicalMaterial,
   MeshStandardMaterial,
   Object3D,
+  SRGBColorSpace,
+  Texture,
+  TextureLoader,
   Vector3,
   type Scene,
   type BufferGeometry,
@@ -52,8 +57,57 @@ export type MapHandle = {
 
 const ISLAND_GLB_URL = new URL('../Assets/Maps/lowpoly_islandtest.glb', import.meta.url).href
 const GODOT_EXPORT_GLB_URL = new URL('../Assets/Maps/Godot_ExportTest.glb', import.meta.url).href
+const GODOT_DIFFUSE_MAP_URL = new URL('../Assets/Maps/texture_08.png', import.meta.url).href
 /** Solid albedo for island visuals; GLB textures are stripped after load. */
 const ISLAND_SOLID_BASE_HEX = 0x2a235b
+
+function assignDiffuseMap(
+  raw: MeshStandardMaterial | MeshPhysicalMaterial | MeshLambertMaterial,
+  tex: Texture,
+  oldMaps: Set<Texture>,
+): void {
+  if (raw.map && raw.map !== tex) oldMaps.add(raw.map)
+  raw.map = tex
+  raw.color.setHex(0xffffff)
+  raw.needsUpdate = true
+}
+
+/** Replaces embedded GLB albedo with the shared checker PNG (disposes old map textures). */
+function applyGodotDiffuseMap(root: Object3D, tex: Texture): void {
+  const oldMaps = new Set<Texture>()
+  root.traverse((node) => {
+    const mesh = node as Mesh
+    if (!mesh.isMesh || !mesh.material) return
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+    for (const raw of mats) {
+      if (
+        raw instanceof MeshStandardMaterial ||
+        raw instanceof MeshPhysicalMaterial ||
+        raw instanceof MeshLambertMaterial
+      ) {
+        assignDiffuseMap(raw, tex, oldMaps)
+      }
+    }
+  })
+  for (const t of oldMaps) t.dispose()
+}
+
+function loadGodotDiffuseTexture(): Promise<Texture> {
+  const loader = new TextureLoader()
+  return new Promise((resolve, reject) => {
+    loader.load(
+      GODOT_DIFFUSE_MAP_URL,
+      (tex) => {
+        tex.colorSpace = SRGBColorSpace
+        tex.flipY = false
+        tex.needsUpdate = true
+        resolve(tex)
+      },
+      undefined,
+      reject,
+    )
+  })
+}
 
 function applyIslandSolidMaterials(root: Object3D): void {
   root.traverse((node) => {
@@ -352,16 +406,20 @@ async function loadGodotExportMap(_scene: Scene, hubRoot: Group): Promise<MapHan
   hubRoot.add(container)
 
   const loader = new GLTFLoader()
-  const gltf = await new Promise<{ scene: Group }>((resolve, reject) => {
-    loader.load(
-      GODOT_EXPORT_GLB_URL,
-      (data) => resolve(data as unknown as { scene: Group }),
-      undefined,
-      (err) => reject(err),
-    )
-  })
+  const [gltf, diffuseTex] = await Promise.all([
+    new Promise<{ scene: Group }>((resolve, reject) => {
+      loader.load(
+        GODOT_EXPORT_GLB_URL,
+        (data) => resolve(data as unknown as { scene: Group }),
+        undefined,
+        (err) => reject(err),
+      )
+    }),
+    loadGodotDiffuseTexture(),
+  ])
 
   container.add(gltf.scene)
+  applyGodotDiffuseMap(gltf.scene, diffuseTex)
   const { collisionMeshes, spawnA: sA, spawnB: sB, looseSpawns } = collectGltfArenaData(
     gltf.scene,
     'markersOrGodotCsgMesh',
