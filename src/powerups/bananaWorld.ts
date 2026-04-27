@@ -111,12 +111,17 @@ export class BananaWorld {
   private openedBananaPivot: Group | null = null
   private openedBananaLoadPromise: Promise<Group> | null = null
   private handBananaFilled = false
+  /** Third-person banana for the networked opponent (parent: `bot.root`). */
+  readonly opponentBananaGroup = new Group()
+  private opponentBananaFilled = false
 
   constructor(scene: Scene) {
     this.scene = scene
     this.handGroup = new Group()
     this.handGroup.name = 'bananaHandProp'
     this.handGroup.visible = false
+    this.opponentBananaGroup.name = 'bananaOpponentProp'
+    this.opponentBananaGroup.visible = false
     void this.loadBananaTemplate().then(() => this.ensureHandBananaClone())
   }
 
@@ -225,6 +230,37 @@ export class BananaWorld {
     this.handBananaFilled = true
   }
 
+  private ensureOpponentBananaClone(): void {
+    if (this.opponentBananaFilled || !this.bananaPivot) return
+    const node = this.bananaPivot.clone(true)
+    node.name = 'bananaOpponentMesh'
+    node.scale.multiplyScalar(0.88)
+    this.opponentBananaGroup.clear()
+    this.opponentBananaGroup.add(node)
+    this.opponentBananaFilled = true
+  }
+
+  /**
+   * Parent to the peer avatar root so the banana follows them in third person (PvP).
+   * Safe to call whenever `bot` is recreated.
+   */
+  attachOpponentBananaToRoot(root: Group): void {
+    this.opponentBananaGroup.removeFromParent()
+    this.syncOpponentBananaPoseFromConfig()
+    root.add(this.opponentBananaGroup)
+    void this.loadBananaTemplate().then(() => this.ensureOpponentBananaClone())
+  }
+
+  syncOpponentBananaPoseFromConfig(): void {
+    this.opponentBananaGroup.position.set(
+      gameConfig.bananaOpponentLocalX,
+      gameConfig.bananaOpponentLocalY,
+      gameConfig.bananaOpponentLocalZ,
+    )
+    const yr = (gameConfig.bananaOpponentRotYDeg * Math.PI) / 180
+    this.opponentBananaGroup.rotation.set(0, yr, 0)
+  }
+
   attachHandToCamera(camera: PerspectiveCamera): void {
     this.handGroup.removeFromParent()
     this.syncHandPoseFromConfig()
@@ -312,20 +348,34 @@ export class BananaWorld {
 
   /**
    * Apply network init (host sends positions).
+   * When `terrain` is set, each pickup is re-snapped to **local** ground via raycast so the
+   * guest matches their loaded collision mesh (host Y alone can float visibly high if meshes differ).
    */
   async applyInitPickups(
     list: { id: string; x: number; y: number; z: number }[],
+    terrain?: TerrainPhysics,
   ): Promise<void> {
     this.clear()
     for (const it of list) {
+      let groundY = it.y
+      if (terrain) {
+        const startY = Math.max(24, it.y + 8)
+        const hit = terrain.raycastDown(it.x, startY, it.z, 400)
+        if (hit) {
+          const hy = hit.point.y
+          // If local trimesh hits a surface *above* host ground, keep host Y (avoids “floating” crates).
+          // If local is lower (sunken / offset mesh), use local so the mesh sits on visible floor.
+          if (hy <= it.y + 0.45) groundY = hy
+        }
+      }
       const m = await this.clonePickupVisual()
-      const yVis = it.y + gameConfig.bananaPickupVisualYOffset
+      const yVis = groundY + gameConfig.bananaPickupVisualYOffset
       m.position.set(it.x, yVis, it.z)
       this.scene.add(m)
       this.pickups.push({
         id: it.id,
         x: it.x,
-        y: it.y,
+        y: groundY,
         z: it.z,
         baseY: yVis,
         mesh: m,
@@ -441,14 +491,17 @@ export class BananaWorld {
 
   dispose(): void {
     this.clear()
-    this.handGroup.traverse((c) => {
-      const o = c as Mesh
-      if (o.isMesh) {
-        o.geometry?.dispose?.()
-        const mat = o.material
-        if (Array.isArray(mat)) for (const m of mat) m?.dispose?.()
-        else mat?.dispose?.()
-      }
-    })
+    this.opponentBananaGroup.removeFromParent()
+    for (const g of [this.handGroup, this.opponentBananaGroup] as const) {
+      g.traverse((c) => {
+        const o = c as Mesh
+        if (o.isMesh) {
+          o.geometry?.dispose?.()
+          const mat = o.material
+          if (Array.isArray(mat)) for (const m of mat) m?.dispose?.()
+          else mat?.dispose?.()
+        }
+      })
+    }
   }
 }
