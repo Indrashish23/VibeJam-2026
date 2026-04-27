@@ -661,8 +661,12 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     storedRollTotal: 0,
     walkPhase: 0,
     strafeTiltRad: 0,
+    /** Vertical camera bob applied at end of frame; stripped at start of movement for clean physics. */
+    storedCamBobY: 0,
   }
   controls.addEventListener('change', () => {
+    camera.position.y -= fpPresentationState.storedCamBobY
+    fpPresentationState.storedCamBobY = 0
     fpPresentationState.storedPitchBob = 0
     fpPresentationState.storedRollTotal = 0
   })
@@ -697,11 +701,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   const unlitToLit = new WeakMap<Material, Material>()
   let lastUnlitMode = false
   let unlitRescanTick = 0
-  /** Island GLB stays PBR so sun shadows read; only non-island meshes swap to MeshBasic when unlit. */
-  function isUnderIslandMap(node: Object3D): boolean {
+  /** Imported GLB arenas stay PBR so sun shadows read; only other meshes swap to MeshBasic when unlit. */
+  function isUnderLitGltfArenaMap(node: Object3D): boolean {
     let cur: Object3D | null = node
     while (cur) {
-      if (cur.name === 'map:island') return true
+      if (cur.name === 'map:island' || cur.name === 'map:godotExport') return true
       cur = cur.parent
     }
     return false
@@ -761,13 +765,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     return unlitToLit.get(src) ?? src
   }
   function applyLightingModeToScene(unlit: boolean): void {
-    /* Keep sun + ambient so island terrain (skipped below) still shades and receives shadows when unlit. */
+    /* Keep sun + ambient so imported arena terrain (skipped below) still shades and receives shadows when unlit. */
     ambient.intensity = gameConfig.ambientIntensity
     sun.intensity = gameConfig.sunIntensity
     scene.traverse((node) => {
       const mesh = node as Mesh
       if (!mesh.isMesh) return
-      if (unlit && isUnderIslandMap(mesh)) return
+      if (unlit && isUnderLitGltfArenaMap(mesh)) return
       const matRef = (mesh as unknown as { material?: Material | Material[] }).material
       if (!matRef) return
       if (Array.isArray(matRef)) {
@@ -967,17 +971,16 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     return 0
   }
 
-  /** Advance walk phase once per frame (before FP weapons + camera bob use it). */
+  /** Advance walk phase once per frame; `moving` matches locomotion even if head bob is disabled. */
   function tickFpWalkPresentation(delta: number): { moving: boolean; spd01: number } {
-    let moving = false
-    let spd01 = 0
+    const slip = isPlayerBananaSlipNow()
+    const canWalk = playerHurt === 'none' && !slip
+    const moving =
+      !!(canWalk && grounded && (keys.forward || keys.back || keys.left || keys.right))
+    const spd = Math.hypot(velocity.x, velocity.z)
+    const spd01 = Math.min(1, spd / Math.max(1e-4, gameConfig.moveSpeed))
+
     if (gameConfig.fpViewBobEnabled >= 0.5) {
-      const slip = isPlayerBananaSlipNow()
-      const canWalk = playerHurt === 'none' && !slip
-      moving =
-        !!(canWalk && grounded && (keys.forward || keys.back || keys.left || keys.right))
-      const spd = Math.hypot(velocity.x, velocity.z)
-      spd01 = Math.min(1, spd / Math.max(1e-4, gameConfig.moveSpeed))
       if (moving && grounded) {
         fpPresentationState.walkPhase +=
           delta * Math.PI * 2 * gameConfig.fpHeadbobHz * Math.max(0.28, spd01)
@@ -1002,16 +1005,16 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
     let bobPitch = 0
     let bobRoll = 0
+    let camBobY = 0
     if (gameConfig.fpViewBobEnabled >= 0.5) {
-      const { moving, spd01 } = fpWalk
-      bobPitch =
-        Math.sin(fpPresentationState.walkPhase) *
-        MathUtils.degToRad(gameConfig.fpHeadbobPitchDeg) *
-        spd01
+      const { moving } = fpWalk
       /*
-       * Walk roll: fixed peak ±fpHeadbobRollDeg (cos envelope); do NOT scale by spd01 — that tied tilt
-       * intensity to W/S speed and felt like runaway roll. Strafe tilt is separate (fpStrafeTiltDeg).
+       * Head bob is camera **position Y** only (hands follow camera — no dual bob vs idle sway).
+       * Pitch euler bob removed so idle weapon sway never stacks with walk bob.
        */
+      camBobY = moving
+        ? Math.sin(fpPresentationState.walkPhase) * gameConfig.fpHeadbobCameraYMul
+        : 0
       bobRoll = moving
         ? Math.cos(fpPresentationState.walkPhase * 2) *
           MathUtils.degToRad(gameConfig.fpHeadbobRollDeg)
@@ -1034,15 +1037,18 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (gameConfig.fpViewBobEnabled < 0.5) {
       bobPitch = 0
       bobRoll = 0
+      camBobY = 0
     }
 
     const totalRoll = slipRoll + fpPresentationState.strafeTiltRad + bobRoll
     fpPresentationState.storedPitchBob = bobPitch
     fpPresentationState.storedRollTotal = totalRoll
+    fpPresentationState.storedCamBobY = camBobY
 
     _fpViewEuler.x += fpPresentationState.storedPitchBob
     _fpViewEuler.z += fpPresentationState.storedRollTotal
     camera.quaternion.setFromEuler(_fpViewEuler)
+    camera.position.y += fpPresentationState.storedCamBobY
   }
   function pvpHostBroadcastAndApply(msg: Record<string, unknown>): void {
     if (rtcGame) rtcGame.sendGameJson(msg)
@@ -1076,6 +1082,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     fpPresentationState.storedRollTotal = 0
     fpPresentationState.walkPhase = 0
     fpPresentationState.strafeTiltRad = 0
+    fpPresentationState.storedCamBobY = 0
     localHasBanana = false
     pvpBananaInventory = { host: 0, guest: 0 }
     nextBananaPeelId = 1
@@ -3261,6 +3268,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     fpPresentationState.storedRollTotal = 0
     fpPresentationState.walkPhase = 0
     fpPresentationState.strafeTiltRad = 0
+    fpPresentationState.storedCamBobY = 0
     slideAnimUntilMs = 0
     gameRoot.classList.remove('game-root--dash-tilt')
     gameRoot.style.transform = ''
@@ -4145,6 +4153,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   function updateMovement(delta: number) {
+    camera.position.y -= fpPresentationState.storedCamBobY
+
     /* Online lobby / pre-live: freeze local player. Voice resume countdown still runs physics so grounded / jump stay consistent. */
     if (multiplayerBlocksPlay()) return
 
@@ -4567,23 +4577,19 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       }
     }
 
-    /* After movement: walk phase + weapon Y bob match camera head bob this frame. */
+    /* After movement: walk phase for FP; idle weapon sway only when not walking (never stacked with cam bob). */
     const fpWalk = tickFpWalkPresentation(delta)
-    /* Fixed peak vs walk phase only — do not × spd01 or W/S speed changes apparent sway. */
-    const weaponWalkBobY =
-      gameConfig.fpViewBobEnabled >= 0.5 && fpWalk.moving
-        ? Math.sin(fpPresentationState.walkPhase) * gameConfig.fpWeaponWalkBobYMul
-        : 0
+    const idleWeaponSway = !fpWalk.moving
 
     const megaphoneCanCharge =
       !voiceInputBlocked && !voiceResumeCountdownActive && !multiplayerBlocksPlay()
     megaphoneFp.update(delta, {
       charging: megaphoneCanCharge && (chargingLmb || chargingRmb),
       charge01: voiceChargeSmoothed,
-      walkBobLocalY: weaponWalkBobY,
+      idleWeaponSway,
     })
     bananaWorld.syncHandPoseFromConfig()
-    bananaWorld.applyHandPresentationSway(weaponWalkBobY)
+    bananaWorld.applyHandPresentationSway(idleWeaponSway)
 
     applyFpCameraPresentation(delta, fpWalk)
     composer.render()

@@ -60,8 +60,8 @@ export const defaultGameConfig = {
 
   /** 0/1: walking head bob + A/D strafe camera roll (presentation only). Tweaks → FPS view & weapons. */
   fpViewBobEnabled: 1,
-  /** Pitch bob amplitude (deg) while moving on the ground. */
-  fpHeadbobPitchDeg: 1.5,
+  /** Camera vertical bob peak while walking (m × sin(walk phase)); replaces old pitch-axis bob — arms follow camera. */
+  fpHeadbobCameraYMul: 0.026,
   /** Walk-cycle camera roll amplitude (±deg peak); scales with cosine of walk phase, not move speed. */
   fpHeadbobRollDeg: 1.7,
   /** Walk-cycle frequency scale (Hz × move speed blend). */
@@ -72,11 +72,6 @@ export const defaultGameConfig = {
   fpStrafeTiltEaseHz: 12,
   /** Scales continuous idle hand sway loop on megaphone + banana (0 = off; not movement-gated). */
   fpWeaponSwayMul: 0.55,
-  /**
-   * Camera-local Y bob peak while walking (m × sin(walk phase)); not scaled by move speed so W/S does not change sway amount.
-   */
-  fpWeaponWalkBobYMul: 0.034,
-
   gravity: 38,
   jumpForce: 25,
   jumpCooldownMs: 480,

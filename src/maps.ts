@@ -18,16 +18,17 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { addArena, getArenaCollisionCuboids } from './arena'
 import { gameConfig } from './gameConfig'
 
-export type MapId = 'default' | 'island'
+export type MapId = 'default' | 'island' | 'godotExport'
 export type SpawnSlot = 'a' | 'b'
 
 export const MAP_DEFS: { id: MapId; label: string }[] = [
   { id: 'default', label: 'Default' },
   { id: 'island', label: 'Island' },
+  { id: 'godotExport', label: 'Godot export test' },
 ]
 
 export function isMapId(value: unknown): value is MapId {
-  return value === 'default' || value === 'island'
+  return value === 'default' || value === 'island' || value === 'godotExport'
 }
 
 export type MapHandle = {
@@ -50,6 +51,7 @@ export type MapHandle = {
 }
 
 const ISLAND_GLB_URL = new URL('../Assets/Maps/lowpoly_islandtest.glb', import.meta.url).href
+const GODOT_EXPORT_GLB_URL = new URL('../Assets/Maps/Godot_ExportTest.glb', import.meta.url).href
 /** Solid albedo for island visuals; GLB textures are stripped after load. */
 const ISLAND_SOLID_BASE_HEX = 0x2a235b
 
@@ -165,6 +167,59 @@ function hasCollisionMarker(node: Object3D): boolean {
   return false
 }
 
+/** Godot CSG baked exports use mesh names like CSGBakedMeshInstance3D — no col_ prefix. */
+function isGodotCsgBakedCollisionName(normalizedMeshName: string): boolean {
+  return (
+    normalizedMeshName.includes('csgbakedmesh') ||
+    normalizedMeshName.includes('csg_mesh') ||
+    normalizedMeshName.includes('staticbody3d')
+  )
+}
+
+type GltfCollisionPolicy = 'markersOnly' | 'markersOrGodotCsgMesh'
+
+function meshCountsAsTerrainCollision(
+  mesh: Mesh,
+  normalizedMeshName: string,
+  policy: GltfCollisionPolicy,
+): boolean {
+  if (policy === 'markersOnly') return hasCollisionMarker(mesh)
+  return hasCollisionMarker(mesh) || isGodotCsgBakedCollisionName(normalizedMeshName)
+}
+
+function collectGltfArenaData(root: Group, collisionPolicy: GltfCollisionPolicy): {
+  collisionMeshes: Mesh[]
+  spawnA: Vector3 | null
+  spawnB: Vector3 | null
+  looseSpawns: Vector3[]
+} {
+  const collisionMeshes: Mesh[] = []
+  let spawnA: Vector3 | null = null
+  let spawnB: Vector3 | null = null
+  const looseSpawns: Vector3[] = []
+  root.updateMatrixWorld(true)
+  root.traverse((node) => {
+    const normalizedName = normalizeSceneName(node.name)
+    const slot = spawnSlotFromName(normalizedName)
+    if (slot === 'a') {
+      spawnA = node.getWorldPosition(new Vector3())
+    } else if (slot === 'b') {
+      spawnB = node.getWorldPosition(new Vector3())
+    } else if (looksLikeSpawnMarker(normalizedName)) {
+      looseSpawns.push(node.getWorldPosition(new Vector3()))
+    }
+
+    const mesh = node as Mesh
+    if (!mesh.isMesh) return
+    mesh.castShadow = true
+    mesh.receiveShadow = true
+    if (meshCountsAsTerrainCollision(mesh, normalizedName, collisionPolicy)) {
+      collisionMeshes.push(mesh)
+    }
+  })
+  return { collisionMeshes, spawnA, spawnB, looseSpawns }
+}
+
 function disposeObject3D(root: Object3D): void {
   root.traverse((node) => {
     const mesh = node as Mesh
@@ -233,30 +288,12 @@ async function loadIslandMap(_scene: Scene, hubRoot: Group): Promise<MapHandle> 
 
   container.add(gltf.scene)
   applyIslandSolidMaterials(gltf.scene)
-  const collisionMeshes: Mesh[] = []
-  let spawnA: Vector3 | null = null
-  let spawnB: Vector3 | null = null
-  /* Ordered fallback: any node that looks like a spawn but doesn't match a known A/B name. */
-  const looseSpawns: Vector3[] = []
-  gltf.scene.updateMatrixWorld(true)
-  gltf.scene.traverse((node) => {
-    const normalizedName = normalizeSceneName(node.name)
-    const slot = spawnSlotFromName(normalizedName)
-    if (slot === 'a') {
-      spawnA = node.getWorldPosition(new Vector3())
-    } else if (slot === 'b') {
-      spawnB = node.getWorldPosition(new Vector3())
-    } else if (looksLikeSpawnMarker(normalizedName)) {
-      looseSpawns.push(node.getWorldPosition(new Vector3()))
-    }
-
-    const mesh = node as Mesh
-    if ((mesh as Mesh).isMesh) {
-      mesh.castShadow = true
-      mesh.receiveShadow = true
-      if (hasCollisionMarker(mesh)) collisionMeshes.push(mesh)
-    }
-  })
+  const { collisionMeshes, spawnA: sA, spawnB: sB, looseSpawns } = collectGltfArenaData(
+    gltf.scene,
+    'markersOnly',
+  )
+  let spawnA = sA
+  let spawnB = sB
 
   /* Fill missing slots from loose spawn markers in document order. */
   if (!spawnA && looseSpawns.length > 0) spawnA = looseSpawns.shift() ?? null
@@ -309,9 +346,84 @@ async function loadIslandMap(_scene: Scene, hubRoot: Group): Promise<MapHandle> 
   }
 }
 
+async function loadGodotExportMap(_scene: Scene, hubRoot: Group): Promise<MapHandle> {
+  const container = new Group()
+  container.name = 'map:godotExport'
+  hubRoot.add(container)
+
+  const loader = new GLTFLoader()
+  const gltf = await new Promise<{ scene: Group }>((resolve, reject) => {
+    loader.load(
+      GODOT_EXPORT_GLB_URL,
+      (data) => resolve(data as unknown as { scene: Group }),
+      undefined,
+      (err) => reject(err),
+    )
+  })
+
+  container.add(gltf.scene)
+  const { collisionMeshes, spawnA: sA, spawnB: sB, looseSpawns } = collectGltfArenaData(
+    gltf.scene,
+    'markersOrGodotCsgMesh',
+  )
+  let spawnA = sA
+  let spawnB = sB
+
+  if (!spawnA && looseSpawns.length > 0) spawnA = looseSpawns.shift() ?? null
+  if (!spawnB && looseSpawns.length > 0) spawnB = looseSpawns.shift() ?? null
+
+  if (collisionMeshes.length === 0) {
+    console.warn(
+      '[map:godotExport] No collision meshes. Use col_* node names, or CSGBakedMeshInstance / StaticBody-style mesh names from Godot.',
+    )
+  } else {
+    console.info(`[map:godotExport] ${collisionMeshes.length} collision mesh(es), trimesh → Rapier.`)
+  }
+  if (!spawnA || !spawnB) {
+    console.warn(
+      '[map:godotExport] Missing player spawn(s); using bbox fallbacks. Name empties PlayerSpawn1 / PlayerSpawn2 (or spawn_player / spawn_player_2).',
+    )
+  }
+
+  const bbox = new Box3().setFromObject(gltf.scene)
+  const topY = Number.isFinite(bbox.max.y) ? bbox.max.y : 0
+  const dropTopY = topY + 6
+  const fallbackA = new Vector3(0, dropTopY, 6.8)
+  const fallbackB = new Vector3(0, dropTopY, -6.8)
+
+  function feetSpawn(slot: SpawnSlot): Vector3 {
+    return (slot === 'a' ? spawnA : spawnB)?.clone() ?? (slot === 'a' ? fallbackA : fallbackB).clone()
+  }
+
+  return {
+    id: 'godotExport',
+    collisionMeshes,
+    isBlastZone(pos: Vector3): boolean {
+      return pos.y < gameConfig.blastY
+    },
+    getPlayerSpawn(slot: SpawnSlot, eyeHeight: number): Vector3 {
+      const feet = feetSpawn(slot)
+      feet.y += eyeHeight
+      return feet
+    },
+    getBotSpawn(slot: SpawnSlot, footOffset: number): Vector3 {
+      const feet = feetSpawn(slot)
+      feet.y += footOffset
+      return feet
+    },
+    dispose() {
+      hubRoot.remove(container)
+      disposeObject3D(container)
+    },
+  }
+}
+
 export async function loadMap(id: MapId, scene: Scene, hubRoot: Group): Promise<MapHandle> {
   if (id === 'island') {
     return await loadIslandMap(scene, hubRoot)
+  }
+  if (id === 'godotExport') {
+    return await loadGodotExportMap(scene, hubRoot)
   }
   return loadDefaultMap(scene, hubRoot)
 }

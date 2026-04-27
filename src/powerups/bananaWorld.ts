@@ -80,7 +80,7 @@ function islandSpawnPoints(): Vector3[] {
 }
 
 export function getBananaSpawnCandidates(mapId: MapId): Vector3[] {
-  if (mapId === 'island') return islandSpawnPoints()
+  if (mapId === 'island' || mapId === 'godotExport') return islandSpawnPoints()
   return defaultArenaSpawnPoints()
 }
 
@@ -244,13 +244,12 @@ export class BananaWorld {
     this.handGroup.rotation.set(0, 0, 0)
   }
 
-  /** Idle sway + optional walk bob Y on top of `syncHandPoseFromConfig`. */
-  applyHandPresentationSway(walkBobLocalY = 0): void {
+  /** Idle sway on top of `syncHandPoseFromConfig` (only when standing — not while walking). */
+  applyHandPresentationSway(idleSway = true): void {
+    if (!idleSway) return
     const wm = Math.max(0, Math.min(1, gameConfig.fpWeaponSwayMul))
-    if (wm < 1e-4 && Math.abs(walkBobLocalY) < 1e-8) return
+    if (wm < 1e-4) return
     const sway = wm
-    if (Math.abs(walkBobLocalY) > 1e-8) this.handGroup.position.y += walkBobLocalY
-    if (sway < 1e-4) return
     const tt = performance.now() * 0.001
     this.handGroup.position.x += Math.sin(tt * 2.05) * 0.0034 * sway
     this.handGroup.position.y += Math.cos(tt * 2.45) * 0.0027 * sway

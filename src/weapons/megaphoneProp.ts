@@ -30,8 +30,11 @@ export type MegaphoneUpdateOpts = {
   charging: boolean
   /** Smoothed charge 0–1 (`voiceChargeSmoothed`). */
   charge01: number
-  /** Camera-local Y offset from FP walk bob (same phase as camera head bob). */
-  walkBobLocalY?: number
+  /**
+   * When false, skip idle hand sway (while walking — camera Y bob carries the view model).
+   * @default true
+   */
+  idleWeaponSway?: boolean
 }
 
 /**
@@ -154,9 +157,6 @@ export class MegaphoneFpProp {
     _qCur.slerpQuaternions(_qRest, _qPull, t)
     this.root.quaternion.copy(_qCur)
 
-    const wby = opts.walkBobLocalY ?? 0
-    if (Math.abs(wby) > 1e-8) this.root.position.y += wby
-
     /* Shake: only while charging and at/above min fire charge. */
     const minF = Math.min(0.999, Math.max(0.01, voiceMinChargeToFire))
     let shakeMix = 0
@@ -190,8 +190,9 @@ export class MegaphoneFpProp {
       0,
       Math.min(2, fpWeaponSwayMul * Math.max(0, megaphoneSwayMul)),
     )
-    /* Idle loop only (time-based); amplitude not gated on movement/strafe. */
-    if (wm > 1e-4) {
+    const idleSway = opts.idleWeaponSway !== false
+    /* Idle loop only when stationary — never stacked with camera walk bob. */
+    if (idleSway && wm > 1e-4) {
       const sway = wm
       const tt = performance.now() * 0.001
       this.root.position.x += Math.sin(tt * 2.15) * 0.0036 * sway
