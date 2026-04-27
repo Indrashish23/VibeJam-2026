@@ -103,6 +103,7 @@ const chargeBarTopUrl = `${import.meta.env.BASE_URL}ui/ChargeBarTop.svg`
 const chargeBarFillMaskUrl = `${import.meta.env.BASE_URL}ui/ChargeBarFillMask.svg`
 /** Full chrome layer while voice charge is capped (swap back to {@link chargeBarTopUrl} on release). */
 const chargeBarMaxUrl = `${import.meta.env.BASE_URL}ui/ui_chargebar_max.svg`
+const chargeMicIconUrl = `${import.meta.env.BASE_URL}ui/mic_icon.svg`
 
 /** Production without baked host: open once with `?pk=your-deployment.partykit.dev` (stored in session). */
 try {
@@ -190,6 +191,10 @@ const chargeBarFill = document.getElementById('charge-bar-fill') as HTMLDivEleme
 const chargeBarMinMark = document.getElementById('charge-bar-min') as HTMLDivElement | null
 const chargeBarStatus = document.getElementById('charge-bar-status') as HTMLDivElement | null
 const chargeWedgeEl = document.getElementById('charge-wedge') as HTMLDivElement | null
+const chargeHudMicEl = document.getElementById('charge-hud-mic') as HTMLDivElement | null
+const chargeHudMicImg = document.querySelector(
+  '.charge-hud-mic__img',
+) as HTMLImageElement | null
 const chargeBarPctEl = document.getElementById('charge-bar-pct') as HTMLSpanElement | null
 const chargeWedgeEmptyImg = document.querySelector(
   '.charge-wedge__empty',
@@ -201,6 +206,7 @@ let chargeChromeShowsMaxArt = false
 
 if (chargeWedgeEmptyImg) chargeWedgeEmptyImg.src = chargeBarEmptyUrl
 if (chargeWedgeTopImg) chargeWedgeTopImg.src = chargeBarTopUrl
+if (chargeHudMicImg) chargeHudMicImg.src = chargeMicIconUrl
 if (chargeBarWrap) {
   chargeBarWrap.style.setProperty('--charge-fill-mask', `url('${chargeBarFillMaskUrl}')`)
   chargeBarWrap.style.setProperty('--charge-pct', '0%')
@@ -231,6 +237,13 @@ function syncChargeHudLayout(): void {
   chargeBarWrap.style.setProperty('--charge-hud-ammo-y', `${g.chargeHudAmmoPopTopPct}%`)
   chargeBarWrap.style.setProperty('--charge-hud-min-left', `${g.chargeHudMinMarkLeftPct}%`)
   chargeBarWrap.style.setProperty('--charge-hud-min-right', `${g.chargeHudMinMarkRightPct}%`)
+  chargeBarWrap.style.setProperty('--charge-hud-mic-gap', `${g.chargeHudMicGapRem}rem`)
+  chargeBarWrap.style.setProperty('--charge-hud-mic-w', `${g.chargeHudMicWidthRem}rem`)
+  chargeBarWrap.style.setProperty('--charge-hud-mic-y', `${g.chargeHudMicTopOffsetRem}rem`)
+  chargeBarWrap.style.setProperty('--charge-hud-mic-pulse', String(g.chargeHudMicPulseScale))
+  if (chargeHudMicEl) {
+    chargeHudMicEl.classList.toggle('charge-hud-mic--off', g.chargeHudMicEnabled < 0.5)
+  }
 }
 
 function syncUiHudChrome(): void {
@@ -1790,6 +1803,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let chargingLmb = false
   /** Last smoothed voice charge (for shot power + UI). */
   let voiceChargeSmoothed = 0
+  /** 0–1 smoothed RMS activity for charge-HUD mic icon pulse. */
+  let chargeHudMicAmpSmoothed = 0
   /** −1 = unlimited voice shots per round; otherwise shots left when capped. */
   let voiceAmmoLeft = -1
   /** Monotonic counters consumed by the tutorial controller (offline only). */
@@ -1958,6 +1973,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     clearPistolState()
     voice.resetChargeMeter()
     voiceChargeSmoothed = 0
+    chargeHudMicAmpSmoothed = 0
     setChargeBarDisplayPct(0)
     if (chargeBarWrap) chargeBarWrap.classList.remove('charge-bar-wrap--overload')
     if (chargeBarWrap) chargeBarWrap.classList.remove('charge-bar-wrap--ready')
@@ -3079,6 +3095,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       voice.stopVoiceClipPlayback()
       voice.resetChargeMeter()
       voiceChargeSmoothed = 0
+      chargeHudMicAmpSmoothed = 0
       setChargeBarDisplayPct(0)
       if (chargeBarWrap) chargeBarWrap.classList.remove('charge-bar-wrap--overload')
       if (chargeBarWrap) chargeBarWrap.classList.remove('charge-bar-wrap--ready')
@@ -3185,6 +3202,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (ammo <= 0) {
       voice.resetChargeMeter()
       voiceChargeSmoothed = 0
+      chargeHudMicAmpSmoothed = 0
       setChargeBarDisplayPct(0)
       if (chargeBarWrap) chargeBarWrap.classList.remove('charge-bar-wrap--ready')
       if (chargeBarWrap) chargeBarWrap.classList.remove('charge-bar-wrap--overload')
@@ -3200,6 +3218,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       /* Decode failed or clip too short — refund charge so the player can retry. */
       voice.resetChargeMeter()
       voiceChargeSmoothed = 0
+      chargeHudMicAmpSmoothed = 0
       setChargeBarDisplayPct(0)
       return
     }
@@ -3217,6 +3236,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     /* Reset live charge so the bar redraws from ammo/cap on the next frame. */
     voice.resetChargeMeter()
     voiceChargeSmoothed = 0
+    chargeHudMicAmpSmoothed = 0
     if (chargeBarWrap) chargeBarWrap.classList.remove('charge-bar-wrap--overload')
     if (chargeBarWrap) chargeBarWrap.classList.remove('charge-bar-wrap--ready')
   }
@@ -4724,6 +4744,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       chargingRmb = false
       voice.resetChargeMeter()
       voiceChargeSmoothed = 0
+      chargeHudMicAmpSmoothed = 0
       void voice.finishChargeRecording()
       setLocalVoipRecordingBlocked(false)
       setChargeBarDisplayPct(0)
@@ -4784,6 +4805,28 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       }
     }
     updateChargeStatusUi(voiceChargeSmoothed)
+
+    if (chargeBarWrap && chargeHudMicEl) {
+      const canShowMic =
+        gameConfig.chargeHudMicEnabled >= 0.5 && !chargeBarWrap.hidden && !voiceInputBlocked
+      if (canShowMic) {
+        const raw = voice.sampleRms()
+        const noiseFloor =
+          Math.max(1e-6, gameConfig.voiceSilenceRmsThreshold) *
+          Math.max(0.05, gameConfig.chargeHudMicNoiseThresholdMul)
+        const span = Math.max(1e-5, gameConfig.chargeHudMicRmsSpan)
+        const target = Math.min(1, Math.max(0, (raw - noiseFloor) / span))
+        const sm = Math.max(0.06, Math.min(1, gameConfig.chargeHudMicSmoothing))
+        chargeHudMicAmpSmoothed += (target - chargeHudMicAmpSmoothed) * sm
+        chargeBarWrap.style.setProperty('--charge-hud-mic-amp', String(chargeHudMicAmpSmoothed))
+        chargeHudMicEl.classList.toggle('charge-hud-mic--active', chargeHudMicAmpSmoothed > 0.04)
+      } else {
+        chargeHudMicAmpSmoothed *= 0.78
+        if (chargeHudMicAmpSmoothed < 0.012) chargeHudMicAmpSmoothed = 0
+        chargeBarWrap.style.setProperty('--charge-hud-mic-amp', String(chargeHudMicAmpSmoothed))
+        chargeHudMicEl.classList.remove('charge-hud-mic--active')
+      }
+    }
 
     const dashSpd = dashVel.length()
     dashTiltDeg *= Math.exp(-13.5 * delta)
@@ -5194,6 +5237,14 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         'chargeHudAmmoPopTopPct',
         'chargeHudMinMarkLeftPct',
         'chargeHudMinMarkRightPct',
+        'chargeHudMicEnabled',
+        'chargeHudMicGapRem',
+        'chargeHudMicWidthRem',
+        'chargeHudMicTopOffsetRem',
+        'chargeHudMicNoiseThresholdMul',
+        'chargeHudMicRmsSpan',
+        'chargeHudMicSmoothing',
+        'chargeHudMicPulseScale',
       ],
       syncVisualsFromConfig: () => {
         skyDome.syncFromConfig()

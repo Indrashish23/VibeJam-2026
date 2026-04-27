@@ -1066,6 +1066,11 @@ body {
   --charge-hud-ammo-y: 38%;
   --charge-hud-min-left: 4%;
   --charge-hud-min-right: 8%;
+  --charge-hud-mic-amp: 0;
+  --charge-hud-mic-pulse: 0.38;
+  --charge-hud-mic-gap: 0.45rem;
+  --charge-hud-mic-w: 1.65rem;
+  --charge-hud-mic-y: 0.55rem;
   position: absolute;
   right: var(--charge-hud-right);
   top: calc(50% + var(--charge-hud-bias));
@@ -1078,6 +1083,72 @@ body {
   flex-direction: column;
   align-items: flex-end;
   gap: 0.25rem;
+}
+
+.charge-hud-wedge-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: flex-end;
+  width: 100%;
+  gap: var(--charge-hud-mic-gap);
+}
+
+.charge-hud-mic {
+  flex: 0 0 auto;
+  width: var(--charge-hud-mic-w);
+  margin-top: var(--charge-hud-mic-y);
+  transform: scale(calc(1 + var(--charge-hud-mic-amp) * var(--charge-hud-mic-pulse)));
+  transform-origin: 50% 0;
+  will-change: transform, filter;
+  filter: drop-shadow(
+    0 0 calc(1px + var(--charge-hud-mic-amp) * 16px) rgba(255, 255, 255, calc(0.12 + var(--charge-hud-mic-amp) * 0.88))
+  );
+  transition:
+    transform 0.05s linear,
+    filter 0.05s linear;
+}
+
+.charge-hud-mic--active {
+  animation: charge-hud-mic-glow 0.48s ease-in-out infinite alternate;
+}
+
+.charge-hud-mic--active .charge-hud-mic__img {
+  animation: charge-hud-mic-spark 0.38s ease-in-out infinite alternate;
+}
+
+@keyframes charge-hud-mic-glow {
+  from {
+    filter: drop-shadow(
+      0 0 calc(1px + var(--charge-hud-mic-amp) * 10px) rgba(255, 255, 255, calc(0.2 + var(--charge-hud-mic-amp) * 0.5))
+    );
+  }
+  to {
+    filter: drop-shadow(
+      0 0 calc(3px + var(--charge-hud-mic-amp) * 22px) rgba(255, 255, 255, calc(0.45 + var(--charge-hud-mic-amp) * 0.5))
+    );
+  }
+}
+
+@keyframes charge-hud-mic-spark {
+  from {
+    opacity: 0.65;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.charge-hud-mic__img {
+  display: block;
+  width: 100%;
+  height: auto;
+  opacity: calc(0.28 + var(--charge-hud-mic-amp) * 0.72);
+  transition: opacity 0.05s linear;
+}
+
+.charge-hud-mic--off {
+  display: none;
 }
 
 .charge-wedge {

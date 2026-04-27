@@ -39,6 +39,23 @@ export const defaultGameConfig = {
   /** Min-fire horizontal rule: inset from wedge right (%). */
   chargeHudMinMarkRightPct: 8,
 
+  /** 1 = show live mic-activity icon beside the charge wedge; pulses with voice RMS. */
+  chargeHudMicEnabled: 1,
+  /** Gap between mic icon and wedge (rem). */
+  chargeHudMicGapRem: 0.45,
+  /** Mic icon display width (rem), height follows SVG aspect. */
+  chargeHudMicWidthRem: 1.65,
+  /** Nudge icon down from row top to align with wedge fill (rem). */
+  chargeHudMicTopOffsetRem: 0.55,
+  /** RMS above (voiceSilenceRmsThreshold × mul) maps to 0 activity; then span maps to full pulse. */
+  chargeHudMicNoiseThresholdMul: 1,
+  /** RMS headroom above the noise floor to hit full icon pulse (typ. 0.05–0.2). */
+  chargeHudMicRmsSpan: 0.09,
+  /** 0–1: how fast the icon follows loudness (higher = snappier). */
+  chargeHudMicSmoothing: 0.24,
+  /** Max extra scale at full activity (0.4 ≈ +40% size at loudest). */
+  chargeHudMicPulseScale: 0.38,
+
   /** Uniform scale for `#hud-viewport` (launch % + charge wedge cluster); 1 = default. */
   uiHudMasterScale: 1,
   /** Scale only the launch-percent HUD block (inside master viewport scale). */
