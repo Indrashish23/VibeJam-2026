@@ -8,6 +8,7 @@ import {
   Group,
   Material,
   Mesh,
+  MeshStandardMaterial,
   Object3D,
   Vector3,
   type Scene,
@@ -49,6 +50,28 @@ export type MapHandle = {
 }
 
 const ISLAND_GLB_URL = new URL('../Assets/Maps/lowpoly_islandtest.glb', import.meta.url).href
+/** Solid albedo for island visuals; GLB textures are stripped after load. */
+const ISLAND_SOLID_BASE_HEX = 0x2a235b
+
+function applyIslandSolidMaterials(root: Object3D): void {
+  root.traverse((node) => {
+    const mesh = node as Mesh
+    if (!mesh.isMesh) return
+    const olds = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+    const nextMats = olds.map(
+      () =>
+        new MeshStandardMaterial({
+          color: ISLAND_SOLID_BASE_HEX,
+          roughness: 0.82,
+          metalness: 0.06,
+        }),
+    )
+    mesh.material = nextMats.length === 1 ? nextMats[0]! : nextMats
+    for (const m of olds) {
+      m.dispose()
+    }
+  })
+}
 
 function normalizeSceneName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
@@ -209,6 +232,7 @@ async function loadIslandMap(_scene: Scene, hubRoot: Group): Promise<MapHandle> 
   })
 
   container.add(gltf.scene)
+  applyIslandSolidMaterials(gltf.scene)
   const collisionMeshes: Mesh[] = []
   let spawnA: Vector3 | null = null
   let spawnB: Vector3 | null = null
