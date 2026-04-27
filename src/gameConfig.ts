@@ -48,9 +48,9 @@ export const defaultGameConfig = {
   skyCloudOpacity: 0.22,
 
   /** Fill light; keep low so the directional sun reads harsh against the skybox. */
-  ambientIntensity: 0.22,
+  ambientIntensity: 10,
   /** Key directional sun strength (shadow caster). */
-  sunIntensity: 1.85,
+  sunIntensity: 1,
   /** 1 = force unlit materials (ignores scene lighting) for flat readability/debugging. */
   lightingUnlitMode: 0,
   movementMaxDelta: 0.1,
@@ -438,13 +438,13 @@ export const defaultGameConfig = {
   megaphoneRestPitchDeg: -23,
   megaphoneRestYawDeg: 75,
   megaphoneRestRollDeg: 10,
-  /** Kept identical to rest defaults so charge tween does not offset pose (tweak pull separately for motion). */
-  megaphonePullLocalX: 0.34,
+  /** Charge-tween target (camera-local); Y/pitch match rest, X/Z/yaw/roll tuned vs rest for pull-in. */
+  megaphonePullLocalX: 0.14,
   megaphonePullLocalY: -0.4,
-  megaphonePullLocalZ: -0.48,
+  megaphonePullLocalZ: -0.36,
   megaphonePullPitchDeg: -23,
-  megaphonePullYawDeg: 75,
-  megaphonePullRollDeg: 10,
+  megaphonePullYawDeg: 87,
+  megaphonePullRollDeg: 7,
   /** Seconds (approx) to ease megaphone back to rest after release. */
   megaphoneRestReturnSec: 0.22,
   megaphoneShakePosAmp: 0.018,
