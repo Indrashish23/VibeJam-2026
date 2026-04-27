@@ -2,6 +2,9 @@ import type { PerspectiveCamera } from 'three'
 import { Vector3 } from 'three'
 import { postProcessVoiceDecodeBuffer } from './voiceBufferPostProcess'
 import { gameConfig } from '../gameConfig'
+import { getSfxChainMul } from './sfxChain'
+
+const IMPACT_HIT_URL = new URL('../../Assets/SFX/Footsteps/ImpactSound.mp3', import.meta.url).href
 
 const _listenerPos = new Vector3()
 const _listenerFwd = new Vector3()
@@ -29,6 +32,9 @@ export class VoiceChargeManager {
 
   /** Stops previous clip graph when starting a new one. */
   private voicePlaybackCleanup: (() => void)[] = []
+
+  private impactHitBuf: AudioBuffer | null = null
+  private impactHitDecodePromise: Promise<AudioBuffer | null> | null = null
 
   /** Accumulated fire charge 0..1 (bar shows this, not instantaneous RMS). */
   private charge = 0
@@ -81,6 +87,8 @@ export class VoiceChargeManager {
       void this.ctx.close()
       this.ctx = null
     }
+    this.impactHitBuf = null
+    this.impactHitDecodePromise = null
   }
 
   dispose(): void {
@@ -319,6 +327,142 @@ export class VoiceChargeManager {
     return g
   }
 
+  private async ensureImpactHitBuffer(): Promise<AudioBuffer | null> {
+    const c = this.ctx
+    if (!c) return null
+    if (this.impactHitBuf) return this.impactHitBuf
+    if (!this.impactHitDecodePromise) {
+      this.impactHitDecodePromise = (async () => {
+        try {
+          const res = await fetch(IMPACT_HIT_URL)
+          const ab = await res.arrayBuffer()
+          return await new Promise<AudioBuffer | null>((resolve) => {
+            c.decodeAudioData(
+              ab.slice(0),
+              (b) => resolve(b),
+              () => resolve(null),
+            )
+          })
+        } catch {
+          return null
+        }
+      })()
+    }
+    const b = await this.impactHitDecodePromise
+    if (b) this.impactHitBuf = b
+    return this.impactHitBuf
+  }
+
+  /**
+   * Spatial `ImpactSound.mp3` at hit point: dry + single delayed tap (echo).
+   * Independent of voice clip playback; skips if disabled or no AudioContext.
+   */
+  private playHitImpactSpatialAt(soundWorld: Vector3, camera: PerspectiveCamera): void {
+    void this.playHitImpactSpatialAtAsync(soundWorld, camera)
+  }
+
+  private async playHitImpactSpatialAtAsync(
+    soundWorld: Vector3,
+    camera: PerspectiveCamera,
+  ): Promise<void> {
+    if (gameConfig.voiceHitImpactSfxEnabled < 0.5) return
+    const c = this.ctx
+    if (!c) return
+    const chain = getSfxChainMul()
+    const dryLev = Math.max(
+      0,
+      Math.min(1, gameConfig.voiceHitImpactSfxVolumeMul * chain),
+    )
+    if (dryLev <= 0) return
+
+    const buf = await this.ensureImpactHitBuffer()
+    if (!buf) return
+
+    const echoMul = Math.max(0, Math.min(1, gameConfig.voiceHitImpactEchoMul))
+    const delaySec = Math.max(0.02, Math.min(0.35, gameConfig.voiceHitImpactEchoDelaySec))
+
+    try {
+      camera.getWorldPosition(_listenerPos)
+      camera.getWorldDirection(_listenerFwd)
+      _listenerFwd.normalize()
+
+      const listener = c.listener
+      listener.positionX.value = _listenerPos.x
+      listener.positionY.value = _listenerPos.y
+      listener.positionZ.value = _listenerPos.z
+      listener.forwardX.value = _listenerFwd.x
+      listener.forwardY.value = _listenerFwd.y
+      listener.forwardZ.value = _listenerFwd.z
+      listener.upX.value = _listenerUp.x
+      listener.upY.value = _listenerUp.y
+      listener.upZ.value = _listenerUp.z
+
+      const panner = c.createPanner()
+      panner.panningModel = 'HRTF'
+      panner.distanceModel = 'inverse'
+      panner.refDistance = gameConfig.voiceHitRefDistance
+      panner.maxDistance = gameConfig.voiceHitMaxDistance
+      panner.rolloffFactor = gameConfig.voiceHitRolloff
+      panner.coneInnerAngle = 360
+      panner.coneOuterAngle = 360
+      panner.setPosition(soundWorld.x, soundWorld.y, soundWorld.z)
+
+      const master = c.createGain()
+      master.gain.value = 1
+      panner.connect(master)
+      master.connect(c.destination)
+
+      const dryGain = c.createGain()
+      dryGain.gain.value = dryLev
+      const drySrc = c.createBufferSource()
+      drySrc.buffer = buf
+      drySrc.connect(dryGain)
+      dryGain.connect(panner)
+
+      let wetSrc: AudioBufferSourceNode | null = null
+      let wetGain: GainNode | null = null
+      let delayNode: DelayNode | null = null
+      if (echoMul > 1e-4) {
+        delayNode = c.createDelay(1.0)
+        delayNode.delayTime.value = delaySec
+        wetGain = c.createGain()
+        wetGain.gain.value = dryLev * echoMul
+        wetSrc = c.createBufferSource()
+        wetSrc.buffer = buf
+        wetSrc.connect(delayNode)
+        delayNode.connect(wetGain)
+        wetGain.connect(panner)
+      }
+
+      const parts = wetSrc ? 2 : 1
+      let done = 0
+      const finish = () => {
+        done++
+        if (done < parts) return
+        try {
+          drySrc.disconnect()
+          dryGain.disconnect()
+          if (wetSrc) wetSrc.disconnect()
+          if (wetGain) wetGain.disconnect()
+          if (delayNode) delayNode.disconnect()
+          panner.disconnect()
+          master.disconnect()
+        } catch {
+          /* ignore */
+        }
+      }
+
+      drySrc.onended = finish
+      drySrc.start()
+      if (wetSrc) {
+        wetSrc.onended = finish
+        wetSrc.start()
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
   /** Short fallback when decode fails — simple blip. */
   playFallbackHitSound(): void {
     this.stopVoiceClipPlayback()
@@ -431,9 +575,11 @@ export class VoiceChargeManager {
     this.stopVoiceClipPlayback()
     const c = this.ctx
     if (!c || !buf) {
+      if (c) this.playHitImpactSpatialAt(soundWorld, camera)
       this.playFallbackHitSound()
       return
     }
+    this.playHitImpactSpatialAt(soundWorld, camera)
     try {
       camera.getWorldPosition(_listenerPos)
       camera.getWorldDirection(_listenerFwd)
@@ -560,9 +706,11 @@ export class VoiceChargeManager {
     this.stopVoiceClipPlayback()
     const c = this.ctx
     if (!c || !buf) {
+      if (c) this.playHitImpactSpatialAt(soundWorld, camera)
       this.playFallbackHitSound()
       return
     }
+    this.playHitImpactSpatialAt(soundWorld, camera)
     try {
       camera.getWorldPosition(_listenerPos)
       camera.getWorldDirection(_listenerFwd)

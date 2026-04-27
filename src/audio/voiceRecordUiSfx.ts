@@ -1,7 +1,7 @@
 import { gameConfig } from '../gameConfig'
 import { getSfxChainMul } from './sfxChain'
 
-const URL_RELEASE = new URL('../../Assets/SFX/Footsteps/ReleaseSound.mp3', import.meta.url).href
+const URL_RELEASE = new URL('../../Assets/SFX/ThrowSound.ogg', import.meta.url).href
 
 let currentRecording: HTMLAudioElement | null = null
 

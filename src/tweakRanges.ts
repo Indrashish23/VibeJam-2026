@@ -248,6 +248,10 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   voiceRecordSfxVolumeMul: { min: 0, max: 1, step: 0.02 },
   voiceReleaseSfxEnabled: { min: 0, max: 1, step: 1 },
   voiceReleaseSfxVolumeMul: { min: 0, max: 1, step: 0.02 },
+  voiceHitImpactSfxEnabled: { min: 0, max: 1, step: 1 },
+  voiceHitImpactSfxVolumeMul: { min: 0, max: 1, step: 0.02 },
+  voiceHitImpactEchoMul: { min: 0, max: 1, step: 0.02 },
+  voiceHitImpactEchoDelaySec: { min: 0.02, max: 0.35, step: 0.004 },
 }
 
 /** Human-readable labels for the tweaks panel (fallback: raw config key). */
@@ -481,7 +485,11 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   voiceRecordSfxBaseMul: 'Voice: record one-shot base × (MP3)',
   voiceRecordSfxVolumeMul: 'Voice: record start level × (0–1)',
   voiceReleaseSfxEnabled: 'Voice: “release” SFX on shot (0/1, local)',
-  voiceReleaseSfxVolumeMul: 'Voice: release level × (0–1) for shot launch',
+  voiceReleaseSfxVolumeMul: 'Voice: release level × (0–1) for shot launch (ThrowSound.ogg)',
+  voiceHitImpactSfxEnabled: 'Voice hit: ImpactSound layer (0/1, spatial)',
+  voiceHitImpactSfxVolumeMul: 'Voice hit: impact dry level × (0–1)',
+  voiceHitImpactEchoMul: 'Voice hit: impact echo tap × dry (0–1)',
+  voiceHitImpactEchoDelaySec: 'Voice hit: echo delay (seconds)',
 }
 
 /**
@@ -654,8 +662,17 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   voiceRecordSfxVolumeMul:
     'Gain for the record-start one-shot, after `voiceRecordSfxBaseMul` and the SFX chain in Settings / Tweaks.',
   voiceReleaseSfxEnabled:
-    '0 = no one-shot. 1 = play ReleaseSound.mp3 when a voice projectile is actually created (not dry-fires).',
-  voiceReleaseSfxVolumeMul: 'Gain for that launch one-shot; multiplied by the SFX chain (Settings × Tweaks SFX).',
+    '0 = no one-shot. 1 = play ThrowSound.ogg when a voice projectile is actually created (not dry-fires).',
+  voiceReleaseSfxVolumeMul:
+    'Gain for that launch one-shot (ThrowSound.ogg); multiplied by the SFX chain (Settings × Tweaks SFX).',
+  voiceHitImpactSfxEnabled:
+    '0 = no extra layer. 1 = spatial ImpactSound.mp3 when a voiced hit resolves (alongside voice clip or fallback blip).',
+  voiceHitImpactSfxVolumeMul:
+    'Dry impact gain × SFX chain. Echo tap uses this × `voiceHitImpactEchoMul`.',
+  voiceHitImpactEchoMul:
+    'Second tap level relative to dry (0 = dry only). Routed through same spatial panner with delay.',
+  voiceHitImpactEchoDelaySec:
+    'Delay before the echo tap (slapback). Capped ~20–350 ms in range for sensible slapback.',
 
   ambientIntensity: 'Fill light strength from all directions (shadow softness).',
   sunIntensity: 'Main directional light strength (contrast and shadows).',
@@ -971,6 +988,10 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'voiceRecordSfxVolumeMul',
       'voiceReleaseSfxEnabled',
       'voiceReleaseSfxVolumeMul',
+      'voiceHitImpactSfxEnabled',
+      'voiceHitImpactSfxVolumeMul',
+      'voiceHitImpactEchoMul',
+      'voiceHitImpactEchoDelaySec',
       'proximityVoipOutputMul',
       'proximityVoipRefDistance',
       'proximityVoipMaxDistance',

@@ -499,8 +499,16 @@ export const defaultGameConfig = {
   voiceRecordSfxVolumeMul: 0.22,
   /** 0 = off. Local only: one-shot when a voice **projectile** is launched (not dry-fire). */
   voiceReleaseSfxEnabled: 1,
-  /** Dev level × (0–1) for `ReleaseSound.mp3`; × master SFX in Settings. */
+  /** Dev level × (0–1) for `ThrowSound.ogg`; × master SFX in Settings. */
   voiceReleaseSfxVolumeMul: 0.26,
+  /** 0 = off. Spatial `ImpactSound.mp3` layer when a voice hit resolves (dry + delayed echo). */
+  voiceHitImpactSfxEnabled: 1,
+  /** Impact one-shot gain × SFX chain (before echo wet mix). */
+  voiceHitImpactSfxVolumeMul: 0.42,
+  /** Echo tap level × dry impact gain (0 = dry only). */
+  voiceHitImpactEchoMul: 0.32,
+  /** Seconds of delay before the echo tap (slight slapback). */
+  voiceHitImpactEchoDelaySec: 0.088,
 } as const
 
 export type GameConfigKey = keyof typeof defaultGameConfig

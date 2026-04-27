@@ -22,7 +22,7 @@ const FOOTSTEP_URLS: string[] = [2, 3, 4, 5, 6, 7].map(
 )
 const JUMP_URL = new URL('../../Assets/SFX/Footsteps/JumpSound.ogg', import.meta.url).href
 const LAND_URL = new URL('../../Assets/SFX/Footsteps/LandingonGround.ogg', import.meta.url).href
-const RELEASE_URL = new URL('../../Assets/SFX/Footsteps/ReleaseSound.mp3', import.meta.url).href
+const RELEASE_URL = new URL('../../Assets/SFX/ThrowSound.ogg', import.meta.url).href
 
 let ctx: AudioContext | null = null
 let footstepBufs: (AudioBuffer | null)[] = []
