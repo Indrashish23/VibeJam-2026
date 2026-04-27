@@ -60,7 +60,8 @@ export const MID_TIER_PROFILE: BotProfile = {
   windupMoveScale: 0.6,
   dodgeWindowMs: [200, 500],
   dodgeDurationMs: 150,
-  ringMargin: 3.2,
+  /** Keep bot well inside the deck; rays + inward steering also pull away from ring-out. */
+  ringMargin: 5.5,
 }
 
 type MoveState = 'approach' | 'spacing' | 'reposition' | 'unstuck'
@@ -116,6 +117,8 @@ export class BotFighter {
   private windupLeftMs = 0
   private pendingSpeedMul = 1
   private shotGapLeftMs = 0
+  /** Cooldown for opportunistic jumps toward an elevated player (smart mode). */
+  private smartJumpCdMs = 0
   private aiSuppressed = false
   private netAnimOneShotOut: AvatarOneShotClip | null = null
   private netAnimEpoch = 0
@@ -665,6 +668,7 @@ export class BotFighter {
     this.prevPlayerCharging = false
     this.dodgeUntilMs = 0
     this.dodgeScheduleAtMs = 0
+    this.smartJumpCdMs = 0
     this.smartMoveDir.set(0, 0, 1)
     this.smartDesiredSpeed = 0
     this.smartStuckAcc = 0
@@ -816,7 +820,101 @@ export class BotFighter {
     this.root.rotation.y += Math.sign(dy) * step
   }
 
-  private updateSmartAi(delta: number, playerPos: Vector3, dist: number, toPx: number, toPz: number): void {
+  /**
+   * Ray-based wall nudge, edge speed falloff, inward pull toward stage center, AABB clamp,
+   * and optional jump when the player is higher. Runs after intent velocity is chosen.
+   */
+  private applySmartLocomotionGuards(
+    terrain: TerrainPhysics,
+    playerPos: Vector3,
+    moveBase: number,
+    opts: { allowJump: boolean; maxSpeedMul: number },
+  ): void {
+    const px = this.root.position.x
+    const pz = this.root.position.z
+    const margin = Math.max(this.profile.ringMargin, 5.0)
+    const halfX = gameConfig.groundWidth * 0.5 - margin
+    const halfZ = gameConfig.groundDepth * 0.5 - margin
+    const wallRayLen = 2.5
+    const chestY = this.root.position.y + this.feetFromCenter * 0.78
+
+    _steerTmp.set(0, 0, 0)
+    const push = 0.82
+    const rays: { dx: number; dz: number }[] = [
+      { dx: 1, dz: 0 },
+      { dx: -1, dz: 0 },
+      { dx: 0, dz: 1 },
+      { dx: 0, dz: -1 },
+      { dx: 0.7071, dz: 0.7071 },
+      { dx: 0.7071, dz: -0.7071 },
+      { dx: -0.7071, dz: 0.7071 },
+      { dx: -0.7071, dz: -0.7071 },
+    ]
+    for (const { dx, dz } of rays) {
+      const t = terrain.raycastAlong(px, chestY, pz, dx, 0, dz, wallRayLen)
+      if (t != null && t < wallRayLen * 0.94) {
+        const w = 1 - t / wallRayLen
+        _steerTmp.x += -dx * w * push
+        _steerTmp.z += -dz * w * push
+      }
+    }
+    if (_steerTmp.lengthSq() > 1e-7) {
+      _steerTmp.normalize()
+      this.velocity.addScaledVector(_steerTmp, moveBase * 0.88)
+    }
+
+    const distEdge = Math.min(halfX - Math.abs(px), halfZ - Math.abs(pz))
+    const edgeBand = 6.5
+    const u = distEdge < edgeBand ? Math.max(0, distEdge / edgeBand) : 1
+    const edgeScale = 0.2 + 0.8 * u * u
+    this.velocity.x *= edgeScale
+    this.velocity.z *= edgeScale
+
+    _steerTmp.set(-px, 0, -pz)
+    if (_steerTmp.lengthSq() > 0.04) {
+      _steerTmp.normalize()
+      this.velocity.addScaledVector(_steerTmp, moveBase * (1 - u) * (1 - u) * 1.05)
+    }
+
+    const look = 0.5
+    const npx = px + this.velocity.x * look
+    const npz = pz + this.velocity.z * look
+    if ((npx > halfX && this.velocity.x > 0) || (npx < -halfX && this.velocity.x < 0)) this.velocity.x = 0
+    if ((npz > halfZ && this.velocity.z > 0) || (npz < -halfZ && this.velocity.z < 0)) this.velocity.z = 0
+
+    const cap = moveBase * opts.maxSpeedMul
+    let h = Math.hypot(this.velocity.x, this.velocity.z)
+    if (h > cap && h > 1e-6) {
+      const s = cap / h
+      this.velocity.x *= s
+      this.velocity.z *= s
+      h = cap
+    }
+    this.smartDesiredSpeed = h
+
+    if (
+      opts.allowJump &&
+      this.grounded &&
+      this.smartJumpCdMs <= 0 &&
+      this.shotState !== 'windup' &&
+      this.hurtPhase === 'none'
+    ) {
+      const dy = playerPos.y - this.root.position.y
+      if (dy > 0.42) {
+        this.vy = gameConfig.jumpForce * 0.9
+        this.smartJumpCdMs = 800
+      }
+    }
+  }
+
+  private updateSmartAi(
+    delta: number,
+    playerPos: Vector3,
+    dist: number,
+    toPx: number,
+    toPz: number,
+    terrain: TerrainPhysics,
+  ): void {
     if (this.aiSuppressed) {
       this.velocity.set(0, 0, 0)
       this.smartDesiredSpeed = 0
@@ -941,7 +1039,10 @@ export class BotFighter {
         this.velocity.x = vx
         this.velocity.z = vz
       }
-      this.smartDesiredSpeed = moveBase * wMul
+      this.applySmartLocomotionGuards(terrain, playerPos, moveBase, {
+        allowJump: false,
+        maxSpeedMul: 0.72,
+      })
       return
     }
 
@@ -1002,12 +1103,15 @@ export class BotFighter {
       this.moveCommitLeftMs -= delta * 1000
       this.velocity.x = this.smartUnstuckDir.x * moveBase
       this.velocity.z = this.smartUnstuckDir.z * moveBase
-      this.smartDesiredSpeed = moveBase
       if (this.moveCommitLeftMs <= 0) {
         this.moveState = 'spacing'
         const [c0, c1] = this.profile.commitmentMs
         this.moveCommitLeftMs = c0 + Math.random() * (c1 - c0)
       }
+      this.applySmartLocomotionGuards(terrain, playerPos, moveBase, {
+        allowJump: false,
+        maxSpeedMul: 1.0,
+      })
       this.turnToward(playerPos, delta, gameConfig.botSmartTurnRate)
       this.setRecordingTelegraph(false)
       return
@@ -1042,16 +1146,10 @@ export class BotFighter {
       this.velocity.z = this.smartMoveDir.z * moveBase
     }
 
-    /* Rectangular edge lookahead clamp */
-    const rm = this.profile.ringMargin
-    const halfX = gameConfig.groundWidth * 0.5 - rm
-    const halfZ = gameConfig.groundDepth * 0.5 - rm
-    const px = this.root.position.x + this.velocity.x * 0.4
-    const pz = this.root.position.z + this.velocity.z * 0.4
-    if ((px > halfX && this.velocity.x > 0) || (px < -halfX && this.velocity.x < 0)) this.velocity.x = 0
-    if ((pz > halfZ && this.velocity.z > 0) || (pz < -halfZ && this.velocity.z < 0)) this.velocity.z = 0
-
-    this.smartDesiredSpeed = moveBase
+    this.applySmartLocomotionGuards(terrain, playerPos, moveBase, {
+      allowJump: true,
+      maxSpeedMul: 1.48,
+    })
     this.turnToward(playerPos, delta, gameConfig.botSmartTurnRate)
     this.setRecordingTelegraph(false)
   }
@@ -1410,8 +1508,12 @@ export class BotFighter {
     const toPz = playerPos.z - this.root.position.z
     const dist = Math.hypot(toPx, toPz) || 1
 
+    if (this.mode === 'smart' && this.smartJumpCdMs > 0) {
+      this.smartJumpCdMs = Math.max(0, this.smartJumpCdMs - delta * 1000)
+    }
+
     if (canThink && this.mode === 'smart') {
-      this.updateSmartAi(delta, playerPos, dist, toPx, toPz)
+      this.updateSmartAi(delta, playerPos, dist, toPx, toPz, terrain)
     } else if (canThink) {
       this.faceToward(playerPos)
       this.setRecordingTelegraph(false)
@@ -1516,6 +1618,7 @@ const _yAxis = new Vector3(0, 1, 0)
 const _muzzleForSolve = new Vector3()
 const _moveStart = new Vector3()
 const _moveDesired = new Vector3()
+const _steerTmp = new Vector3()
 
 function gaussianRand(): number {
   const u1 = Math.random() || 1e-9

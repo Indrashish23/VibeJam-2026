@@ -313,4 +313,37 @@ export class TerrainPhysics {
       normal: new Vector3(hit.normal.x, hit.normal.y, hit.normal.z),
     }
   }
+
+  /**
+   * Cast a horizontal (or arbitrary) ray against static terrain only. Returns time-of-impact
+   * distance, or `null` if no hit within `maxDistance`. Direction need not be unit length.
+   */
+  raycastAlong(
+    ox: number,
+    oy: number,
+    oz: number,
+    dirX: number,
+    dirY: number,
+    dirZ: number,
+    maxDistance: number,
+  ): number | null {
+    const len = Math.hypot(dirX, dirY, dirZ)
+    if (len < 1e-8) return null
+    const inv = 1 / len
+    const hit = this.world.castRayAndGetNormal(
+      new RAPIER.Ray(
+        { x: ox, y: oy, z: oz },
+        { x: dirX * inv, y: dirY * inv, z: dirZ * inv },
+      ),
+      maxDistance,
+      false,
+      QUERY_NO_EXCLUDE,
+      undefined,
+      undefined,
+      undefined,
+      (collider) => this.terrainHandles.has(collider.handle),
+    )
+    if (!hit) return null
+    return rayColliderIntersectionToi(hit)
+  }
 }
