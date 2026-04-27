@@ -187,6 +187,8 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   ambientIntensity: { min: 0, max: CAP, step: 0.05 },
   sunIntensity: { min: 0, max: CAP, step: 0.05 },
   lightingUnlitMode: { min: 0, max: 1, step: 1 },
+  lightingUnlitSelfModel: { min: 0, max: 1, step: 1 },
+  lightingUnlitEnemyModel: { min: 0, max: 1, step: 1 },
   stunnedStarScaleMul: { min: 0.35, max: 2.2, step: 0.02 },
   stunnedStarSpinMul: { min: 0.45, max: 5, step: 0.05 },
   stunnedStarSpreadMul: { min: 0.45, max: 2.35, step: 0.02 },
@@ -195,9 +197,8 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   fpHeadbobCameraYMul: { min: 0, max: 0.12, step: 0.002 },
   fpHeadbobRollDeg: { min: 0, max: 4, step: 0.05 },
   fpHeadbobHz: { min: 0.5, max: 5, step: 0.05 },
-  fpStrafeTiltDeg: { min: 0, max: 12, step: 0.1 },
-  fpStrafeTiltEaseHz: { min: 2, max: 28, step: 0.5 },
   fpWeaponSwayMul: { min: 0, max: 2, step: 0.05 },
+  fpCameraDragMul: { min: 0, max: 2.5, step: 0.05 },
   gravity: { min: 0, max: CAP, step: 1 },
   jumpForce: { min: 0, max: CAP, step: 0.5 },
   jumpCooldownMs: { min: 0, max: CAP, step: 100 },
@@ -289,9 +290,8 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   fpHeadbobCameraYMul: 'Head bob camera Y (m)',
   fpHeadbobRollDeg: 'Walk bob roll ±deg (fixed vs speed)',
   fpHeadbobHz: 'Head bob cadence (Hz)',
-  fpStrafeTiltDeg: 'Strafe head tilt (deg)',
-  fpStrafeTiltEaseHz: 'Strafe tilt release easing (Hz)',
   fpWeaponSwayMul: 'Weapon sway intensity',
+  fpCameraDragMul: 'Camera drag intensity',
   dashImpulse: 'Shift dash distance target',
   dashVelocityMul: 'Shift dash distance multiplier ×',
   dashDecay: 'Slide decay',
@@ -430,6 +430,8 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   ambientIntensity: 'Ambient light',
   sunIntensity: 'Sun strength',
   lightingUnlitMode: 'Lighting mode: unlit (0/1)',
+  lightingUnlitSelfModel: 'Self model unlit (0/1)',
+  lightingUnlitEnemyModel: 'Enemy model unlit (0/1)',
   pcAvatarYOffset: 'Body Y offset (lift / lower)',
   pcAvatarForward: 'Body forward offset (negative = behind camera)',
   pcAvatarSide: 'Body side offset',
@@ -552,11 +554,10 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   fpHeadbobRollDeg:
     'Side-to-side roll from the walk cycle (degrees peak ±). Amplitude does not scale with how fast you move — only W/A/S/D “walking”. Set to 0 for vertical-only camera bob.',
   fpHeadbobHz: 'Bob frequency at full stride (walk phase advances with speed).',
-  fpStrafeTiltDeg: 'Max camera roll toward the strafe direction (A/D) in degrees.',
-  fpStrafeTiltEaseHz:
-    'After you release A/D only: roll eases back to upright (Hz). Tilt snaps in immediately while strafing; use higher for a snappier return.',
   fpWeaponSwayMul:
     'Sway on megaphone + banana in first-person (0 = off).',
+  fpCameraDragMul:
+    'Scales first-person camera drag/lag (look drag + jump/land lag). 0 disables the effect; ~1 is snappy.',
   groundWidth: 'Half the stage is this wide in X; larger = more room before ring-out.',
   groundDepth: 'Half the stage depth in Z.',
   blastMargin: 'Extra distance beyond the deck edge before the blast zone counts (XZ).',
@@ -742,6 +743,10 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   sunIntensity: 'Main directional light strength (contrast and shadows).',
   lightingUnlitMode:
     '0 = normal lighting. 1 = force unlit rendering (materials ignore ambient/sun and use texture/color only).',
+  lightingUnlitSelfModel:
+    '0 = keep normal lighting on your model. 1 = force unlit on the local/self avatar only.',
+  lightingUnlitEnemyModel:
+    '0 = keep normal lighting on enemy/bot model. 1 = force unlit on the enemy avatar only.',
 
   punchMaxRange: 'Maximum distance your voice-fired fist can travel before it despawns.',
   punchProjectileSpeed: 'Launch speed of the fist along its aim direction.',
@@ -1114,9 +1119,8 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'fpHeadbobCameraYMul',
       'fpHeadbobRollDeg',
       'fpHeadbobHz',
-      'fpStrafeTiltDeg',
-      'fpStrafeTiltEaseHz',
       'fpWeaponSwayMul',
+      'fpCameraDragMul',
     ],
   },
   {
@@ -1260,7 +1264,13 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
   {
     id: 'lighting',
     title: 'Lighting',
-    keys: ['ambientIntensity', 'sunIntensity', 'lightingUnlitMode'],
+    keys: [
+      'ambientIntensity',
+      'sunIntensity',
+      'lightingUnlitMode',
+      'lightingUnlitSelfModel',
+      'lightingUnlitEnemyModel',
+    ],
   },
   {
     id: 'uiVfx',

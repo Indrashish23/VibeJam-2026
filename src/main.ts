@@ -660,7 +660,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     storedPitchBob: 0,
     storedRollTotal: 0,
     walkPhase: 0,
-    strafeTiltRad: 0,
     /** Vertical camera bob applied at end of frame; stripped at start of movement for clean physics. */
     storedCamBobY: 0,
     storedCamLagY: 0,
@@ -714,12 +713,25 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   const litToUnlit = new WeakMap<Material, Material>()
   const unlitToLit = new WeakMap<Material, Material>()
   let lastUnlitMode = false
+  let lastSelfModelUnlit = false
+  let lastEnemyModelUnlit = false
   let unlitRescanTick = 0
+  const SELF_AVATAR_ROOT_NAME = 'avatar:self'
+  const ENEMY_AVATAR_ROOT_NAME = 'avatar:enemy'
   /** Imported GLB arenas stay PBR so sun shadows read; only other meshes swap to MeshBasic when unlit. */
   function isUnderLitGltfArenaMap(node: Object3D): boolean {
     let cur: Object3D | null = node
     while (cur) {
       if (cur.name === 'map:island' || cur.name === 'map:godotExport') return true
+      cur = cur.parent
+    }
+    return false
+  }
+
+  function isUnderNamedRoot(node: Object3D, rootName: string): boolean {
+    let cur: Object3D | null = node
+    while (cur) {
+      if (cur.name === rootName) return true
       cur = cur.parent
     }
     return false
@@ -778,25 +790,42 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
     return unlitToLit.get(src) ?? src
   }
-  function applyLightingModeToScene(unlit: boolean): void {
+  function applyLightingModeToScene(
+    unlit: boolean,
+    selfModelUnlit = gameConfig.lightingUnlitSelfModel >= 0.5,
+    enemyModelUnlit = gameConfig.lightingUnlitEnemyModel >= 0.5,
+  ): void {
     /* Keep sun + ambient so imported arena terrain (skipped below) still shades and receives shadows when unlit. */
     ambient.intensity = gameConfig.ambientIntensity
     sun.intensity = gameConfig.sunIntensity
     scene.traverse((node) => {
       const mesh = node as Mesh
       if (!mesh.isMesh) return
-      if (unlit && isUnderLitGltfArenaMap(mesh)) return
+      const isMapMesh = isUnderLitGltfArenaMap(mesh)
+      const isSelfAvatarMesh = isUnderNamedRoot(mesh, SELF_AVATAR_ROOT_NAME)
+      const isEnemyAvatarMesh = isUnderNamedRoot(mesh, ENEMY_AVATAR_ROOT_NAME)
+
+      let meshUnlit = unlit
+      if (meshUnlit && isMapMesh) meshUnlit = false
+      if (!meshUnlit && selfModelUnlit && isSelfAvatarMesh) meshUnlit = true
+      if (!meshUnlit && enemyModelUnlit && isEnemyAvatarMesh) meshUnlit = true
+
       const matRef = (mesh as unknown as { material?: Material | Material[] }).material
       if (!matRef) return
       if (Array.isArray(matRef)) {
         ;(mesh as unknown as { material: Material[] }).material = matRef.map((m) =>
-          mapMaterialForLightingMode(m, unlit),
+          mapMaterialForLightingMode(m, meshUnlit),
         )
       } else {
-        ;(mesh as unknown as { material: Material }).material = mapMaterialForLightingMode(matRef, unlit)
+        ;(mesh as unknown as { material: Material }).material = mapMaterialForLightingMode(
+          matRef,
+          meshUnlit,
+        )
       }
     })
     lastUnlitMode = unlit
+    lastSelfModelUnlit = selfModelUnlit
+    lastEnemyModelUnlit = enemyModelUnlit
   }
 
   const hubRoot = new Group()
@@ -1035,17 +1064,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         : 0
     }
 
-    let targetStrafe = 0
-    if (keys.left && !keys.right) targetStrafe = 1
-    else if (keys.right && !keys.left) targetStrafe = -1
-    const tiltMax = MathUtils.degToRad(gameConfig.fpStrafeTiltDeg)
-    const desiredStrafeRoll = targetStrafe * tiltMax
-    if (Math.abs(desiredStrafeRoll) > 1e-8) {
-      fpPresentationState.strafeTiltRad = desiredStrafeRoll
-    } else {
-      const easeOut = 1 - Math.exp(-delta * Math.max(0.5, gameConfig.fpStrafeTiltEaseHz))
-      fpPresentationState.strafeTiltRad += (0 - fpPresentationState.strafeTiltRad) * easeOut
-    }
+    const dragMul = Math.max(0, Math.min(2.5, gameConfig.fpCameraDragMul))
 
     const rawYaw = _fpViewEuler.y
     const rawPitch = _fpViewEuler.x
@@ -1053,16 +1072,32 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     const dpitch = rawPitch - fpPresentationState.rawPitchPrev
     fpPresentationState.rawYawPrev = rawYaw
     fpPresentationState.rawPitchPrev = rawPitch
-    const lookDragRollTarget = MathUtils.clamp(-dyaw * 0.78, -MathUtils.degToRad(2.2), MathUtils.degToRad(2.2))
-    const lookDragPitchTarget = MathUtils.clamp(-dpitch * 0.48, -MathUtils.degToRad(1.7), MathUtils.degToRad(1.7))
+    const lookDragRollTarget = MathUtils.clamp(
+      -dyaw * (0.78 * dragMul),
+      -MathUtils.degToRad(2.2 * dragMul),
+      MathUtils.degToRad(2.2 * dragMul),
+    )
+    const lookDragPitchTarget = MathUtils.clamp(
+      -dpitch * (0.48 * dragMul),
+      -MathUtils.degToRad(1.7 * dragMul),
+      MathUtils.degToRad(1.7 * dragMul),
+    )
     const lookFollow = 1 - Math.exp(-delta * 22)
     fpPresentationState.lookLagRollRad +=
       (lookDragRollTarget - fpPresentationState.lookLagRollRad) * lookFollow
     fpPresentationState.lookLagPitchRad +=
       (lookDragPitchTarget - fpPresentationState.lookLagPitchRad) * lookFollow
 
-    const jumpLagTargetY = MathUtils.clamp(-vy * 0.0016, -0.032, 0.022)
-    const jumpLagPitchTarget = MathUtils.clamp(-vy * 0.00085, -MathUtils.degToRad(2.6), MathUtils.degToRad(1.6))
+    const jumpLagTargetY = MathUtils.clamp(
+      -vy * (0.0016 * dragMul),
+      -0.032 * dragMul,
+      0.022 * dragMul,
+    )
+    const jumpLagPitchTarget = MathUtils.clamp(
+      -vy * (0.00085 * dragMul),
+      -MathUtils.degToRad(2.6 * dragMul),
+      MathUtils.degToRad(1.6 * dragMul),
+    )
     fpPresentationState.jumpLandLagY +=
       (jumpLagTargetY - fpPresentationState.jumpLandLagY) * (1 - Math.exp(-delta * 19))
     fpPresentationState.jumpLagPitchRad +=
@@ -1076,7 +1111,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
 
     const camLagY = fpPresentationState.jumpLandLagY + fpPresentationState.landedKickY
-    const totalRoll = slipRoll + bobRoll + fpPresentationState.strafeTiltRad + fpPresentationState.lookLagRollRad
+    const totalRoll = slipRoll + bobRoll + fpPresentationState.lookLagRollRad
     fpPresentationState.storedPitchBob =
       bobPitch + fpPresentationState.lookLagPitchRad + fpPresentationState.jumpLagPitchRad
     fpPresentationState.storedRollTotal = totalRoll
@@ -1120,7 +1155,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     fpPresentationState.storedPitchBob = 0
     fpPresentationState.storedRollTotal = 0
     fpPresentationState.walkPhase = 0
-    fpPresentationState.strafeTiltRad = 0
     fpPresentationState.storedCamBobY = 0
     fpPresentationState.storedCamLagY = 0
     fpPresentationState.lookLagPitchRad = 0
@@ -3233,7 +3267,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       spawnActors()
       applySunShadowFrustum()
       syncBlastBoundsLine()
-      applyLightingModeToScene(gameConfig.lightingUnlitMode >= 0.5)
+      applyLightingModeToScene(
+        gameConfig.lightingUnlitMode >= 0.5,
+        gameConfig.lightingUnlitSelfModel >= 0.5,
+        gameConfig.lightingUnlitEnemyModel >= 0.5,
+      )
     })()
     swapMapInFlight = work
     try {
@@ -3312,7 +3350,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     fpPresentationState.storedPitchBob = 0
     fpPresentationState.storedRollTotal = 0
     fpPresentationState.walkPhase = 0
-    fpPresentationState.strafeTiltRad = 0
     fpPresentationState.storedCamBobY = 0
     fpPresentationState.storedCamLagY = 0
     fpPresentationState.lookLagPitchRad = 0
@@ -3574,7 +3611,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     bot.dispose(scene)
     botMode = mode
     bot = new BotFighter(scene, botMode, new Vector3(0, 1.45, -gameConfig.groundDepth / 2 + 12))
-    applyLightingModeToScene(gameConfig.lightingUnlitMode >= 0.5)
+    applyLightingModeToScene(
+      gameConfig.lightingUnlitMode >= 0.5,
+      gameConfig.lightingUnlitSelfModel >= 0.5,
+      gameConfig.lightingUnlitEnemyModel >= 0.5,
+    )
     instantHudRematch()
   }
 
@@ -4285,7 +4326,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         playLandOneShot()
         broadcastActorSfxIfPvp('land')
       }
-      fpPresentationState.landedKickY = Math.min(0.028, fpPresentationState.landedKickY + 0.022)
+      const dragMul = Math.max(0, Math.min(2.5, gameConfig.fpCameraDragMul))
+      fpPresentationState.landedKickY = Math.min(
+        0.028 * dragMul,
+        fpPresentationState.landedKickY + 0.022 * dragMul,
+      )
       voiceDownBoostReady = true
       airDashReady = true
       airJumpsLeft = Math.max(0, Math.round(gameConfig.airJumpsMax))
@@ -4390,13 +4435,21 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     proxVoip3d?.tick()
     updateProxVoiceActiveIcon()
     const wantsUnlit = gameConfig.lightingUnlitMode >= 0.5
-    if (wantsUnlit !== lastUnlitMode) {
-      applyLightingModeToScene(wantsUnlit)
+    const wantsSelfModelUnlit = gameConfig.lightingUnlitSelfModel >= 0.5
+    const wantsEnemyModelUnlit = gameConfig.lightingUnlitEnemyModel >= 0.5
+    if (
+      wantsUnlit !== lastUnlitMode ||
+      wantsSelfModelUnlit !== lastSelfModelUnlit ||
+      wantsEnemyModelUnlit !== lastEnemyModelUnlit
+    ) {
+      applyLightingModeToScene(wantsUnlit, wantsSelfModelUnlit, wantsEnemyModelUnlit)
       unlitRescanTick = 0
-    } else if (wantsUnlit) {
-      /* Catch meshes that appear later (async avatar/bot/map loads) while unlit mode is active. */
+    } else if (wantsUnlit || wantsSelfModelUnlit || wantsEnemyModelUnlit) {
+      /* Catch meshes that appear later (async avatar/bot/map loads) while any unlit mode is active. */
       unlitRescanTick = (unlitRescanTick + 1) % 20
-      if (unlitRescanTick === 0) applyLightingModeToScene(true)
+      if (unlitRescanTick === 0) {
+        applyLightingModeToScene(wantsUnlit, wantsSelfModelUnlit, wantsEnemyModelUnlit)
+      }
     }
 
     if (DEBUG_MP) {
@@ -4901,7 +4954,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       keysThatSkipRoundReset: ['hideGameHud'],
       syncVisualsFromConfig: () => {
         skyDome.syncFromConfig()
-        applyLightingModeToScene(gameConfig.lightingUnlitMode >= 0.5)
+        applyLightingModeToScene(
+          gameConfig.lightingUnlitMode >= 0.5,
+          gameConfig.lightingUnlitSelfModel >= 0.5,
+          gameConfig.lightingUnlitEnemyModel >= 0.5,
+        )
         syncGameHudVisibility()
       },
       onToggle(open) {

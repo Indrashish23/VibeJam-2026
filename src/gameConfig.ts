@@ -56,6 +56,10 @@ export const defaultGameConfig = {
   sunIntensity: 1,
   /** 1 = force unlit materials (ignores scene lighting) for flat readability/debugging. */
   lightingUnlitMode: 0,
+  /** 1 = force unlit materials on the local player avatar only. */
+  lightingUnlitSelfModel: 0,
+  /** 1 = force unlit materials on the enemy / bot avatar only. */
+  lightingUnlitEnemyModel: 0,
   movementMaxDelta: 0.1,
 
   /** 0/1: walking camera Y bob + walk-cycle roll (presentation only). Tweaks → FPS view & weapons. */
@@ -66,12 +70,10 @@ export const defaultGameConfig = {
   fpHeadbobRollDeg: 1.7,
   /** Walk-cycle frequency scale (Hz × move speed blend). */
   fpHeadbobHz: 1.6,
-  /** Max camera roll when holding **A** or **D** alone (deg). */
-  fpStrafeTiltDeg: 3.2,
-  /** Strafe roll ease-back rate after A/D release (higher = faster return to neutral). */
-  fpStrafeTiltEaseHz: 16,
   /** Scales continuous idle hand sway loop on megaphone + banana (0 = off; not movement-gated). */
   fpWeaponSwayMul: 1.05,
+  /** First-person camera drag / lag intensity (look, jump, land); 0 = off. */
+  fpCameraDragMul: 1,
   gravity: 38,
   jumpForce: 25,
   jumpCooldownMs: 480,

@@ -130,6 +130,7 @@ export class LocalPlayerAvatar {
   private constructor(scene: Scene, modelRoot: Object3D, mixer: AnimationMixer) {
     this.scene = scene
     this.mixer = mixer
+    this.root.name = 'avatar:self'
     this.root.rotation.order = 'YXZ'
     this.root.add(modelRoot)
     /* Capture bbox at native scale before any auto-fit, so we can cleanly anchor feet later. */

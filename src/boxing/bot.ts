@@ -129,6 +129,7 @@ export class BotFighter {
     opts?: { bodyColor?: number },
   ) {
     this.mode = mode
+    this.root.name = 'avatar:enemy'
     const bodyHex =
       typeof opts?.bodyColor === 'number'
         ? opts.bodyColor
