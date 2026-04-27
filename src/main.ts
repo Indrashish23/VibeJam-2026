@@ -12,6 +12,7 @@ import {
   EdgesGeometry,
   Group,
   BufferGeometry,
+  BufferAttribute,
   LineBasicMaterial,
   LineLoop,
   LineSegments,
@@ -19,6 +20,8 @@ import {
   MathUtils,
   Mesh,
   MeshBasicMaterial,
+  Points,
+  PointsMaterial,
   PerspectiveCamera,
   Scene,
   Vector3,
@@ -52,6 +55,7 @@ import {
   type WebRtcGameApi,
 } from './net/webrtcGame'
 import { LowEndDitherShader } from './post/lowEndDitherShader'
+import { CelOutlineShader } from './post/celOutlineShader'
 import { readStoredPlayerName, savePlayerName } from './playerName'
 import {
   loadUserSettings,
@@ -614,8 +618,14 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     normalEdgeStrength: Math.max(0, gameConfig.retroEdgeStrength * 0.65),
     depthEdgeStrength: Math.max(0, gameConfig.retroEdgeStrength),
   })
+  const celOutlinePass = new ShaderPass(CelOutlineShader)
+  ;(celOutlinePass.uniforms as Record<string, { value: unknown }>).resolution.value = [
+    window.innerWidth,
+    Math.max(window.innerHeight, 1),
+  ]
   composer.addPass(pixelPass)
   composer.addPass(new OutputPass())
+  composer.addPass(celOutlinePass)
   /* After color space / tone mapping: cheap screen-space noise to reduce gradient banding. */
   composer.addPass(new ShaderPass(LowEndDitherShader))
   composer.setSize(window.innerWidth, Math.max(window.innerHeight, 1))
@@ -1109,6 +1119,32 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   const prevShake = new Vector3()
   let shakeIntensity = 0
   let flashIntensity = 0
+  const dangerAuraOverlay = document.createElement('div')
+  dangerAuraOverlay.style.position = 'absolute'
+  dangerAuraOverlay.style.inset = '0'
+  dangerAuraOverlay.style.pointerEvents = 'none'
+  dangerAuraOverlay.style.zIndex = '11'
+  dangerAuraOverlay.style.opacity = '0'
+  dangerAuraOverlay.style.background =
+    'radial-gradient(circle at 50% 52%, rgba(255,0,0,0.02) 0%, rgba(255,0,0,0.08) 44%, rgba(255,0,0,0.2) 100%)'
+  gameRoot.appendChild(dangerAuraOverlay)
+
+  const dangerSmokeCount = 16
+  const dangerSmokePos = new Float32Array(dangerSmokeCount * 3)
+  const dangerSmokeGeom = new BufferGeometry()
+  dangerSmokeGeom.setAttribute('position', new BufferAttribute(dangerSmokePos, 3))
+  const dangerSmokeMat = new PointsMaterial({
+    color: new Color(0x6f3030),
+    size: 0.32,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    sizeAttenuation: true,
+  })
+  const dangerSmoke = new Points(dangerSmokeGeom, dangerSmokeMat)
+  dangerSmoke.frustumCulled = false
+  dangerSmoke.visible = false
+  scene.add(dangerSmoke)
 
   let vy = 0
   let grounded = false
@@ -3823,6 +3859,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     camera.updateProjectionMatrix()
     renderer.setSize(w, h)
     composer.setSize(w, h)
+    ;(celOutlinePass.uniforms as Record<string, { value: unknown }>).resolution.value = [w, h]
   }
   window.addEventListener('resize', onResize)
 
@@ -3989,6 +4026,35 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         hitFlashEl.style.opacity = '0'
       }
     }
+  }
+
+  function updateDangerAuraFx(nowSec: number): void {
+    const over = Math.max(0, playerPercent - 70)
+    if (over <= 0.001) {
+      dangerAuraOverlay.style.opacity = '0'
+      dangerSmoke.visible = false
+      dangerSmokeMat.opacity = 0
+      return
+    }
+    const t = Math.min(1, over / 80)
+    const pulse = 0.45 + 0.55 * Math.sin(nowSec * 9.2)
+    const aura = Math.min(0.28, 0.06 + t * 0.16 + pulse * t * 0.05)
+    dangerAuraOverlay.style.opacity = aura.toFixed(3)
+
+    dangerSmoke.visible = true
+    dangerSmokeMat.opacity = Math.min(0.22, 0.03 + t * 0.12)
+    const footY = feetY()
+    for (let i = 0; i < dangerSmokeCount; i++) {
+      const k = i * 3
+      const seed = i * 0.61803398875
+      const ring = 0.24 + (i % 5) * 0.06 + 0.08 * Math.sin(nowSec * 0.9 + seed * 5)
+      const ang = nowSec * (0.38 + t * 0.42) + seed * Math.PI * 2
+      const rise = ((nowSec * (0.22 + t * 0.24) + seed * 2.7) % 1) * (0.75 + t * 0.55)
+      dangerSmokePos[k] = camera.position.x + Math.cos(ang) * ring
+      dangerSmokePos[k + 1] = footY + 0.18 + rise
+      dangerSmokePos[k + 2] = camera.position.z + Math.sin(ang) * ring
+    }
+    dangerSmokeGeom.attributes.position.needsUpdate = true
   }
 
   let debugMpHb = 0
@@ -4165,6 +4231,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
 
     syncStunnedFxOverlay()
+    updateDangerAuraFx(performance.now() * 0.001)
 
     applyHitPresentation(delta)
 
