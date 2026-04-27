@@ -39,6 +39,12 @@ import { PlayerArms } from './boxing/playerArms'
 import { VoiceChargeManager, audioBufferSliceToWavBlob } from './audio/voiceCharge'
 import { playLocalVoiceRecordReleaseSfx, playLocalVoiceRecordStartSfx } from './audio/voiceRecordUiSfx'
 import { mountTweaksPanel } from './tweaksPanel'
+import {
+  startTutorial,
+  isTutorialPending,
+  clearTutorialDone,
+  type TutorialApi,
+} from './tutorial'
 import { runLobbyGate, type LobbyResult } from './lobbyGate'
 import { base64ToBlob, blobToBase64 } from './net/blobCodec'
 import {
@@ -1366,6 +1372,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let voiceChargeSmoothed = 0
   /** −1 = unlimited voice shots per round; otherwise shots left when capped. */
   let voiceAmmoLeft = -1
+  /** Monotonic counters consumed by the tutorial controller (offline only). */
+  let tutorialVoiceShotsFired = 0
+  let tutorialBotRingouts = 0
   /** Gameplay frozen until mic works + optional countdown. */
   let voiceInputBlocked = true
   let voiceResumeCountdownActive = false
@@ -1611,8 +1620,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     seriesTransitionActive = true
     const epochAtStart = pvpMatchEpoch
     try {
-      if (iWonRound) seriesWinsSelf += 1
-      else seriesWinsOpp += 1
+      if (iWonRound) {
+        seriesWinsSelf += 1
+        tutorialBotRingouts += 1
+      } else seriesWinsOpp += 1
       if (iWonRound) await playWinGameSplashSequence()
       if (epochAtStart !== pvpMatchEpoch) return
       endMatch(iWonRound ? 'win' : 'lose')
@@ -2604,6 +2615,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           ? arms.tryHeadscanFire(speedMul, buf, t, sizeMul, camera.position, _aimDir)
           : arms.tryFire(speedMul, buf, t, sizeMul, _muzzleWorld, _aimDir)
     if (fired) {
+      tutorialVoiceShotsFired += 1
       playLocalVoiceRecordReleaseSfx()
       voice.stopVoiceClipPlayback()
       voice.resetChargeMeter()
@@ -4602,15 +4614,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       },
       onReplayTutorial: () => {
         if (multiplayerBlocksPlay() || isPvp()) return
-        try {
-          localStorage.removeItem('vibejam_tutorial_done_v1')
-        } catch {
-          /* storage may be blocked */
-        }
-        const wTut = window as unknown as {
-          vibejamStartTutorial?: () => void | Promise<void>
-        }
-        void wTut.vibejamStartTutorial?.()
+        clearTutorialDone()
+        void startTutorial(buildTutorialApi())
       },
       ...(isOnline && lobby.mode === 'online'
         ? { onPracticeWithDummy: beginLobbyDummyPractice }
@@ -4620,6 +4625,53 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   if (isOnline && lobby.mode === 'online' && lobby.role === 'host' && lobby.startWithDummyPractice) {
     void beginLobbyDummyPractice()
+  }
+
+  /* === Tutorial bootstrap (offline only, per-tab via sessionStorage) ====== */
+
+  function buildTutorialApi(): TutorialApi {
+    return {
+      getCharge: () => voiceChargeSmoothed,
+      getMinChargeToFire: () => gameConfig.voiceMinChargeToFire,
+      getVoiceShotsFired: () => tutorialVoiceShotsFired,
+      getBotRingouts: () => tutorialBotRingouts,
+      setEnemyPercent: (value: number) => {
+        enemyPercent = Math.max(0, Math.min(999, value))
+        syncHud()
+      },
+      unlockPointer: () => {
+        try {
+          controls.unlock()
+        } catch {
+          /* pointer lock not held; safe to ignore */
+        }
+      },
+      lockPointer: () => {
+        tryPointerLock()
+      },
+    }
+  }
+
+  ;(window as unknown as {
+    vibejamStartTutorial?: () => void | Promise<void>
+  }).vibejamStartTutorial = () => startTutorial(buildTutorialApi())
+
+  if (
+    !isOnline &&
+    lobby.mode === 'offline' &&
+    lobby.mapId === 'default' &&
+    isTutorialPending()
+  ) {
+    /* Wait for the voice-resume countdown to clear so the welcome modal
+     * doesn't fight the 3-2-1 overlay. */
+    void (async () => {
+      let guard = 0
+      while (voiceResumeCountdownActive && guard < 200) {
+        await sleepMs(120)
+        guard += 1
+      }
+      await startTutorial(buildTutorialApi())
+    })()
   }
 }
 

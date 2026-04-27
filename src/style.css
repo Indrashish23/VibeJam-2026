@@ -1841,3 +1841,133 @@ body {
   font-family: ui-monospace, 'Cascadia Code', monospace;
   color: #cbd5e1;
 }
+
+/* === Tutorial overlay (per-tab onboarding) ============================== */
+
+.tutorial-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 56;
+  pointer-events: none;
+}
+
+.tutorial-overlay[hidden] {
+  display: none !important;
+}
+
+.tutorial-prompt {
+  position: absolute;
+  top: 11%;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(40rem, 88vw);
+  padding: 0.85rem 1.2rem;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.86);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  text-align: center;
+}
+
+.tutorial-prompt[hidden] {
+  display: none !important;
+}
+
+.tutorial-prompt-text {
+  margin: 0;
+  font-size: 1rem;
+  color: #f1f5f9;
+  line-height: 1.45;
+}
+
+.tutorial-prompt--flash {
+  animation: tutorial-prompt-flash 0.85s ease-in-out infinite alternate;
+}
+
+@keyframes tutorial-prompt-flash {
+  from {
+    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
+    border-color: rgba(148, 163, 184, 0.4);
+  }
+  to {
+    box-shadow: 0 14px 36px rgba(252, 211, 77, 0.45);
+    border-color: rgba(252, 211, 77, 0.85);
+  }
+}
+
+.tutorial-modal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(24rem, 86vw);
+  padding: 1.35rem 1.45rem;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.96);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  pointer-events: auto;
+  text-align: center;
+}
+
+.tutorial-modal[hidden] {
+  display: none !important;
+}
+
+.tutorial-modal-title {
+  margin: 0 0 0.45rem;
+  font-size: 1.4rem;
+  color: #f1f5f9;
+}
+
+.tutorial-modal-body {
+  margin: 0 0 1.1rem;
+  font-size: 0.95rem;
+  color: #cbd5e1;
+  line-height: 1.5;
+}
+
+.tutorial-modal-cta {
+  display: inline-block;
+  padding: 0.55rem 1.4rem;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+}
+
+.tutorial-modal-cta:hover {
+  background: #1d4ed8;
+}
+
+.tutorial-modal-cta:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.tutorial-skip {
+  position: absolute;
+  bottom: 1.1rem;
+  right: 1.2rem;
+  padding: 0.45rem 0.95rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  background: rgba(15, 23, 42, 0.86);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  color: #cbd5e1;
+  pointer-events: auto;
+}
+
+.tutorial-skip:hover {
+  background: rgba(15, 23, 42, 0.96);
+  color: #f1f5f9;
+}
+
+.tutorial-skip[hidden] {
+  display: none !important;
+}

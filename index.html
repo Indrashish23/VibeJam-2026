@@ -356,6 +356,23 @@
         </div>
       </div>
       <div id="tweaks-panel-host"></div>
+      <div id="tutorial-overlay" class="tutorial-overlay" hidden aria-live="polite">
+        <div id="tutorial-prompt" class="tutorial-prompt" hidden>
+          <p id="tutorial-prompt-text" class="tutorial-prompt-text"></p>
+        </div>
+        <div
+          id="tutorial-modal"
+          class="tutorial-modal"
+          hidden
+          role="dialog"
+          aria-labelledby="tutorial-modal-title"
+        >
+          <h2 id="tutorial-modal-title" class="tutorial-modal-title"></h2>
+          <p id="tutorial-modal-body" class="tutorial-modal-body"></p>
+          <button type="button" id="tutorial-modal-cta" class="tutorial-modal-cta">Next</button>
+        </div>
+        <button type="button" id="tutorial-skip" class="tutorial-skip">Skip Tutorial</button>
+      </div>
     </div>
 
     <!-- Outside game-root so logs work on lobby + fixed overlay -->

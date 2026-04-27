@@ -3,6 +3,7 @@ import { loadUserSettings } from './userSettingsStorage'
 import { isMultiplayerTransportConfigured } from './net/transportConfig'
 import { PublicLobbyDirectoryClient, type PublicLobbyListing } from './net/publicLobbyDirectory'
 import { isMapId, MAP_DEFS, type MapId } from './maps'
+import { clearTutorialDone } from './tutorial'
 
 function randomRoomId(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
@@ -246,11 +247,7 @@ export function runLobbyGate(initialDisplayName: string): Promise<LobbyResult> {
     if (ui.replayTutorial) {
       ui.replayTutorial.onclick = () => {
         clearErr()
-        try {
-          localStorage.removeItem('vibejam_tutorial_done_v1')
-        } catch {
-          /* storage may be blocked */
-        }
+        clearTutorialDone()
         /* Force default map so the tutorial runs in the stage it was authored for. */
         finish({ mode: 'offline', mapId: 'default' })
       }
