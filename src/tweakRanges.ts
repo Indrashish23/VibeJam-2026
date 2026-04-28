@@ -218,6 +218,15 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   lightingUnlitMode: { min: 0, max: 1, step: 1 },
   lightingUnlitSelfModel: { min: 0, max: 1, step: 1 },
   lightingUnlitEnemyModel: { min: 0, max: 1, step: 1 },
+
+  lobbyMonkeyPosX: { min: -45, max: 45, step: 0.5 },
+  lobbyMonkeyPosY: { min: -25, max: 35, step: 0.5 },
+  lobbyMonkeyPosZ: { min: -45, max: 45, step: 0.5 },
+  lobbyMonkeyPitchDeg: { min: -180, max: 180, step: 1 },
+  lobbyMonkeyYawDeg: { min: -180, max: 180, step: 1 },
+  lobbyMonkeyRollDeg: { min: -180, max: 180, step: 1 },
+  lobbyMonkeyScale: { min: 0.15, max: 14, step: 0.05 },
+
   stunnedStarScaleMul: { min: 0.35, max: 2.2, step: 0.02 },
   stunnedStarSpinMul: { min: 0.45, max: 5, step: 0.05 },
   stunnedStarSpreadMul: { min: 0.45, max: 2.35, step: 0.02 },
@@ -621,6 +630,14 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   voiceHitImpactEchoDelaySec: 'Voice hit: echo delay (seconds)',
   hitMarkerSfxEnabled: 'Hitmarker SFX (0/1)',
   hitMarkerSfxVolumeMul: 'Hitmarker level ×',
+
+  lobbyMonkeyPosX: 'Lobby monkey X (world m)',
+  lobbyMonkeyPosY: 'Lobby monkey Y (world m)',
+  lobbyMonkeyPosZ: 'Lobby monkey Z (world m)',
+  lobbyMonkeyPitchDeg: 'Lobby monkey pitch °',
+  lobbyMonkeyYawDeg: 'Lobby monkey yaw °',
+  lobbyMonkeyRollDeg: 'Lobby monkey roll °',
+  lobbyMonkeyScale: 'Lobby monkey uniform scale',
 }
 
 /**
@@ -898,6 +915,14 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   hitMarkerSfxEnabled:
     '0 = off. 1 = play `hitmarker.ogg` when your hit registers (PvP shot connect or local vs bot).',
   hitMarkerSfxVolumeMul: 'Hitmarker gain × SFX chain (Settings → sound effects × Tweaks SFX).',
+
+  lobbyMonkeyPosX: 'Main-menu preview only: monkey prop world X (three.js units).',
+  lobbyMonkeyPosY: 'Lobby monkey vertical position on the arena.',
+  lobbyMonkeyPosZ: 'Monkey depth position in the lobby preview.',
+  lobbyMonkeyPitchDeg: 'Euler pitch degrees (applied with YXZ order).',
+  lobbyMonkeyYawDeg: 'Yaw to face the camera/preview.',
+  lobbyMonkeyRollDeg: 'Roll tilt for the lobby prop.',
+  lobbyMonkeyScale: 'Uniform scale of the lobby GLB (LobbyMonkeyModel.glb).',
 
   ambientIntensity: 'Fill light strength from all directions (shadow softness).',
   sunIntensity: 'Main directional light strength (contrast and shadows).',
@@ -1486,6 +1511,19 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'stunnedStarSpreadMul',
       'stunnedStarSpinMul',
       'stunnedStarScaleMul',
+    ],
+  },
+  {
+    id: 'lobbyMonkey',
+    title: 'Lobby (menu prop)',
+    keys: [
+      'lobbyMonkeyPosX',
+      'lobbyMonkeyPosY',
+      'lobbyMonkeyPosZ',
+      'lobbyMonkeyPitchDeg',
+      'lobbyMonkeyYawDeg',
+      'lobbyMonkeyRollDeg',
+      'lobbyMonkeyScale',
     ],
   },
 ]

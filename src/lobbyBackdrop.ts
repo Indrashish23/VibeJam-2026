@@ -9,14 +9,19 @@ import {
   Color,
   DirectionalLight,
   Group,
+  MathUtils,
+  Mesh,
   PerspectiveCamera,
   Scene,
   Vector3,
   WebGLRenderer,
 } from 'three'
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { gameConfig } from './gameConfig'
 import { createProceduralSky } from './skyDome'
 import { loadMap, type MapHandle } from './maps'
+
+const LOBBY_MONKEY_URL = new URL('../Assets/Props/LobbyMonkeyModel.glb', import.meta.url).href
 
 function applySunShadowFrustum(sun: DirectionalLight): void {
   const ext = Math.max(gameConfig.groundWidth, gameConfig.groundDepth) * 0.5 + gameConfig.blastMargin + 10
@@ -34,7 +39,15 @@ function aimPreviewCamera(cam: PerspectiveCamera): void {
   cam.lookAt(new Vector3(0, 1.25, 0))
 }
 
-export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<{ dispose: () => void }> {
+export type LobbyBackdropHandle = {
+  dispose: () => void
+  syncLobbyMonkeyFromConfig: () => void
+  camera: PerspectiveCamera
+  ambient: AmbientLight
+  sun: DirectionalLight
+}
+
+export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<LobbyBackdropHandle> {
   const scene = new Scene()
   scene.background = new Color(
     gameConfig.skyboxColorR,
@@ -88,6 +101,41 @@ export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<{ dispo
     }
   })
 
+  let monkeyRoot: Group | null = null
+  try {
+    const loader = new GLTFLoader()
+    const gltf = await loader.loadAsync(LOBBY_MONKEY_URL)
+    monkeyRoot = gltf.scene
+    hubRoot.add(monkeyRoot)
+    monkeyRoot.traverse((obj) => {
+      const m = obj as { isMesh?: boolean; castShadow?: boolean; receiveShadow?: boolean }
+      if (m.isMesh) {
+        m.castShadow = true
+        m.receiveShadow = true
+      }
+    })
+  } catch (err) {
+    console.warn('[lobbyBackdrop] Failed to load LobbyMonkeyModel.glb', err)
+  }
+
+  function syncLobbyMonkeyFromConfig(): void {
+    if (!monkeyRoot) return
+    monkeyRoot.position.set(
+      gameConfig.lobbyMonkeyPosX,
+      gameConfig.lobbyMonkeyPosY,
+      gameConfig.lobbyMonkeyPosZ,
+    )
+    monkeyRoot.rotation.set(
+      MathUtils.degToRad(gameConfig.lobbyMonkeyPitchDeg),
+      MathUtils.degToRad(gameConfig.lobbyMonkeyYawDeg),
+      MathUtils.degToRad(gameConfig.lobbyMonkeyRollDeg),
+      'YXZ',
+    )
+    monkeyRoot.scale.setScalar(Math.max(0.05, gameConfig.lobbyMonkeyScale))
+  }
+
+  syncLobbyMonkeyFromConfig()
+
   scene.add(camera)
 
   const clock = new Clock()
@@ -108,6 +156,7 @@ export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<{ dispo
 
     const dt = clock.getDelta()
     skyDome.update(dt, camera.position)
+    syncLobbyMonkeyFromConfig()
     renderer.render(scene, camera)
   }
 
@@ -122,11 +171,30 @@ export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<{ dispo
     scene.remove(ambient)
     scene.remove(sun)
     scene.remove(sun.target)
+    if (monkeyRoot) {
+      hubRoot.remove(monkeyRoot)
+      monkeyRoot.traverse((o) => {
+        const mo = o as Mesh
+        if (mo.isMesh) {
+          mo.geometry?.dispose()
+          const mats = mo.material
+          if (Array.isArray(mats)) mats.forEach((mat) => mat.dispose())
+          else mats?.dispose()
+        }
+      })
+      monkeyRoot = null
+    }
     scene.remove(hubRoot)
     scene.remove(camera)
     renderer.dispose()
     renderer.domElement.remove()
   }
 
-  return { dispose }
+  return {
+    dispose,
+    syncLobbyMonkeyFromConfig,
+    camera,
+    ambient,
+    sun,
+  }
 }

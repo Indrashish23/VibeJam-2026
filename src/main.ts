@@ -170,6 +170,7 @@ const winGameSplashSubEl = document.getElementById('win-game-splash-sub') as HTM
 const winReturnLobbyOverlayEl = document.getElementById(
   'win-return-lobby-overlay',
 ) as HTMLDivElement | null
+const lobbyWipeOverlayEl = document.getElementById('lobby-wipe-overlay') as HTMLDivElement | null
 const countdownOverlay = document.getElementById('countdown-overlay') as HTMLDivElement | null
 const countdownNumEl = document.getElementById('countdown-num') as HTMLSpanElement | null
 const dashScanEl = document.getElementById('dash-scanlines') as HTMLDivElement | null
@@ -421,6 +422,33 @@ const _moveDesired = new Vector3()
 
 function sleepMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/** Full-screen transition before `location.reload` when returning to the main menu. */
+function runLobbyExitWipeThen(done: () => void): void {
+  const el = lobbyWipeOverlayEl
+  if (!el) {
+    done()
+    return
+  }
+  el.hidden = false
+  el.classList.remove('lobby-wipe-overlay--animate')
+  void el.offsetWidth
+  el.classList.add('lobby-wipe-overlay--animate')
+  const stripes = el.querySelector('.lobby-wipe-stripes')
+  const finish = () => {
+    el.classList.remove('lobby-wipe-overlay--animate')
+    el.hidden = true
+    done()
+  }
+  let finished = false
+  const once = () => {
+    if (finished) return
+    finished = true
+    finish()
+  }
+  stripes?.addEventListener('animationend', once, { once: true })
+  window.setTimeout(once, 950)
 }
 
 function runUsernameGate(): Promise<void> {
@@ -2042,6 +2070,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   async function concludeRoundElimination(iWonRound: boolean): Promise<void> {
+    if (opponentForfeitHandled) return
     if (seriesTransitionActive || matchOutcome) return
     hideKoAnnouncementImmediate()
     console.info('[matchEnd] concludeRoundElimination', {
@@ -2058,6 +2087,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       if (iWonRound) tutorialBotRingouts += 1
       await playGameOutcomeSplashSequence(iWonRound ? 'win' : 'lose')
       if (epochAtStart !== pvpMatchEpoch) return
+      if (opponentForfeitHandled) return
       if (iWonRound) {
         await sleepMs(2000)
         if (!applyMatchEndCore('win')) return
@@ -2232,6 +2262,27 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (matchEndLobbyBtnEl) matchEndLobbyBtnEl.hidden = false
   }
 
+  /** Hide HUD layers that fight with the single match-result / forfeit surface. */
+  function squelchCompetingEndOfMatchUi(): void {
+    if (matchCancelledOverlay) matchCancelledOverlay.hidden = true
+    if (winReturnLobbyOverlayEl) {
+      winReturnLobbyOverlayEl.hidden = true
+      winReturnLobbyOverlayEl.classList.remove('win-return-lobby-overlay--flash')
+    }
+    hideWinGameSplash()
+    hideKoAnnouncementImmediate()
+    if (countdownOverlay) {
+      countdownOverlay.hidden = true
+      countdownOverlay.classList.remove('countdown-overlay--pulse', 'countdown-overlay--opaque')
+    }
+    hideLeaveMatchDialog()
+    if (mpToast) {
+      mpToast.hidden = true
+      mpToast.classList.remove('mp-toast--bad')
+    }
+    if (stunnedOverlayEl) stunnedOverlayEl.hidden = true
+  }
+
   function returnToLobbyReload(notifyOpponent: boolean = false): void {
     leavingToLobby = true
     if (notifyOpponent && isOnline && lobby.mode === 'online' && (mpSocket?.readyState === 1 || rtcGame)) {
@@ -2252,14 +2303,17 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       /* ignore */
     }
     const delay = notifyOpponent ? 150 : 80
-    window.setTimeout(() => {
-      window.location.reload()
-    }, delay)
+    runLobbyExitWipeThen(() => {
+      window.setTimeout(() => {
+        window.location.reload()
+      }, delay)
+    })
   }
 
   function showOpponentForfeitAndReturn(): void {
     if (opponentForfeitHandled) return
     opponentForfeitHandled = true
+    squelchCompetingEndOfMatchUi()
     clearMovementKeys()
     hideWinGameSplash()
     winFinisher = null
@@ -2499,7 +2553,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
 
     if (ty === 'authMatchEnd' && lobby.mode === 'online' && typeof data.winnerRole === 'string') {
-      if (!matchOutcome && !seriesTransitionActive) {
+      if (!opponentForfeitHandled && !matchOutcome && !seriesTransitionActive) {
         const wr =
           data.winnerRole === 'host' || data.winnerRole === 'guest' ? data.winnerRole : undefined
         if (wr) void concludeRoundElimination(wr === lobby.role)
@@ -2517,12 +2571,21 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
 
     if (ty === 'matchCancelled' && lobby.mode === 'online') {
-      if (matchCancelledOverlay) {
+      if (opponentForfeitHandled) return
+      if (
+        matchEndOverlay &&
+        !matchEndOverlay.hidden &&
+        matchEndCardEl?.classList.contains('match-end-card--forfeit')
+      ) {
+        return
+      }
+      if (matchCancelledOverlay && !matchOutcome && !seriesTransitionActive) {
         try {
           controls.unlock()
         } catch {
           /* ignore */
         }
+        squelchCompetingEndOfMatchUi()
         matchCancelledOverlay.hidden = false
         requestAnimationFrame(() => matchCancelledOkBtn?.focus())
       } else {
@@ -4049,6 +4112,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   function endMatch(outcome: 'win' | 'lose'): void {
     if (!applyMatchEndCore(outcome)) return
+    squelchCompetingEndOfMatchUi()
     if (matchEndOverlay) matchEndOverlay.hidden = false
     if (matchEndTitle) {
       matchEndTitle.textContent = outcome === 'win' ? 'You win!' : 'You lose!'
@@ -5535,6 +5599,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   const tweaksHost = document.getElementById('tweaks-panel-host')
   if (tweaksHost) {
+    tweaksHost.replaceChildren()
     mountTweaksPanel(tweaksHost, {
       controls,
       camera,
@@ -5567,6 +5632,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         'chargeHudMicRmsSpan',
         'chargeHudMicSmoothing',
         'chargeHudMicPulseScale',
+        'lobbyMonkeyPosX',
+        'lobbyMonkeyPosY',
+        'lobbyMonkeyPosZ',
+        'lobbyMonkeyPitchDeg',
+        'lobbyMonkeyYawDeg',
+        'lobbyMonkeyRollDeg',
+        'lobbyMonkeyScale',
       ],
       syncVisualsFromConfig: () => {
         skyDome.syncFromConfig()

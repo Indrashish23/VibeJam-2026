@@ -908,6 +908,56 @@ body:has(#lobby-overlay:not([hidden])) #tweaks-panel-host {
   color: rgba(226, 232, 240, 0.92);
 }
 
+/* Full-screen transition before reload when returning to main menu */
+.lobby-wipe-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 320000;
+  pointer-events: none;
+  overflow: hidden;
+  background: transparent;
+}
+
+.lobby-wipe-overlay[hidden] {
+  display: none !important;
+}
+
+.lobby-wipe-stripes {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: min(52vw, 520px);
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-end;
+  gap: clamp(10px, 2.8vw, 36px);
+  padding-right: clamp(12px, 4vw, 52px);
+  transform: translateX(105%);
+}
+
+.lobby-wipe-bar {
+  flex: 0 0 clamp(11px, 2.4vw, 28px);
+  height: 100%;
+  background: #ffffff;
+  box-shadow:
+    0 0 18px rgba(255, 255, 255, 0.75),
+    0 0 42px rgba(255, 255, 255, 0.35);
+}
+
+.lobby-wipe-overlay--animate .lobby-wipe-stripes {
+  animation: lobby-wipe-rtl 0.68s cubic-bezier(0.42, 0, 0.17, 1) forwards;
+}
+
+@keyframes lobby-wipe-rtl {
+  from {
+    transform: translateX(105%);
+  }
+  to {
+    transform: translateX(-240%);
+  }
+}
+
 .rematch-sequence {
   position: absolute;
   inset: 0;

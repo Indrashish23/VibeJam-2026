@@ -4,7 +4,9 @@ import { isMultiplayerTransportConfigured } from './net/transportConfig'
 import { PublicLobbyDirectoryClient, type PublicLobbyListing } from './net/publicLobbyDirectory'
 import { isMapId, MAP_DEFS, type MapId } from './maps'
 import { clearTutorialDone, TUTORIAL_ENABLED } from './tutorial'
+import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js'
 import { mountLobbyBackdrop } from './lobbyBackdrop'
+import { mountTweaksPanel } from './tweaksPanel'
 
 function randomRoomId(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
@@ -113,6 +115,32 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
 
   const backdrop = await mountLobbyBackdrop(gameRoot)
 
+  const tweaksHost = document.getElementById('tweaks-panel-host')
+  let disposeLobbyTweaks: (() => void) | null = null
+  if (tweaksHost) {
+    const controls = new PointerLockControls(backdrop.camera, gameRoot)
+    const mounted = mountTweaksPanel(tweaksHost, {
+      controls,
+      camera: backdrop.camera,
+      ambient: backdrop.ambient,
+      sun: backdrop.sun,
+      keysThatSkipRoundReset: [
+        'lobbyMonkeyPosX',
+        'lobbyMonkeyPosY',
+        'lobbyMonkeyPosZ',
+        'lobbyMonkeyPitchDeg',
+        'lobbyMonkeyYawDeg',
+        'lobbyMonkeyRollDeg',
+        'lobbyMonkeyScale',
+      ],
+      syncVisualsFromConfig: () => {
+        backdrop.syncLobbyMonkeyFromConfig()
+      },
+      onToggle: () => {},
+    })
+    disposeLobbyTweaks = () => mounted.dispose()
+  }
+
   const ui = wireLobbyDom()
   let displayName = initialDisplayName
 
@@ -138,6 +166,9 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
       if (settled) return
       settled = true
       stopBrowserClient()
+      disposeLobbyTweaks?.()
+      disposeLobbyTweaks = null
+      tweaksHost?.replaceChildren()
       backdrop.dispose()
       ui.overlay.hidden = true
       resolve(result)
