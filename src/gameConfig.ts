@@ -262,20 +262,20 @@ export const defaultGameConfig = {
   /** Extra projectile size bonus at full charge `t=1` (0.2 = +20%, 1 = +100%). */
   projectileSizeChargeMaxBonus: 0.57,
   /** Horizontal knockback on player when bot lands a hit (non-parried). */
-  knockbackOnPlayer: 20,
+  knockbackOnPlayer: 60,
   /** Converts horizontal knock impulse into upward vy (pop when hurt; tune with capsule slide). */
-  knockVictimLiftMul: 0.52,
+  knockVictimLiftMul: 0.74,
   /** Extra vy when the shot connects from below you (uses aim vector Y from shot → victim). */
-  knockVictimBelowAimMul: 0.62,
+  knockVictimBelowAimMul: 0.88,
   /** Extra bot vy from knock strength (launch arc vs sliding on the deck). */
   knockBotVertBoostMul: 0.4,
   /** Extra bot vy when the shot is from below (normalized fist→body Y, × strength). */
   knockBotBelowAimMul: 0.58,
   /** Base knock on bot (multiplied by voice `t` lerp). */
-  knockbackOnBot: 62,
+  knockbackOnBot: 60,
   /** At quiet voice (t=0) knock = base × this; at loud (t=1) × that. */
-  knockVoiceMinMul: 0.4,
-  knockVoiceMaxMul: 1.05,
+  knockVoiceMinMul: 0.38,
+  knockVoiceMaxMul: 1,
   /** PvE: percent added when the bot’s fist hits you. */
   botFistPercentGain: 12,
   /** 0..1: bot fist knock lerp (uses knockVoice min/max). */
@@ -289,13 +289,13 @@ export const defaultGameConfig = {
   /** Minimum charge bar (0–1) before a release spawns a fist. */
   voiceMinChargeToFire: 0.36,
   /** Percent added to victim at minimum valid charge (at voiceMinChargeToFire). */
-  percentGainMin: 4,
+  percentGainMin: 7.5,
   /** Percent added at full charge (1). */
-  percentGainMax: 22,
+  percentGainMax: 27.5,
   /** Knock scale floor from victim launch percent (at 0%). */
   launchKnockFloor: 0.04,
   /** Multiplier on (percent/100)^exponent for knock scaling. */
-  launchKnockScale: 10,
+  launchKnockScale: 7.5,
   /** Exponent on normalized percent for launch knock (higher = gentler at low %). */
   launchKnockExponent: 2.15,
   /** Horizontal knock decay while tumbling from a hit (lower = flies farther before sliding). */
