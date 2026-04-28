@@ -190,16 +190,12 @@ const hudViewportEl = document.getElementById('hud-viewport') as HTMLDivElement 
 const percentHudEl = document.getElementById('percent-hud') as HTMLDivElement | null
 const hudStockYouNumEl = document.getElementById('hud-stock-you-num') as HTMLSpanElement | null
 const hudStockYouWrapEl = document.getElementById('hud-stock-you-wrap') as HTMLDivElement | null
-const hudStockFoeNumEl = document.getElementById('hud-stock-foe-num') as HTMLSpanElement | null
-const hudStockFoeWrapEl = document.getElementById('hud-stock-foe-wrap') as HTMLDivElement | null
 const hudLeftStackEl = document.getElementById('hud-left-stack') as HTMLDivElement | null
 const hudDamagePctShellEl = document.getElementById('hud-damage-pct-shell') as HTMLSpanElement | null
 const hudPlayerCardEl = document.getElementById('hud-player-card') as HTMLDivElement | null
 const hudPortraitColumnEl = document.getElementById('hud-portrait-column') as HTMLDivElement | null
 const hudPortraitWrapShellEl = document.getElementById('hud-portrait-wrap-shell') as HTMLDivElement | null
 const hudStockYouShellEl = document.getElementById('hud-stock-you-shell') as HTMLDivElement | null
-const hudStockFoeAnchorEl = document.getElementById('hud-stock-foe-anchor') as HTMLDivElement | null
-const hudStockFoeShellEl = document.getElementById('hud-stock-foe-shell') as HTMLDivElement | null
 const koAnnounceOverlayEl = document.getElementById('ko-announce-overlay') as HTMLDivElement | null
 const koAnnounceNameEl = document.getElementById('ko-announce-name') as HTMLParagraphElement | null
 const koAnnounceStockRowEl = document.getElementById('ko-announce-stock-row') as HTMLDivElement | null
@@ -360,21 +356,6 @@ function syncUiHudChrome(): void {
     g.hudStockYouShellScale,
   )
   hudStockYouShellEl?.style.setProperty('--hud-stock-you-font-scale', String(g.hudStockYouFontScale))
-
-  hudStockFoeShellEl?.style.setProperty('--hud-stock-foe-font-scale', String(g.hudStockFoeFontScale))
-  setHudTransform(
-    hudStockFoeShellEl,
-    g.hudStockFoeShellOffsetXRem,
-    g.hudStockFoeShellOffsetYRem,
-    g.hudStockFoeShellOffsetZPx,
-    g.hudStockFoeShellScale,
-  )
-
-  if (hudStockFoeAnchorEl) {
-    hudStockFoeAnchorEl.style.left = `${g.hudStockFoeAnchorLeftRem}rem`
-    hudStockFoeAnchorEl.style.bottom = `${g.hudStockFoeAnchorBottomRem}rem`
-    hudStockFoeAnchorEl.style.transform = `translate3d(0,0,${g.hudStockFoeAnchorOffsetZPx}px) scale(${g.hudStockFoeAnchorScale})`
-  }
 }
 
 function syncTweaksPanelChrome(): void {
@@ -3630,7 +3611,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   function syncStockBadgeNums(): void {
     if (hudStockYouNumEl) hudStockYouNumEl.textContent = String(Math.max(0, stocksYou))
-    if (hudStockFoeNumEl) hudStockFoeNumEl.textContent = String(Math.max(0, stocksFoe))
   }
 
   function syncStocksHud(): void {
@@ -3638,7 +3618,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   function flashVictimStockBadge(who: 'you' | 'foe'): void {
-    const el = who === 'you' ? hudStockYouWrapEl : hudStockFoeWrapEl
+    if (who !== 'you') return
+    const el = hudStockYouWrapEl
     if (!el) return
     el.classList.remove('hud-stock-badge--flash')
     void el.offsetWidth
@@ -3704,7 +3685,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
       const syncVictimBadge = (n: number): void => {
         if (victim === 'you' && hudStockYouNumEl) hudStockYouNumEl.textContent = String(n)
-        else if (victim === 'foe' && hudStockFoeNumEl) hudStockFoeNumEl.textContent = String(n)
       }
 
       let n = stocksBefore
@@ -3717,7 +3697,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         koAnnounceStockNumEl.classList.remove('hud-stock-num--tick')
         void koAnnounceStockNumEl.offsetWidth
         koAnnounceStockNumEl.classList.add('hud-stock-num--tick')
-        const badgeNum = victim === 'you' ? hudStockYouNumEl : hudStockFoeNumEl
+        const badgeNum = victim === 'you' ? hudStockYouNumEl : null
         badgeNum?.classList.remove('hud-stock-num--tick')
         void badgeNum?.offsetWidth
         badgeNum?.classList.add('hud-stock-num--tick')

@@ -1230,7 +1230,7 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   right: var(--percent-hud-right);
   left: var(--percent-hud-left);
   bottom: var(--percent-hud-bottom);
-  width: min(44rem, calc(100vw - 2.5rem));
+  width: min(44rem, calc(100vw - 2.5rem), min(92vmin, 56rem));
   z-index: 50;
   pointer-events: none;
   display: flex;
@@ -1254,7 +1254,6 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
 }
 
 .game-root.game-root--hud-drag .percent-hud,
-.game-root.game-root--hud-drag .hud-stock-foe-anchor,
 .game-root.game-root--hud-drag #charge-bar-wrap {
   pointer-events: auto !important;
   cursor: grab;
@@ -1263,7 +1262,6 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
 }
 
 .game-root.game-root--hud-drag .percent-hud:active,
-.game-root.game-root--hud-drag .hud-stock-foe-anchor:active,
 .game-root.game-root--hud-drag #charge-bar-wrap:active {
   cursor: grabbing;
 }
@@ -1276,22 +1274,9 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   gap: 0.35rem;
 }
 
-.hud-stock-foe-anchor {
-  position: absolute;
-  left: 1rem;
-  bottom: 2.2rem;
-  z-index: 51;
-  pointer-events: none;
-  transform-origin: bottom left;
-}
-
-.hud-stock-foe-shell {
-  transform-origin: bottom left;
-}
-
 .hud-stock-x {
   font-family: system-ui, sans-serif;
-  font-size: clamp(1.05rem, 2.8vw, 1.45rem);
+  font-size: clamp(1.05rem, min(2.8vw, 3.2vmin), 1.45rem);
   font-weight: 800;
   color: #f8fafc;
   line-height: 1;
@@ -1300,7 +1285,7 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
 
 .hud-stock-num {
   font-family: 'Tourney', system-ui, sans-serif;
-  font-size: clamp(1.25rem, 3.2vw, 1.75rem);
+  font-size: clamp(1.25rem, min(3.2vw, 3.8vmin), 1.75rem);
   font-weight: 700;
   font-style: italic;
   font-variant-numeric: tabular-nums;
@@ -1339,17 +1324,10 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   margin-bottom: -0.15rem;
 }
 
-.hud-stock-badge--foe {
-  border-color: rgba(251, 113, 133, 0.88);
-  box-shadow:
-    3px 4px 0 rgba(0, 0, 0, 0.65),
-    0 0 14px rgba(244, 63, 94, 0.22);
-}
-
 .hud-stock-you-shell .hud-stock-x {
   font-family: system-ui, sans-serif;
   font-size: calc(
-    clamp(1.05rem, 2.8vw, 1.45rem) * var(--hud-stock-you-font-scale, 1)
+    clamp(1.05rem, min(2.8vw, 3.2vmin), 1.45rem) * var(--hud-stock-you-font-scale, 1)
   );
   font-weight: 800;
   color: #f8fafc;
@@ -1360,31 +1338,7 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
 .hud-stock-you-shell .hud-stock-num {
   font-family: 'Tourney', system-ui, sans-serif;
   font-size: calc(
-    clamp(1.25rem, 3.2vw, 1.75rem) * var(--hud-stock-you-font-scale, 1)
-  );
-  font-weight: 700;
-  font-style: italic;
-  font-variant-numeric: tabular-nums;
-  color: #f8fafc;
-  line-height: 1;
-  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.75);
-}
-
-.hud-stock-foe-shell .hud-stock-x {
-  font-family: system-ui, sans-serif;
-  font-size: calc(
-    clamp(1.05rem, 2.8vw, 1.45rem) * var(--hud-stock-foe-font-scale, 1)
-  );
-  font-weight: 800;
-  color: #f8fafc;
-  line-height: 1;
-  user-select: none;
-}
-
-.hud-stock-foe-shell .hud-stock-num {
-  font-family: 'Tourney', system-ui, sans-serif;
-  font-size: calc(
-    clamp(1.25rem, 3.2vw, 1.75rem) * var(--hud-stock-foe-font-scale, 1)
+    clamp(1.25rem, min(3.2vw, 3.8vmin), 1.75rem) * var(--hud-stock-you-font-scale, 1)
   );
   font-weight: 700;
   font-style: italic;
@@ -1449,7 +1403,7 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   align-items: flex-end;
   gap: 0.18rem;
   min-width: 0;
-  min-height: clamp(11rem, 28vw, 18rem);
+  min-height: clamp(11rem, min(28vw, 32vmin), 18rem);
 }
 
 .hud-smoke-canvas {
@@ -1468,8 +1422,18 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
 
 .hud-damage-pct-shell {
   display: block;
-  align-self: flex-end;
   z-index: 1;
+}
+
+/* Anchor left (portrait screen-left, % grows right): fixed left edge of digits. */
+.percent-hud--anchor-left .hud-damage-pct-shell {
+  align-self: flex-start;
+  transform-origin: 0 80%;
+}
+
+/* Anchor right: fixed right edge of digits (grow toward screen left). */
+.percent-hud:not(.percent-hud--anchor-left) .hud-damage-pct-shell {
+  align-self: flex-end;
   transform-origin: 100% 80%;
 }
 
@@ -1482,11 +1446,13 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   left: var(--hud-damage-pct-ox);
   top: var(--hud-damage-pct-oy);
   z-index: 1;
-  align-self: flex-end;
-  margin-right: -0.04em;
   font-family: 'Tourney', Impact, sans-serif;
   font-size: calc(
-    clamp(96px, 17vw, 170px) * var(--hud-damage-pct-scale) * var(--hud-damage-pct-font-clamp-mul, 1)
+    clamp(
+        96px,
+        min(17vw, 14vmin),
+        min(170px, 20vmin)
+      ) * var(--hud-damage-pct-scale) * var(--hud-damage-pct-font-clamp-mul, 1)
   );
   font-style: italic;
   font-weight: 700;
@@ -1497,13 +1463,28 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   text-shadow:
     4px 5px 0 rgba(0, 0, 0, 0.92),
     0 0 28px rgba(0, 0, 0, 0.55);
+}
+
+.percent-hud--anchor-left .hud-damage-pct {
+  text-align: left;
+  align-self: flex-start;
+  transform-origin: 0 80%;
+  margin-left: -0.04em;
+  margin-right: 0;
+}
+
+.percent-hud:not(.percent-hud--anchor-left) .hud-damage-pct {
+  text-align: right;
+  align-self: flex-end;
   transform-origin: 100% 80%;
+  margin-right: -0.04em;
+  margin-left: 0;
 }
 
 .hud-player-card {
   position: relative;
   z-index: 1;
-  width: min(28rem, 72vw);
+  width: min(28rem, min(72vw, 85vmin));
   max-width: 100%;
 }
 
@@ -1520,7 +1501,9 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   right: 8%;
   bottom: 14%;
   font-family: 'Krona One', sans-serif;
-  font-size: calc(clamp(0.62rem, 1.65vw, 0.82rem) * var(--hud-display-name-font-scale));
+  font-size: calc(
+    clamp(0.62rem, min(1.65vw, 2.1vmin), 0.82rem) * var(--hud-display-name-font-scale)
+  );
   font-weight: 400;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1538,7 +1521,7 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
 .hud-portrait-wrap {
   --hud-hit-shake: 12px;
   flex: 0 0 auto;
-  width: clamp(7.5rem, 21vw, 13rem);
+  width: clamp(7.5rem, min(21vw, 24vmin), 13rem);
   margin-bottom: -0.35rem;
   margin-left: -0.35rem;
   transform-origin: 65% 85%;
