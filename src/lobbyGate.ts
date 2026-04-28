@@ -365,6 +365,7 @@ export async function runLobbyGate(
       queueUi.cancel?.addEventListener('click', onCancel)
 
       const region = getCoarseRegion()
+      console.info('[quickMatch] starting queue', { region, mapId, playerName })
       const queueHandle = runQuickMatchQueue({
         playerName,
         region,

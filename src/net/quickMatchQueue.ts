@@ -1,6 +1,12 @@
 import { createMultiplayerSocket, type MultiplayerWire } from './multiplayerSocket'
 import { type CoarseRegion } from './regionTag'
 
+const DEBUG_QM = true
+function qmLog(...args: unknown[]): void {
+  if (!DEBUG_QM) return
+  console.info('[quickMatch]', ...args)
+}
+
 /**
  * Queue room id for a coarse region (or `global` for the cross-region fallback).
  * Sharding by region keeps gossip O(N) per region and lets the relay edge route
@@ -279,7 +285,13 @@ export function runQuickMatchQueue(opts: QuickMatchOptions): QuickMatchHandle {
   function attachRoomHandlers(room: QueueRoom): void {
     room.socket.addEventListener('open', () => {
       room.open = true
-      sendOnRoom(room, helloPayload())
+      qmLog(`open ${room.label} room=${room.roomId} peer=${peerId}`)
+      /* Mirror the legacy single-room behaviour: a full `sendHello` not only sends the
+       * hello on every open room but also seeds our own roster entry and runs a pair
+       * proposal pass — without this, a tab that opens first sat with an empty roster
+       * (and never proposed a pair) until either a peer's hello arrived or the next
+       * 3s heartbeat tick fired. */
+      sendHello()
     })
     room.socket.addEventListener('message', (ev: Event) => {
       const me = ev as MessageEvent
@@ -291,12 +303,16 @@ export function runQuickMatchQueue(opts: QuickMatchOptions): QuickMatchHandle {
         return
       }
       const parsed = parseQueueMessage(raw)
-      if (parsed) handleMessage(parsed)
+      if (!parsed) return
+      qmLog(`recv ${room.label} ${parsed.type} from=${'peerId' in parsed ? parsed.peerId : '(pair)'}`)
+      handleMessage(parsed)
     })
     room.socket.addEventListener('error', () => {
+      qmLog(`error ${room.label} room=${room.roomId}`)
       /* Errors during quick match aren't fatal — wait out the timeout and fall back to bot. */
     })
     room.socket.addEventListener('close', () => {
+      qmLog(`close ${room.label} room=${room.roomId}`)
       room.open = false
     })
   }
