@@ -111,7 +111,7 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
   gameRoot.hidden = false
   gameRoot.classList.add('game-root--lobby')
 
-  const backdrop = await mountLobbyBackdrop(gameRoot, readStoredMapId())
+  const backdrop = await mountLobbyBackdrop(gameRoot)
 
   const ui = wireLobbyDom()
   let displayName = initialDisplayName
@@ -217,9 +217,7 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
       }
       ui.mapSelect.value = readStoredMapId()
       ui.mapSelect.addEventListener('change', () => {
-        const id = selectedMapId(ui)
-        saveStoredMapId(id)
-        void backdrop.setMapId(id)
+        saveStoredMapId(selectedMapId(ui))
       })
     }
 

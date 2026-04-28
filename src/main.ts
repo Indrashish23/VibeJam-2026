@@ -762,7 +762,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   function isUnderLitGltfArenaMap(node: Object3D): boolean {
     let cur: Object3D | null = node
     while (cur) {
-      if (cur.name === 'map:island' || cur.name === 'map:godotExport') return true
+      if (cur.name === 'map:godotExport') return true
       cur = cur.parent
     }
     return false

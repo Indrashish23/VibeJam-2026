@@ -701,6 +701,27 @@ body {
   display: none;
 }
 
+/* Play menu: hide gameplay HUD and settings chrome; only lobby UI + default-arena canvas stay visible */
+body:has(#lobby-overlay:not([hidden])) #game-root.game-root--lobby > *:not(canvas) {
+  display: none !important;
+}
+
+body:has(#lobby-overlay:not([hidden])) #game-root.game-root--lobby canvas.lobby-backdrop-canvas {
+  pointer-events: none;
+}
+
+body:has(#lobby-overlay:not([hidden])) .user-settings-wrap {
+  display: none !important;
+}
+
+body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
+  display: none !important;
+}
+
+body:has(#lobby-overlay:not([hidden])) #tweaks-panel-host {
+  display: none !important;
+}
+
 .game-root canvas {
   display: block;
   width: 100%;

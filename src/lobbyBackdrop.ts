@@ -1,6 +1,6 @@
 /**
- * Non-playable 3D preview for the main menu: same map lighting + procedural sky as gameplay,
- * no avatars, weapons, or banana world (those are only created in `initGame`).
+ * Non-playable 3D preview for the main menu: always the default arena + lights + procedural sky.
+ * Match map choice is separate; gameplay entities only exist after `initGame`.
  */
 import {
   AmbientLight,
@@ -16,12 +16,7 @@ import {
 } from 'three'
 import { gameConfig } from './gameConfig'
 import { createProceduralSky } from './skyDome'
-import { loadMap, type MapHandle, type MapId } from './maps'
-
-type LobbyBackdropHandle = {
-  dispose: () => void
-  setMapId: (id: MapId) => Promise<void>
-}
+import { loadMap, type MapHandle } from './maps'
 
 function applySunShadowFrustum(sun: DirectionalLight): void {
   const ext = Math.max(gameConfig.groundWidth, gameConfig.groundDepth) * 0.5 + gameConfig.blastMargin + 10
@@ -33,16 +28,13 @@ function applySunShadowFrustum(sun: DirectionalLight): void {
   cam.updateProjectionMatrix()
 }
 
-/** Elevated diagonal view of the arena / map origin (menu is non-interactive). */
+/** Elevated diagonal view of the arena (menu is non-interactive). */
 function aimPreviewCamera(cam: PerspectiveCamera): void {
   cam.position.set(18, 7.5, 20)
   cam.lookAt(new Vector3(0, 1.25, 0))
 }
 
-export async function mountLobbyBackdrop(
-  gameRoot: HTMLElement,
-  initialMapId: MapId,
-): Promise<LobbyBackdropHandle> {
+export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<{ dispose: () => void }> {
   const scene = new Scene()
   scene.background = new Color(
     gameConfig.skyboxColorR,
@@ -87,27 +79,14 @@ export async function mountLobbyBackdrop(
 
   const skyDome = createProceduralSky(scene)
 
-  let mapHandle: MapHandle | null = null
-  let currentId: MapId | null = null
-
-  async function applyMap(id: MapId): Promise<void> {
-    if (currentId === id && mapHandle) return
-    if (mapHandle) {
-      mapHandle.dispose()
-      mapHandle = null
+  const mapHandle: MapHandle = await loadMap('default', scene, hubRoot)
+  hubRoot.traverse((obj) => {
+    const m = obj as { isMesh?: boolean; castShadow?: boolean; receiveShadow?: boolean }
+    if (m.isMesh) {
+      m.castShadow = true
+      m.receiveShadow = true
     }
-    mapHandle = await loadMap(id, scene, hubRoot)
-    currentId = id
-    hubRoot.traverse((obj) => {
-      const m = obj as { isMesh?: boolean; castShadow?: boolean; receiveShadow?: boolean }
-      if (m.isMesh) {
-        m.castShadow = true
-        m.receiveShadow = true
-      }
-    })
-  }
-
-  await applyMap(initialMapId)
+  })
 
   scene.add(camera)
 
@@ -138,9 +117,7 @@ export async function mountLobbyBackdrop(
   function dispose(): void {
     cancelAnimationFrame(rafId)
     window.removeEventListener('resize', resize)
-    mapHandle?.dispose()
-    mapHandle = null
-    currentId = null
+    mapHandle.dispose()
     skyDome.dispose()
     scene.remove(ambient)
     scene.remove(sun)
@@ -151,8 +128,5 @@ export async function mountLobbyBackdrop(
     renderer.domElement.remove()
   }
 
-  return {
-    dispose,
-    setMapId: applyMap,
-  }
+  return { dispose }
 }
