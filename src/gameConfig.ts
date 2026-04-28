@@ -86,7 +86,7 @@ export const defaultGameConfig = {
   postDitherEnabled: 1,
   /** Post dither strength 0–1 (maps to shader; higher = grainier / more retro crunch). */
   postDitherStrength: 0.32,
-  /** Launch % at which danger vignette, smoke, and red tint begin (local player). */
+  /** Launch % at which danger vignette and red tint begin on your screen; foot smoke uses same threshold but only renders on the opponent model (enemy sees yours; you see theirs). */
   dangerFxStartPercent: 50,
   /** Skybox base color channels (0–1) for the procedural sky dome. */
   skyboxColorR: 0.14,
@@ -107,6 +107,10 @@ export const defaultGameConfig = {
   ambientIntensity: 5,
   /** Key directional sun strength (shadow caster). */
   sunIntensity: 13.7,
+  /** Directional sun position (world units); shared by match + lobby preview. */
+  sunPosX: 58,
+  sunPosY: 34,
+  sunPosZ: 42,
   /** 1 = force unlit materials (ignores scene lighting) for flat readability/debugging. */
   lightingUnlitMode: 0,
   /** 1 = force unlit materials on the local player avatar only. */
@@ -665,6 +669,15 @@ export const defaultGameConfig = {
   hitMarkerSfxEnabled: 1,
   /** Gain × for hitmarker × SFX chain. */
   hitMarkerSfxVolumeMul: 0.55,
+
+  /** 1 = hide main-menu HTML card (buttons) for screenshots; Tweaks panel still works. */
+  hideLobbyUi: 0,
+  /** Lobby monkey: faceted per-face shading. */
+  lobbyMonkeyFlatShading: 1,
+  /** Lobby monkey: nearest-neighbor maps (chunky texels). */
+  lobbyMonkeyTexPixelated: 1,
+  /** Lobby monkey: 4× downscale embedded maps (reload menu after toggling). */
+  lobbyMonkeyTexDownscale: 1,
 
   /** Menu-only: lobby 3D preview monkey position (world units). */
   lobbyMonkeyPosX: 14.5,

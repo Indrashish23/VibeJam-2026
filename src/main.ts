@@ -1601,11 +1601,12 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     'radial-gradient(ellipse 70% 85% at 50% 52%, rgba(255,85,70,0.72) 0%, rgba(200,30,25,0.35) 45%, transparent 70%)'
   gameRoot.appendChild(dangerLaunchTintEl)
 
-  const dangerSmokeCount = 16
-  const dangerSmokePos = new Float32Array(dangerSmokeCount * 3)
-  const dangerSmokeGeom = new BufferGeometry()
-  dangerSmokeGeom.setAttribute('position', new BufferAttribute(dangerSmokePos, 3))
-  const dangerSmokeMat = new PointsMaterial({
+  /** High-% foot smoke: only at the opponent’s world position (local player never sees it on self). */
+  const opponentDangerSmokeCount = 16
+  const opponentDangerSmokePos = new Float32Array(opponentDangerSmokeCount * 3)
+  const opponentDangerSmokeGeom = new BufferGeometry()
+  opponentDangerSmokeGeom.setAttribute('position', new BufferAttribute(opponentDangerSmokePos, 3))
+  const opponentDangerSmokeMat = new PointsMaterial({
     color: new Color(0xa89898),
     size: 0.58,
     transparent: true,
@@ -1614,11 +1615,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     depthTest: false,
     sizeAttenuation: true,
   })
-  const dangerSmoke = new Points(dangerSmokeGeom, dangerSmokeMat)
-  dangerSmoke.frustumCulled = false
-  dangerSmoke.renderOrder = 50
-  dangerSmoke.visible = false
-  scene.add(dangerSmoke)
+  const opponentDangerSmoke = new Points(opponentDangerSmokeGeom, opponentDangerSmokeMat)
+  opponentDangerSmoke.frustumCulled = false
+  opponentDangerSmoke.renderOrder = 50
+  opponentDangerSmoke.visible = false
+  scene.add(opponentDangerSmoke)
 
   let vy = 0
   let grounded = false
@@ -5025,8 +5026,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (over <= 0.001) {
       dangerAuraOverlay.style.opacity = '0'
       dangerLaunchTintEl.style.opacity = '0'
-      dangerSmoke.visible = false
-      dangerSmokeMat.opacity = 0
       return
     }
     /* Full intensity by +100% past the start threshold (e.g. 50→150%). */
@@ -5038,21 +5037,35 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
     const tint = Math.min(0.52, 0.06 + t * 0.32 + pulse2 * t * 0.14)
     dangerLaunchTintEl.style.opacity = tint.toFixed(3)
+  }
 
-    dangerSmoke.visible = true
-    dangerSmokeMat.opacity = Math.min(0.55, 0.08 + t * 0.32)
-    const footY = feetY()
-    for (let i = 0; i < dangerSmokeCount; i++) {
+  /** Foot smoke for the opponent when their launch % is high (they do not see this on their own screen). */
+  function updateOpponentDangerSmoke(nowSec: number): void {
+    const start = Math.max(0, Math.min(500, gameConfig.dangerFxStartPercent))
+    const over = Math.max(0, enemyPercent - start)
+    if (over <= 0.001) {
+      opponentDangerSmoke.visible = false
+      opponentDangerSmokeMat.opacity = 0
+      return
+    }
+    const t = Math.min(1, over / 100)
+    opponentDangerSmoke.visible = true
+    opponentDangerSmokeMat.opacity = Math.min(0.55, 0.08 + t * 0.32)
+    const fo = bot.getFootOffset()
+    const cx = bot.root.position.x
+    const cz = bot.root.position.z
+    const footY = bot.root.position.y - fo
+    for (let i = 0; i < opponentDangerSmokeCount; i++) {
       const k = i * 3
       const seed = i * 0.61803398875
       const ring = 0.24 + (i % 5) * 0.06 + 0.08 * Math.sin(nowSec * 0.9 + seed * 5)
       const ang = nowSec * (0.38 + t * 0.42) + seed * Math.PI * 2
       const rise = ((nowSec * (0.22 + t * 0.24) + seed * 2.7) % 1) * (0.75 + t * 0.55)
-      dangerSmokePos[k] = camera.position.x + Math.cos(ang) * ring
-      dangerSmokePos[k + 1] = footY + 0.18 + rise
-      dangerSmokePos[k + 2] = camera.position.z + Math.sin(ang) * ring
+      opponentDangerSmokePos[k] = cx + Math.cos(ang) * ring
+      opponentDangerSmokePos[k + 1] = footY + 0.18 + rise
+      opponentDangerSmokePos[k + 2] = cz + Math.sin(ang) * ring
     }
-    dangerSmokeGeom.attributes.position.needsUpdate = true
+    opponentDangerSmokeGeom.attributes.position.needsUpdate = true
   }
 
   let debugMpHb = 0
@@ -5298,6 +5311,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
     syncStunnedFxOverlay()
     updateDangerAuraFx(performance.now() * 0.001)
+    updateOpponentDangerSmoke(performance.now() * 0.001)
 
     applyHitPresentation(delta)
 

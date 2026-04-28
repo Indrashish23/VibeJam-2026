@@ -750,7 +750,7 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   postDitherEnabled: 'When 0, the final screen dither pass is skipped.',
   postDitherStrength: 'How strong the post dither grain is (0 = nearly flat; 1 = heavy retro noise).',
   dangerFxStartPercent:
-    'Local launch % where red tint, vignette, and foot smoke start (e.g. 50 = halfway to KO).',
+    'Launch % where danger vignette/tint start on your view, and where foot smoke appears on the opponent (you never see smoke on yourself).',
   skyboxColorR:
     'Procedural sky base color red channel (0-1). Combined with G/B to set horizon and zenith tint.',
   skyboxColorG: 'Procedural sky base color green channel (0-1).',
