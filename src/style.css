@@ -718,9 +718,7 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   display: none !important;
 }
 
-body:has(#lobby-overlay:not([hidden])) #tweaks-panel-host {
-  display: none !important;
-}
+/* Tweaks panel (#tweaks-panel-host, z-index 200) stays usable in lobby — open with T / − */
 
 .game-root canvas {
   display: block;
