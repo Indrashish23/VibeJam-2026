@@ -61,7 +61,7 @@ export const defaultGameConfig = {
   /** 1 = anchor launch-% cluster to the right; 0 = anchor left. */
   percentHudAnchorRight: 0,
   /** Extra horizontal inset from the anchored edge (rem); + = farther from edge (toward center). */
-  percentHudOffsetXRem: -1.65,
+  percentHudOffsetXRem: 2.7,
   /** Vertical offset from bottom for the launch-% cluster (rem); + = higher. */
   percentHudOffsetYRem: 1.05,
   /** Subtle stacking / parallax offset (px); forwarded as translateZ on the cluster. */
@@ -71,7 +71,7 @@ export const defaultGameConfig = {
   /** Multiplier on the large damage % digits (inside block scale). */
   percentHudTextScale: 1.47,
   /** Nudge the damage % digits horizontally (rem). */
-  percentHudTextOffsetXRem: -0.8,
+  percentHudTextOffsetXRem: -0.45,
   /** Nudge the damage % digits vertically (rem). */
   percentHudTextOffsetYRem: -0.65,
   /** Multiplies the damage % clamp() font-size base (before percentHudTextScale). */
@@ -89,7 +89,7 @@ export const defaultGameConfig = {
   hudLeftStackOffsetZPx: 0,
   hudLeftStackScale: 1.07,
   /** Wrapper around damage % span (transform; inner span keeps shake + text nudge). */
-  hudDamagePctShellOffsetXRem: -7,
+  hudDamagePctShellOffsetXRem: 8,
   hudDamagePctShellOffsetYRem: -0.25,
   hudDamagePctShellOffsetZPx: -13,
   hudDamagePctShellScale: 0.89,
@@ -105,7 +105,7 @@ export const defaultGameConfig = {
   hudDisplayNameScale: 1.59,
   hudDisplayNameFontScale: 1.65,
   /** Portrait column container (transform + portrait scale via percentHudPortraitScale). */
-  hudPortraitColumnOffsetXRem: 3.45,
+  hudPortraitColumnOffsetXRem: -3.35,
   hudPortraitColumnOffsetYRem: 8,
   hudPortraitColumnOffsetZPx: -7,
   /** Wrapper around portrait image (transform; inner keeps shake). */
