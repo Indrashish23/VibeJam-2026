@@ -1,7 +1,12 @@
 import { createMultiplayerSocket, type MultiplayerWire } from './multiplayerSocket'
+import { type CoarseRegion } from './regionTag'
 
-/** Shared PartyKit / relay room used only for client-side matchmaking presence (not gameplay). */
-export const QUICK_MATCH_ROOM_ID = 'vj-quick-queue'
+/**
+ * Queue room id for a coarse region (or `global` for the cross-region fallback).
+ * Sharding by region keeps gossip O(N) per region and lets the relay edge route
+ * each room close to its participants instead of pinning everyone to one origin.
+ */
+export const QUICK_MATCH_ROOM_BASE = 'vj-quick-queue'
 
 /** Default time before quick match falls back to a smart-bot match. */
 export const QUICK_MATCH_TIMEOUT_MS = 20_000
@@ -16,6 +21,11 @@ const PRESENCE_HEARTBEAT_MS = 3_000
  * room broadcast on a previous session.
  */
 const PAIR_FRESHNESS_MS = 8_000
+/**
+ * After this long with no in-region match, also join the global queue room so
+ * sparse regions don't always fall through to the bot.
+ */
+const FALLBACK_TO_GLOBAL_MS = 8_000
 
 type QueueHelloMsg = {
   type: 'queueHello'
@@ -119,10 +129,14 @@ export type QuickMatchHandle = {
 
 export type QuickMatchOptions = {
   playerName: string
+  /** Coarse region used to pick the regional queue room (and skip the global fallback when already global). */
+  region: CoarseRegion
   /** Falls back to {@link QUICK_MATCH_TIMEOUT_MS}. */
   timeoutMs?: number
   /** Called once when the timeout elapses and the bot fallback is being prepared (for UI hints). */
   onTimeoutPhase?: () => void
+  /** Called once when the global fallback room is opened (after {@link FALLBACK_TO_GLOBAL_MS}). */
+  onGlobalFallback?: () => void
 }
 
 type RosterEntry = {
@@ -132,30 +146,45 @@ type RosterEntry = {
   lastTs: number
 }
 
+type QueueRoom = {
+  /** Diagnostic label only; e.g. `regional` / `global`. */
+  label: string
+  roomId: string
+  socket: MultiplayerWire
+  open: boolean
+}
+
 /**
- * Open the shared queue room, advertise presence, and resolve as soon as we
- * are matched into a fresh `vj-XXXXXX` room as host or guest. If no match
- * happens within `timeoutMs`, resolve with `botFallback` so the caller can
- * spin up a smart-bot match in a fresh room (matching a normal PvP setup).
+ * Open the per-region queue room (and, after a brief delay, the global room
+ * as a fallback) and resolve as soon as we are matched into a fresh
+ * `vj-XXXXXX` room as host or guest. If no match happens within `timeoutMs`,
+ * resolve with `botFallback` so the caller can spin up a smart-bot match in a
+ * fresh room (matching a normal PvP setup).
  *
- * Pairing uses a deterministic election: the lowest peerId in the roster
- * (sorted asc) is responsible for proposing pairs. It picks itself as host
- * and the next-oldest waiter as guest, broadcasts a `queuePair`, then leaves.
- * All other clients drop the paired peers from their roster.
+ * Pairing uses a deterministic election: the lowest peerId across the
+ * unified roster (sorted by `joinedAt` then `peerId`) is responsible for
+ * proposing pairs. It picks itself as host and the next-oldest waiter as
+ * guest, broadcasts `queuePair` to all rooms it is in, then leaves. All
+ * other clients drop the paired peers from their roster.
+ *
+ * Multi-room handling: when the global fallback opens, this client gossips
+ * presence on both rooms and the unified roster matches whoever it can see.
+ * A peer is "the same peer" iff its `peerId` matches; duplicate hellos from
+ * regional + global just refresh the same roster entry.
  */
 export function runQuickMatchQueue(opts: QuickMatchOptions): QuickMatchHandle {
   const timeoutMs = opts.timeoutMs ?? QUICK_MATCH_TIMEOUT_MS
   const peerId = generatePeerId()
   const joinedAt = Date.now()
   const roster = new Map<string, RosterEntry>()
+  const rooms: QueueRoom[] = []
 
-  let socket: MultiplayerWire | null = null
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null
   let pruneTimer: ReturnType<typeof setInterval> | null = null
   let pairProposalTimer: ReturnType<typeof setTimeout> | null = null
   let timeoutTimer: ReturnType<typeof setTimeout> | null = null
+  let globalFallbackTimer: ReturnType<typeof setTimeout> | null = null
   let resolved = false
-  let socketOpen = false
 
   let resolveOuter: (r: QuickMatchResult) => void
   let rejectOuter: (e: unknown) => void
@@ -163,6 +192,127 @@ export function runQuickMatchQueue(opts: QuickMatchOptions): QuickMatchHandle {
     resolveOuter = res
     rejectOuter = rej
   })
+
+  function regionalRoomId(region: CoarseRegion): string {
+    return `${QUICK_MATCH_ROOM_BASE}-${region}`
+  }
+
+  function globalRoomId(): string {
+    return `${QUICK_MATCH_ROOM_BASE}-global`
+  }
+
+  function helloPayload(): QueueHelloMsg {
+    return {
+      type: 'queueHello',
+      peerId,
+      name: opts.playerName,
+      joinedAt,
+      ts: Date.now(),
+    }
+  }
+
+  function sendOnRoom(room: QueueRoom, payload: QueueIncoming): void {
+    if (!room.open) return
+    try {
+      room.socket.send(JSON.stringify(payload))
+    } catch {
+      /* ignore — relay may have just closed */
+    }
+  }
+
+  function broadcast(payload: QueueIncoming): void {
+    for (const room of rooms) sendOnRoom(room, payload)
+  }
+
+  function handleMessage(msg: QueueIncoming): void {
+    if (resolved) return
+    if (msg.type === 'queueHello') {
+      if (msg.peerId === peerId) return
+      const existing = roster.get(msg.peerId)
+      if (existing) {
+        existing.name = msg.name
+        existing.joinedAt = msg.joinedAt
+        existing.lastTs = msg.ts
+      } else {
+        roster.set(msg.peerId, {
+          peerId: msg.peerId,
+          name: msg.name,
+          joinedAt: msg.joinedAt,
+          lastTs: msg.ts,
+        })
+        /* Echo our own presence quickly so a newcomer can see us without waiting for the next heartbeat. */
+        sendHello()
+      }
+      schedulePairProposal()
+      return
+    }
+    if (msg.type === 'queueBye') {
+      if (roster.delete(msg.peerId)) schedulePairProposal()
+      return
+    }
+    if (msg.type === 'queuePair') {
+      const age = Date.now() - msg.ts
+      if (age > PAIR_FRESHNESS_MS || age < -PAIR_FRESHNESS_MS) return
+      if (msg.guestPeerId === peerId) {
+        settle(
+          {
+            outcome: 'paired',
+            role: 'guest',
+            roomId: msg.roomId,
+            shortCode: msg.shortCode,
+          },
+          /* sendBye */ false,
+        )
+        return
+      }
+      if (msg.hostPeerId === peerId) {
+        /* Already settled when we sent the proposal locally; nothing to do. */
+        return
+      }
+      /* Drop paired peers so we don't try to match with them. */
+      roster.delete(msg.hostPeerId)
+      roster.delete(msg.guestPeerId)
+      schedulePairProposal()
+    }
+  }
+
+  function attachRoomHandlers(room: QueueRoom): void {
+    room.socket.addEventListener('open', () => {
+      room.open = true
+      sendOnRoom(room, helloPayload())
+    })
+    room.socket.addEventListener('message', (ev: Event) => {
+      const me = ev as MessageEvent
+      if (typeof me.data !== 'string') return
+      let raw: unknown
+      try {
+        raw = JSON.parse(me.data) as unknown
+      } catch {
+        return
+      }
+      const parsed = parseQueueMessage(raw)
+      if (parsed) handleMessage(parsed)
+    })
+    room.socket.addEventListener('error', () => {
+      /* Errors during quick match aren't fatal — wait out the timeout and fall back to bot. */
+    })
+    room.socket.addEventListener('close', () => {
+      room.open = false
+    })
+  }
+
+  function openRoom(roomId: string, label: string): QueueRoom | null {
+    try {
+      const socket = createMultiplayerSocket(roomId)
+      const room: QueueRoom = { label, roomId, socket, open: false }
+      rooms.push(room)
+      attachRoomHandlers(room)
+      return room
+    } catch (err) {
+      console.warn(`[quickMatch] failed to open ${label} room ${roomId}`, err)
+      return null
+    }
+  }
 
   const cleanup = (sendBye: boolean): void => {
     if (heartbeatTimer !== null) {
@@ -181,21 +331,25 @@ export function runQuickMatchQueue(opts: QuickMatchOptions): QuickMatchHandle {
       window.clearTimeout(timeoutTimer)
       timeoutTimer = null
     }
-    if (sendBye && socket && socketOpen) {
+    if (globalFallbackTimer !== null) {
+      window.clearTimeout(globalFallbackTimer)
+      globalFallbackTimer = null
+    }
+    for (const room of rooms) {
+      if (sendBye && room.open) {
+        try {
+          room.socket.send(JSON.stringify({ type: 'queueBye', peerId } satisfies QueueByeMsg))
+        } catch {
+          /* ignore */
+        }
+      }
       try {
-        socket.send(JSON.stringify({ type: 'queueBye', peerId } satisfies QueueByeMsg))
+        room.socket.close()
       } catch {
         /* ignore */
       }
     }
-    if (socket) {
-      try {
-        socket.close()
-      } catch {
-        /* ignore */
-      }
-      socket = null
-    }
+    rooms.length = 0
   }
 
   const settle = (result: QuickMatchResult, sendBye: boolean): void => {
@@ -206,22 +360,10 @@ export function runQuickMatchQueue(opts: QuickMatchOptions): QuickMatchHandle {
   }
 
   const sendHello = (): void => {
-    if (!socket || !socketOpen) return
-    try {
-      socket.send(
-        JSON.stringify({
-          type: 'queueHello',
-          peerId,
-          name: opts.playerName,
-          joinedAt,
-          ts: Date.now(),
-        } satisfies QueueHelloMsg),
-      )
-    } catch {
-      /* ignore */
-    }
+    const payload = helloPayload()
+    broadcast(payload)
     /* Refresh self-entry so prune doesn't drop us from our own bookkeeping. */
-    roster.set(peerId, { peerId, name: opts.playerName, joinedAt, lastTs: Date.now() })
+    roster.set(peerId, { peerId, name: opts.playerName, joinedAt, lastTs: payload.ts })
     schedulePairProposal()
   }
 
@@ -278,13 +420,7 @@ export function runQuickMatchQueue(opts: QuickMatchOptions): QuickMatchHandle {
         guestPeerId: guest.peerId,
         ts: Date.now(),
       }
-      if (socket && socketOpen) {
-        try {
-          socket.send(JSON.stringify(pair))
-        } catch {
-          /* ignore — settle locally regardless so we don't strand. */
-        }
-      }
+      broadcast(pair)
       settle(
         { outcome: 'paired', role: 'host', roomId, shortCode },
         /* sendBye */ false,
@@ -292,63 +428,13 @@ export function runQuickMatchQueue(opts: QuickMatchOptions): QuickMatchHandle {
     }, jitterMs)
   }
 
-  const handleMessage = (msg: QueueIncoming): void => {
-    if (resolved) return
-    if (msg.type === 'queueHello') {
-      if (msg.peerId === peerId) return
-      const existing = roster.get(msg.peerId)
-      if (existing) {
-        existing.name = msg.name
-        existing.joinedAt = msg.joinedAt
-        existing.lastTs = msg.ts
-      } else {
-        roster.set(msg.peerId, {
-          peerId: msg.peerId,
-          name: msg.name,
-          joinedAt: msg.joinedAt,
-          lastTs: msg.ts,
-        })
-        /* Echo our own presence quickly so a newcomer can see us without waiting for the next heartbeat. */
-        sendHello()
-      }
-      schedulePairProposal()
-      return
-    }
-    if (msg.type === 'queueBye') {
-      if (roster.delete(msg.peerId)) schedulePairProposal()
-      return
-    }
-    if (msg.type === 'queuePair') {
-      const age = Date.now() - msg.ts
-      if (age > PAIR_FRESHNESS_MS || age < -PAIR_FRESHNESS_MS) return
-      if (msg.guestPeerId === peerId) {
-        settle(
-          {
-            outcome: 'paired',
-            role: 'guest',
-            roomId: msg.roomId,
-            shortCode: msg.shortCode,
-          },
-          /* sendBye */ false,
-        )
-        return
-      }
-      if (msg.hostPeerId === peerId) {
-        /* Already settled when we sent the proposal locally; nothing to do. */
-        return
-      }
-      /* Drop paired peers so we don't try to match with them. */
-      roster.delete(msg.hostPeerId)
-      roster.delete(msg.guestPeerId)
-      schedulePairProposal()
-    }
-  }
-
-  try {
-    socket = createMultiplayerSocket(QUICK_MATCH_ROOM_ID)
-  } catch (err) {
-    /* No transport configured — surface error to caller; lobby UI will show a graceful message. */
-    queueMicrotask(() => rejectOuter(err))
+  /* Open the regional room first. The client will gossip + try to match here
+   * for FALLBACK_TO_GLOBAL_MS before also entering the global room. */
+  const startedRegional = openRoom(regionalRoomId(opts.region), 'regional')
+  if (!startedRegional) {
+    queueMicrotask(() =>
+      rejectOuter(new Error(`[quickMatch] no transport — could not open ${opts.region} room`)),
+    )
     return {
       promise,
       cancel: () => {
@@ -359,30 +445,25 @@ export function runQuickMatchQueue(opts: QuickMatchOptions): QuickMatchHandle {
     }
   }
 
-  socket.addEventListener('open', () => {
-    socketOpen = true
-    sendHello()
-    heartbeatTimer = window.setInterval(sendHello, PRESENCE_HEARTBEAT_MS)
-    pruneTimer = window.setInterval(pruneStale, 1500)
-  })
-  socket.addEventListener('message', (ev: Event) => {
-    const me = ev as MessageEvent
-    if (typeof me.data !== 'string') return
-    let raw: unknown
-    try {
-      raw = JSON.parse(me.data) as unknown
-    } catch {
-      return
-    }
-    const parsed = parseQueueMessage(raw)
-    if (parsed) handleMessage(parsed)
-  })
-  socket.addEventListener('error', () => {
-    /* Errors during quick match aren't fatal — wait out the timeout and fall back to bot. */
-  })
-  socket.addEventListener('close', () => {
-    socketOpen = false
-  })
+  heartbeatTimer = window.setInterval(sendHello, PRESENCE_HEARTBEAT_MS)
+  pruneTimer = window.setInterval(pruneStale, 1500)
+
+  /* Global fallback: keep gossiping in the regional room AND join the global
+   * pool so we can match across regions if the regional pool stayed empty. */
+  if (opts.region !== 'global') {
+    globalFallbackTimer = window.setTimeout(() => {
+      globalFallbackTimer = null
+      if (resolved) return
+      const opened = openRoom(globalRoomId(), 'global')
+      if (opened) {
+        try {
+          opts.onGlobalFallback?.()
+        } catch {
+          /* ignore */
+        }
+      }
+    }, FALLBACK_TO_GLOBAL_MS)
+  }
 
   timeoutTimer = window.setTimeout(() => {
     if (resolved) return

@@ -69,10 +69,6 @@ import {
 } from './net/multiplayerSocket'
 import { createBrowserHostAuthority } from './net/browserHostAuthority'
 import { isAuthoritativeListenServer } from './net/transportConfig'
-import {
-  QUICK_MATCH_TIMEOUT_MS,
-  runQuickMatchQueue,
-} from './net/quickMatchQueue'
 import { simBananaThrowToLanding, feetOnPeel, isFeetInPickUpRange } from './net/bananaSim'
 import { BananaWorld } from './powerups/bananaWorld'
 import { MegaphoneFpProp } from './weapons/megaphoneProp'
@@ -6090,44 +6086,12 @@ async function resolveLobbyAfterReload(): Promise<LobbyResult> {
   if (replay) {
     const playerName = readStoredPlayerName()?.trim() || 'Angler'
     if (replay.intent === 'quickMatch') {
-      gameRoot.classList.add('game-root--hud-suspended')
-      gameRoot.hidden = false
-      try {
-        const handle = runQuickMatchQueue({
-          playerName,
-          timeoutMs: QUICK_MATCH_TIMEOUT_MS,
-        })
-        const result = await handle.promise
-        if (result.outcome === 'paired') {
-          return {
-            mode: 'online',
-            role: result.role,
-            roomId: result.roomId,
-            shortCode: result.shortCode,
-            mapId: replay.mapId,
-            intent: 'quickMatch',
-          }
-        }
-        if (result.outcome === 'botFallback') {
-          const roomId = randomRoomId()
-          const shortCode = roomId.replace(/^vj-/, '')
-          return {
-            mode: 'online',
-            role: 'host',
-            roomId,
-            shortCode,
-            mapId: replay.mapId,
-            intent: 'quickMatch',
-            startWithSmartBot: true,
-          }
-        }
-        /* cancelled — fall through to menu */
-      } catch (err) {
-        console.warn('[vibejam] requeue failed; returning to menu', err)
-      }
-      gameRoot.hidden = true
-      gameRoot.classList.remove('game-root--hud-suspended')
-      return runLobbyGate(playerName)
+      /* Route requeue through the normal lobby gate with autoStart so the user sees
+       * the same backdrop + queue overlay as if they had clicked Quick Match,
+       * instead of staring at a black gameRoot for the full queue duration. */
+      return runLobbyGate(playerName, {
+        autoStart: { intent: 'quickMatch', mapId: replay.mapId },
+      })
     }
     const lobby = buildLobbyFromIntent(replay.intent, replay.mapId)
     if (lobby) {

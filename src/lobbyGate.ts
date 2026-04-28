@@ -12,6 +12,7 @@ import {
   runQuickMatchQueue,
   type QuickMatchResult,
 } from './net/quickMatchQueue'
+import { getCoarseRegion } from './net/regionTag'
 
 export function randomRoomId(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
@@ -120,10 +121,24 @@ function formatTimerMs(ms: number): string {
 }
 
 /**
+ * Optional one-shot action to fire automatically after the backdrop mounts,
+ * used when the user requeued / replayed and we want the same UI flow as
+ * if they had clicked the matching menu button — without flashing the menu.
+ */
+export type LobbyGateAutoStart = { intent: 'quickMatch'; mapId: MapId }
+
+export type LobbyGateOptions = {
+  autoStart?: LobbyGateAutoStart
+}
+
+/**
  * Display name gate, then pick Quick Match / Host Private / Join via Code / Practice / Vs Bot.
  * Realtime connection is established in-game; no infra details here.
  */
-export async function runLobbyGate(initialDisplayName: string): Promise<LobbyResult> {
+export async function runLobbyGate(
+  initialDisplayName: string,
+  options?: LobbyGateOptions,
+): Promise<LobbyResult> {
   const curtain = document.getElementById('lobby-boot-curtain') as HTMLDivElement | null
   curtain?.removeAttribute('hidden')
   curtain?.setAttribute('aria-hidden', 'false')
@@ -241,8 +256,12 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
       ui.err.textContent = ''
     }
 
-    ui.overlay.hidden = false
-    /* Reveal menu before removing boot curtain so the canvas never flashes without the card. */
+    /* Skip the menu reveal entirely when an autoStart action is queued — the queue
+     * overlay paints over the backdrop directly so requeue feels like clicking the
+     * Quick Match button rather than a black-screen wait. */
+    const showMenu = !options?.autoStart
+    ui.overlay.hidden = !showMenu
+    /* Reveal menu (or backdrop, if autoStart) before removing boot curtain so the canvas never flashes without the card. */
     curtain?.setAttribute('hidden', '')
     curtain?.setAttribute('aria-hidden', 'true')
     ui.intro.textContent = `Signed in as ${displayName}. Quick match for fast PvP, host a private game with a code, or warm up against a bot.`
@@ -260,7 +279,9 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
           ui.mapSelect.appendChild(opt)
         }
       }
-      ui.mapSelect.value = readStoredMapId()
+      /* If autoStart specifies a map, pre-select it so a manual cancel-then-restart
+       * keeps the same map the user originally picked for this match series. */
+      ui.mapSelect.value = options?.autoStart?.mapId ?? readStoredMapId()
       ui.mapSelect.addEventListener('change', () => {
         saveStoredMapId(selectedMapId(ui))
       })
@@ -308,6 +329,8 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
       if (settled) return
       if (onlineUnavailable()) {
         setErr('Online play isn’t available right now. Try Practice or Vs Bot instead.')
+        /* AutoStart hid the menu; bring it back so the error and other options are visible. */
+        ui.overlay.hidden = false
         return
       }
       const mapId = selectedMapId(ui)
@@ -341,13 +364,20 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
       }
       queueUi.cancel?.addEventListener('click', onCancel)
 
+      const region = getCoarseRegion()
       const queueHandle = runQuickMatchQueue({
         playerName,
+        region,
         timeoutMs: QUICK_MATCH_TIMEOUT_MS,
         onTimeoutPhase: () => {
           if (queueUi.title) queueUi.title.textContent = 'No opponent found'
           if (queueUi.sub)
             queueUi.sub.textContent = 'Spinning up a smart bot match — get ready.'
+        },
+        onGlobalFallback: () => {
+          if (queueUi.sub)
+            queueUi.sub.textContent =
+              'Expanding search to the global queue — hang tight.'
         },
       })
       queueAbort = () => queueHandle.cancel()
@@ -478,6 +508,13 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
         intent: 'private',
         mapId: selectedMapId(ui),
       })
+    }
+
+    /* Requeue / replay handoff: same flow as clicking the matching menu button,
+     * but with the menu suppressed so the user goes straight from the boot
+     * curtain → backdrop + queue overlay. */
+    if (options?.autoStart?.intent === 'quickMatch') {
+      startQuickMatch()
     }
   })
 }
