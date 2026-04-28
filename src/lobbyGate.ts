@@ -4,6 +4,7 @@ import { isMultiplayerTransportConfigured } from './net/transportConfig'
 import { PublicLobbyDirectoryClient, type PublicLobbyListing } from './net/publicLobbyDirectory'
 import { isMapId, MAP_DEFS, type MapId } from './maps'
 import { clearTutorialDone, TUTORIAL_ENABLED } from './tutorial'
+import { mountLobbyBackdrop } from './lobbyBackdrop'
 
 function randomRoomId(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
@@ -105,11 +106,17 @@ function selectedLobbyVisibility(ui: ReturnType<typeof wireLobbyDom>): 'public' 
  * Display name gate, then pick offline or online (code share / join / public browser).
  * Realtime connection is established in-game; no infra details here.
  */
-export function runLobbyGate(initialDisplayName: string): Promise<LobbyResult> {
+export async function runLobbyGate(initialDisplayName: string): Promise<LobbyResult> {
+  const gameRoot = document.getElementById('game-root') as HTMLDivElement
+  gameRoot.hidden = false
+  gameRoot.classList.add('game-root--lobby')
+
+  const backdrop = await mountLobbyBackdrop(gameRoot, readStoredMapId())
+
   const ui = wireLobbyDom()
   let displayName = initialDisplayName
 
-  return new Promise((resolve) => {
+  return await new Promise<LobbyResult>((resolve) => {
     const onlineUnavailable = (): boolean => !isMultiplayerTransportConfigured()
 
     let browserClient: PublicLobbyDirectoryClient | null = null
@@ -131,6 +138,7 @@ export function runLobbyGate(initialDisplayName: string): Promise<LobbyResult> {
       if (settled) return
       settled = true
       stopBrowserClient()
+      backdrop.dispose()
       ui.overlay.hidden = true
       resolve(result)
     }
@@ -209,7 +217,9 @@ export function runLobbyGate(initialDisplayName: string): Promise<LobbyResult> {
       }
       ui.mapSelect.value = readStoredMapId()
       ui.mapSelect.addEventListener('change', () => {
-        saveStoredMapId(selectedMapId(ui))
+        const id = selectedMapId(ui)
+        saveStoredMapId(id)
+        void backdrop.setMapId(id)
       })
     }
 
@@ -349,4 +359,5 @@ export function runLobbyGate(initialDisplayName: string): Promise<LobbyResult> {
     }
   })
 }
+
 

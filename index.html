@@ -254,7 +254,14 @@
         />
       </div>
       <div id="win-game-splash" class="win-game-splash" hidden>
-        <span class="win-game-splash__txt" aria-live="polite">GAME</span>
+        <div class="win-game-splash__stack" aria-live="polite">
+          <span class="win-game-splash__txt">GAME</span>
+          <span id="win-game-splash-sub" class="win-game-splash__sub"></span>
+        </div>
+      </div>
+      <div id="win-return-lobby-overlay" class="win-return-lobby-overlay" hidden>
+        <div class="win-return-lobby-overlay__flash" aria-hidden="true"></div>
+        <p id="win-return-lobby-txt" class="win-return-lobby-overlay__txt">Returning to lobby</p>
       </div>
       <div id="dash-scanlines" class="dash-scanlines" aria-hidden="true"></div>
       <div id="jump-vfx" class="jump-vfx" aria-hidden="true"></div>

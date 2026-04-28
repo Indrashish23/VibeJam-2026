@@ -166,6 +166,10 @@ const invulnShineEl = document.getElementById('invuln-shine') as HTMLDivElement 
 const winGameSplashEl = document.getElementById('win-game-splash') as HTMLDivElement | null
 const winGameSplashTxtEl =
   winGameSplashEl?.querySelector('.win-game-splash__txt') as HTMLDivElement | null
+const winGameSplashSubEl = document.getElementById('win-game-splash-sub') as HTMLSpanElement | null
+const winReturnLobbyOverlayEl = document.getElementById(
+  'win-return-lobby-overlay',
+) as HTMLDivElement | null
 const countdownOverlay = document.getElementById('countdown-overlay') as HTMLDivElement | null
 const countdownNumEl = document.getElementById('countdown-num') as HTMLSpanElement | null
 const dashScanEl = document.getElementById('dash-scanlines') as HTMLDivElement | null
@@ -497,6 +501,8 @@ function takeOnlineRematchReloadLobby(): LobbyResult | null {
 }
 
 async function initGame(lobby: LobbyResult): Promise<void> {
+  gameRoot.classList.remove('game-root--lobby')
+
   if (DEBUG_MP)
     debugMpLog(
       `initGame role=${lobby.mode === 'online' ? lobby.role : 'offline'} mp=${lobby.mode} map=${lobby.mapId}`,
@@ -2050,9 +2056,16 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     const epochAtStart = pvpMatchEpoch
     try {
       if (iWonRound) tutorialBotRingouts += 1
-      if (iWonRound) await playWinGameSplashSequence()
+      await playGameOutcomeSplashSequence(iWonRound ? 'win' : 'lose')
       if (epochAtStart !== pvpMatchEpoch) return
-      endMatch(iWonRound ? 'win' : 'lose')
+      if (iWonRound) {
+        await sleepMs(2000)
+        if (!applyMatchEndCore('win')) return
+        await runWinReturnToLobbyTransition()
+        returnToLobbyReload(isOnline && lobby.mode === 'online')
+      } else {
+        endMatch('lose')
+      }
     } finally {
       seriesTransitionActive = false
     }
@@ -3854,6 +3867,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (!winGameSplashEl) return
     winGameSplashEl.classList.remove('win-game-splash--pulse')
     winGameSplashEl.hidden = true
+    if (winGameSplashSubEl) winGameSplashSubEl.textContent = ''
   }
 
   function showWinGameSplash(): void {
@@ -3864,8 +3878,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     winGameSplashEl.classList.add('win-game-splash--pulse')
   }
 
-  async function playWinGameSplashSequence(): Promise<void> {
+  async function playGameOutcomeSplashSequence(outcome: 'win' | 'lose'): Promise<void> {
     if (!winGameSplashEl) return
+    if (winGameSplashSubEl) {
+      winGameSplashSubEl.textContent = outcome === 'win' ? 'YOU WIN' : 'YOU LOSE'
+    }
     showWinGameSplash()
     const minHoldMs = Math.max(250, gameConfig.winRingoutPresentDelayMs)
     const started = performance.now()
@@ -3889,6 +3906,38 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     const remaining = minHoldMs - (performance.now() - started)
     if (remaining > 0) await sleepMs(remaining)
     hideWinGameSplash()
+  }
+
+  async function runWinReturnToLobbyTransition(): Promise<void> {
+    const el = winReturnLobbyOverlayEl
+    if (!el) {
+      await sleepMs(780)
+      return
+    }
+    el.hidden = false
+    el.classList.remove('win-return-lobby-overlay--flash')
+    void el.offsetWidth
+    el.classList.add('win-return-lobby-overlay--flash')
+    const flash = el.querySelector('.win-return-lobby-overlay__flash')
+    await new Promise<void>((resolve) => {
+      let done = false
+      const finish = () => {
+        if (done) return
+        done = true
+        resolve()
+      }
+      const onEnd = () => {
+        flash?.removeEventListener('animationend', onEnd)
+        finish()
+      }
+      flash?.addEventListener('animationend', onEnd, { once: true })
+      window.setTimeout(() => {
+        flash?.removeEventListener('animationend', onEnd)
+        finish()
+      }, 1200)
+    })
+    el.classList.remove('win-return-lobby-overlay--flash')
+    el.hidden = true
   }
 
   function updateWinFinisher(_delta: number): void {
@@ -3981,8 +4030,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     tryPointerLock()
   }
 
-  function endMatch(outcome: 'win' | 'lose'): void {
-    if (matchOutcome) return
+  function applyMatchEndCore(outcome: 'win' | 'lose'): boolean {
+    if (matchOutcome) return false
     hideKoAnnouncementImmediate()
     clearMovementKeys()
     hideWinGameSplash()
@@ -3995,6 +4044,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     voice.resumeAudio()
     voice.playFallbackHitSound()
     controls.unlock()
+    return true
+  }
+
+  function endMatch(outcome: 'win' | 'lose'): void {
+    if (!applyMatchEndCore(outcome)) return
     if (matchEndOverlay) matchEndOverlay.hidden = false
     if (matchEndTitle) {
       matchEndTitle.textContent = outcome === 'win' ? 'You win!' : 'You lose!'
@@ -5630,11 +5684,15 @@ wireBackgroundMusicToFirstGesture()
 }
 
 runUsernameGate()
-  .then(() => takeOnlineRematchReloadLobby() ?? runLobbyGate(readStoredPlayerName()?.trim() || 'Angler'))
-  .then((lobby) => {
-    gameRoot.hidden = false
-    return initGame(lobby)
+  .then(() => {
+    const rematch = takeOnlineRematchReloadLobby()
+    if (rematch) {
+      gameRoot.hidden = false
+      return rematch
+    }
+    return runLobbyGate(readStoredPlayerName()?.trim() || 'Angler')
   })
+  .then((lobby) => initGame(lobby))
   .catch((err) => {
     console.error('[vibejam] init failed', err)
   })
