@@ -6,7 +6,7 @@ import type { GameConfigKey } from './gameConfig'
 
 const CAP = 500
 
-export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step: number }> = {
+export const TWEAK_RANGE = {
   moveSpeed: { min: 0, max: CAP, step: 5 },
   damping: { min: 0, max: CAP, step: 0.5 },
   eyeHeight: { min: 0.1, max: CAP, step: 0.05 },
@@ -215,9 +215,17 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
 
   ambientIntensity: { min: 0, max: CAP, step: 0.05 },
   sunIntensity: { min: 0, max: CAP, step: 0.05 },
+  sunPosX: { min: -220, max: 220, step: 1 },
+  sunPosY: { min: -220, max: 220, step: 1 },
+  sunPosZ: { min: -220, max: 220, step: 1 },
   lightingUnlitMode: { min: 0, max: 1, step: 1 },
   lightingUnlitSelfModel: { min: 0, max: 1, step: 1 },
   lightingUnlitEnemyModel: { min: 0, max: 1, step: 1 },
+
+  hideLobbyUi: { min: 0, max: 1, step: 1 },
+  lobbyMonkeyFlatShading: { min: 0, max: 1, step: 1 },
+  lobbyMonkeyTexPixelated: { min: 0, max: 1, step: 1 },
+  lobbyMonkeyTexDownscale: { min: 0, max: 1, step: 1 },
 
   lobbyMonkeyPosX: { min: -45, max: 45, step: 0.5 },
   lobbyMonkeyPosY: { min: -25, max: 35, step: 0.5 },
@@ -326,7 +334,7 @@ export const TWEAK_RANGE: Record<GameConfigKey, { min: number; max: number; step
   voiceHitImpactEchoDelaySec: { min: 0.02, max: 0.35, step: 0.004 },
   hitMarkerSfxEnabled: { min: 0, max: 1, step: 1 },
   hitMarkerSfxVolumeMul: { min: 0, max: 1, step: 0.02 },
-}
+} satisfies Record<GameConfigKey, { min: number; max: number; step: number }>
 
 /** Human-readable labels for the tweaks panel (fallback: raw config key). */
 export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
@@ -524,6 +532,13 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   skyCloudOpacity: 'Cloud opacity',
   ambientIntensity: 'Ambient light',
   sunIntensity: 'Sun strength',
+  sunPosX: 'Sun X (world m)',
+  sunPosY: 'Sun Y (world m)',
+  sunPosZ: 'Sun Z (world m)',
+  hideLobbyUi: 'Hide lobby HTML (menu card) for screenshots',
+  lobbyMonkeyFlatShading: 'Lobby monkey flat faceted shading',
+  lobbyMonkeyTexPixelated: 'Lobby monkey nearest-neighbor textures',
+  lobbyMonkeyTexDownscale: 'Lobby monkey 4× texture downscale (reload menu)',
   lightingUnlitMode: 'Lighting mode: unlit (0/1)',
   lightingUnlitSelfModel: 'Self model unlit (0/1)',
   lightingUnlitEnemyModel: 'Enemy model unlit (0/1)',
@@ -916,6 +931,14 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
     '0 = off. 1 = play `hitmarker.ogg` when your hit registers (PvP shot connect or local vs bot).',
   hitMarkerSfxVolumeMul: 'Hitmarker gain × SFX chain (Settings → sound effects × Tweaks SFX).',
 
+  hideLobbyUi:
+    '1 = hides the main-menu card (buttons, browser) so only the 3D canvas shows; Tweaks stays open for capture. 0 = normal.',
+  lobbyMonkeyFlatShading:
+    '1 = faceted normals on the lobby GLB. 0 = smooth shading (PBR). Updates live.',
+  lobbyMonkeyTexPixelated:
+    '1 = nearest-neighbor on the monkey’s maps (chunky texels). 0 = softer linear sampling.',
+  lobbyMonkeyTexDownscale:
+    '1 = quarter-res texture atlas (chunky). 0 = keep original map resolution; reload the main menu after toggling so embed re-loads cleanly.',
   lobbyMonkeyPosX: 'Main-menu preview only: monkey prop world X (three.js units).',
   lobbyMonkeyPosY: 'Lobby monkey vertical position on the arena.',
   lobbyMonkeyPosZ: 'Monkey depth position in the lobby preview.',
@@ -923,6 +946,10 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   lobbyMonkeyYawDeg: 'Yaw to face the camera/preview.',
   lobbyMonkeyRollDeg: 'Roll tilt for the lobby prop.',
   lobbyMonkeyScale: 'Uniform scale of the lobby GLB (LobbyMonkeyModel.glb).',
+
+  sunPosX: 'Directional sun world X (shared with matches; shadow direction).',
+  sunPosY: 'Directional sun world Y.',
+  sunPosZ: 'Directional sun world Z.',
 
   ambientIntensity: 'Fill light strength from all directions (shadow softness).',
   sunIntensity: 'Main directional light strength (contrast and shadows).',
@@ -1498,6 +1525,9 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
     keys: [
       'ambientIntensity',
       'sunIntensity',
+      'sunPosX',
+      'sunPosY',
+      'sunPosZ',
       'lightingUnlitMode',
       'lightingUnlitSelfModel',
       'lightingUnlitEnemyModel',
@@ -1515,8 +1545,26 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
   },
   {
     id: 'lobbyMonkey',
-    title: 'Lobby (menu prop)',
+    title: 'Lobby (menu preview)',
     keys: [
+      'hideLobbyUi',
+      'lobbyMonkeyFlatShading',
+      'lobbyMonkeyTexPixelated',
+      'lobbyMonkeyTexDownscale',
+      'lightingUnlitMode',
+      'skyboxColorR',
+      'skyboxColorG',
+      'skyboxColorB',
+      'skyCloudCoverage',
+      'skyCloudSoftness',
+      'skyCloudScale',
+      'skyCloudSpeed',
+      'skyCloudOpacity',
+      'ambientIntensity',
+      'sunIntensity',
+      'sunPosX',
+      'sunPosY',
+      'sunPosZ',
       'lobbyMonkeyPosX',
       'lobbyMonkeyPosY',
       'lobbyMonkeyPosZ',

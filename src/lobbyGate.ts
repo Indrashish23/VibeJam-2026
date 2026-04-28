@@ -5,6 +5,7 @@ import { PublicLobbyDirectoryClient, type PublicLobbyListing } from './net/publi
 import { isMapId, MAP_DEFS, type MapId } from './maps'
 import { clearTutorialDone, TUTORIAL_ENABLED } from './tutorial'
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js'
+import { gameConfig } from './gameConfig'
 import { mountLobbyBackdrop } from './lobbyBackdrop'
 import { mountTweaksPanel } from './tweaksPanel'
 
@@ -125,6 +126,24 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
       ambient: backdrop.ambient,
       sun: backdrop.sun,
       keysThatSkipRoundReset: [
+        'hideLobbyUi',
+        'lobbyMonkeyFlatShading',
+        'lobbyMonkeyTexPixelated',
+        'lobbyMonkeyTexDownscale',
+        'lightingUnlitMode',
+        'skyboxColorR',
+        'skyboxColorG',
+        'skyboxColorB',
+        'skyCloudCoverage',
+        'skyCloudSoftness',
+        'skyCloudScale',
+        'skyCloudSpeed',
+        'skyCloudOpacity',
+        'ambientIntensity',
+        'sunIntensity',
+        'sunPosX',
+        'sunPosY',
+        'sunPosZ',
         'lobbyMonkeyPosX',
         'lobbyMonkeyPosY',
         'lobbyMonkeyPosZ',
@@ -134,7 +153,8 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
         'lobbyMonkeyScale',
       ],
       syncVisualsFromConfig: () => {
-        backdrop.syncLobbyMonkeyFromConfig()
+        backdrop.syncLobbyBackdropFromConfig()
+        document.body.classList.toggle('hide-lobby-html-ui', gameConfig.hideLobbyUi >= 0.5)
       },
       onToggle: () => {},
     })
@@ -169,6 +189,7 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
       disposeLobbyTweaks?.()
       disposeLobbyTweaks = null
       tweaksHost?.replaceChildren()
+      document.body.classList.remove('hide-lobby-html-ui')
       backdrop.dispose()
       ui.overlay.hidden = true
       resolve(result)

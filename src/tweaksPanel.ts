@@ -413,16 +413,19 @@ function appendConfigRow(
     range.setAttribute('list', 'tweak-ticks-01')
   }
 
-  function syncRow() {
-    const v = gameConfig[key]
-    range.value = String(v)
-    if (num) num.value = String(v)
+  function refreshAllRowsForKey(targetKey: GameConfigKey): void {
+    for (const row of rows) {
+      if (row.key !== targetKey) continue
+      const v = gameConfig[targetKey]
+      row.range.value = String(v)
+      if (row.num) row.num.value = String(v)
+    }
   }
 
   function applyValue(raw: number) {
     const clamped = Math.min(r.max, Math.max(r.min, raw))
     gameConfig[key] = clamped
-    syncRow()
+    refreshAllRowsForKey(key)
     syncSceneFromConfig()
     if (!skipRoundReset) onConfigChanged?.()
   }
@@ -434,7 +437,7 @@ function appendConfigRow(
   row.appendChild(name)
   row.appendChild(range)
   if (num) row.appendChild(num)
-  syncRow()
+  refreshAllRowsForKey(key)
   return row
 }
 
@@ -510,6 +513,7 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
     hooks.controls.pointerSpeed = gameConfig.mouseSensitivity
     hooks.ambient.intensity = gameConfig.ambientIntensity
     hooks.sun.intensity = gameConfig.sunIntensity
+    hooks.sun.position.set(gameConfig.sunPosX, gameConfig.sunPosY, gameConfig.sunPosZ)
     hooks.syncVisualsFromConfig?.()
   }
 
@@ -763,7 +767,13 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
   copyBtn.addEventListener('click', () => {
     const changed = rows.filter((row) => Math.abs(gameConfig[row.key] - defaultGameConfig[row.key]) > 1e-9)
     const source = changed.length ? changed : rows
-    const lines = source.map((row) => `  ${row.key}: ${formatTweakValue(gameConfig[row.key])},`)
+    const seen = new Set<GameConfigKey>()
+    const lines: string[] = []
+    for (const row of source) {
+      if (seen.has(row.key)) continue
+      seen.add(row.key)
+      lines.push(`  ${row.key}: ${formatTweakValue(gameConfig[row.key])},`)
+    }
     const snippet = `// Paste into defaultGameConfig in src/gameConfig.ts\n{\n${lines.join('\n')}\n}`
     const onCopied = () => {
       copyBtn.textContent = 'Copied tweaks'

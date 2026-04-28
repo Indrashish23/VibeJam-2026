@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Krona+One&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Krona+One&family=Tourney:ital,wght@0,700;1,700&display=swap"
       rel="stylesheet"
     />
   </head>
@@ -305,16 +305,38 @@
             </div>
             <div id="record-rank" class="player-record-hud__rank">Fledgling Gibbon</div>
           </div>
-          <div class="percent-hud__row percent-hud__row--you">
-            <span id="percent-label-you" class="percent-hud__label">You</span>
-            <span id="percent-you" class="percent-hud__value">0%</span>
+          <div class="percent-hud__main-row">
+            <div class="percent-hud__left-stack">
+              <canvas id="hud-smoke-canvas" class="hud-smoke-canvas" aria-hidden="true"></canvas>
+              <span id="hud-damage-pct" class="hud-damage-pct">0%</span>
+              <div class="hud-player-card">
+                <svg
+                  class="hud-player-card__svg"
+                  width="656"
+                  height="85"
+                  viewBox="0 0 656 85"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  aria-hidden="true"
+                >
+                  <path d="M157.5 1L656 0V84.1699L0 81L157.5 1Z" fill="black" />
+                  <path class="hud-player-card__accent" d="M157.5 1L656 0V19.5H120L157.5 1Z" fill="#EB402C" />
+                </svg>
+                <span id="hud-display-name" class="hud-display-name">Player</span>
+              </div>
+            </div>
+            <div id="hud-portrait-wrap" class="hud-portrait-wrap">
+              <img
+                id="hud-portrait-img"
+                class="hud-portrait-img"
+                src=""
+                width="220"
+                height="220"
+                alt=""
+              />
+            </div>
           </div>
           <div id="stock-strip-you" class="stock-strip stock-strip--you" aria-hidden="true"></div>
-          <div class="percent-hud__row percent-hud__row--foe">
-            <span id="percent-label-foe" class="percent-hud__label">Opponent</span>
-            <span id="percent-foe" class="percent-hud__value">0%</span>
-          </div>
-          <div id="stock-strip-foe" class="stock-strip stock-strip--foe" aria-hidden="true"></div>
         </div>
         <div id="charge-bar-wrap" class="charge-bar-wrap" style="--charge-pct: 0%">
         <div id="ammo-feedback" class="ammo-feedback" hidden aria-hidden="true">+1</div>

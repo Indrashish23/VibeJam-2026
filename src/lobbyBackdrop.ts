@@ -17,8 +17,12 @@ import {
   WebGLRenderer,
 } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
-import { applyMonkeyFlatVertexPixelatedStyle } from './boxing/monkeyVisualStyle'
+import {
+  applyLobbyMonkeyLoadedStyle,
+  syncLobbyMonkeyPresentation,
+} from './boxing/monkeyVisualStyle'
 import { defaultGameConfig, gameConfig, type GameConfigKey } from './gameConfig'
+import { createLobbyHubUnlitSwapper } from './lobbyUnlitMaterials'
 import { createProceduralSky } from './skyDome'
 import { loadMap, type MapHandle } from './maps'
 
@@ -59,7 +63,8 @@ function aimPreviewCamera(cam: PerspectiveCamera): void {
 
 export type LobbyBackdropHandle = {
   dispose: () => void
-  syncLobbyMonkeyFromConfig: () => void
+  /** Apply lighting, sky, sun, unlit swap, monkey style + pose (call from Tweaks sync). */
+  syncLobbyBackdropFromConfig: () => void
   camera: PerspectiveCamera
   ambient: AmbientLight
   sun: DirectionalLight
@@ -69,11 +74,16 @@ export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<LobbyBa
   applyLobbyMonkeyDefaultsFromSource()
 
   const scene = new Scene()
-  scene.background = new Color(
-    gameConfig.skyboxColorR,
-    gameConfig.skyboxColorG,
-    gameConfig.skyboxColorB,
-  )
+  const hubUnlit = createLobbyHubUnlitSwapper()
+
+  function setSceneBackgroundAndClearColor(): void {
+    scene.background = new Color(
+      gameConfig.skyboxColorR,
+      gameConfig.skyboxColorG,
+      gameConfig.skyboxColorB,
+    )
+  }
+  setSceneBackgroundAndClearColor()
 
   const camera = new PerspectiveCamera(
     gameConfig.cameraFov,
@@ -95,7 +105,7 @@ export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<LobbyBa
   scene.add(ambient)
 
   const sun = new DirectionalLight(0xffffff, gameConfig.sunIntensity)
-  sun.position.set(58, 34, 42)
+  sun.position.set(gameConfig.sunPosX, gameConfig.sunPosY, gameConfig.sunPosZ)
   sun.castShadow = true
   sun.shadow.mapSize.set(4096, 4096)
   sun.shadow.camera.near = 0.5
@@ -134,12 +144,16 @@ export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<LobbyBa
         m.receiveShadow = true
       }
     })
-    applyMonkeyFlatVertexPixelatedStyle(monkeyRoot)
+    applyLobbyMonkeyLoadedStyle(monkeyRoot, {
+      flatShading: gameConfig.lobbyMonkeyFlatShading >= 0.5,
+      texNearest: gameConfig.lobbyMonkeyTexPixelated >= 0.5,
+      texDownscale: gameConfig.lobbyMonkeyTexDownscale >= 0.5,
+    })
   } catch (err) {
     console.warn('[lobbyBackdrop] Failed to load LobbyMonkeyModel.glb', err)
   }
 
-  function syncLobbyMonkeyFromConfig(): void {
+  function syncLobbyMonkeyPoseFromConfig(): void {
     if (!monkeyRoot) return
     monkeyRoot.position.set(
       gameConfig.lobbyMonkeyPosX,
@@ -155,7 +169,22 @@ export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<LobbyBa
     monkeyRoot.scale.setScalar(Math.max(0.05, gameConfig.lobbyMonkeyScale))
   }
 
-  syncLobbyMonkeyFromConfig()
+  function syncLobbyBackdropFromConfig(): void {
+    setSceneBackgroundAndClearColor()
+    ambient.intensity = gameConfig.ambientIntensity
+    sun.intensity = gameConfig.sunIntensity
+    sun.position.set(gameConfig.sunPosX, gameConfig.sunPosY, gameConfig.sunPosZ)
+    applySunShadowFrustum(sun)
+    skyDome.syncFromConfig()
+    hubUnlit.applyToHubRoot(hubRoot, gameConfig.lightingUnlitMode >= 0.5)
+    syncLobbyMonkeyPresentation(monkeyRoot, {
+      flatShading: gameConfig.lobbyMonkeyFlatShading >= 0.5,
+      texNearest: gameConfig.lobbyMonkeyTexPixelated >= 0.5,
+    })
+    syncLobbyMonkeyPoseFromConfig()
+  }
+
+  syncLobbyBackdropFromConfig()
 
   scene.add(camera)
 
@@ -177,7 +206,7 @@ export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<LobbyBa
 
     const dt = clock.getDelta()
     skyDome.update(dt, camera.position)
-    syncLobbyMonkeyFromConfig()
+    syncLobbyMonkeyPoseFromConfig()
     renderer.render(scene, camera)
   }
 
@@ -213,7 +242,7 @@ export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<LobbyBa
 
   return {
     dispose,
-    syncLobbyMonkeyFromConfig,
+    syncLobbyBackdropFromConfig,
     camera,
     ambient,
     sun,

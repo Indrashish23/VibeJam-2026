@@ -102,6 +102,16 @@ import {
   isMpDebugMode,
   type MpDiagSnapshot,
 } from './mpDebugReport'
+import {
+  HudSmokeLayer,
+  launchPercentTextColor,
+  PORTRAIT_HURT_URL,
+  PORTRAIT_IDLE_URL,
+  PORTRAIT_SCREAM_URL,
+  PORTRAIT_STUNNED_URL,
+  smokeIntensity01,
+  triggerHudDamageShake,
+} from './hud/localPlayerHud'
 /** Stunned FX SVGs live in `public/ui/` so Vercel/production resolves them without bundling `../Assets/`. */
 const stunnedEffectBgUrl = `${import.meta.env.BASE_URL}ui/StunnedEffectBg.svg`
 const stunnedStarUrl = `${import.meta.env.BASE_URL}ui/StunnedStar.svg`
@@ -137,10 +147,11 @@ const usernameForm = document.getElementById('username-form') as HTMLFormElement
 const usernameInput = document.getElementById('username-input') as HTMLInputElement
 const gameRoot = document.getElementById('game-root') as HTMLDivElement
 
-const percentYouEl = document.getElementById('percent-you')
-const percentFoeEl = document.getElementById('percent-foe')
-const percentLabelYouEl = document.getElementById('percent-label-you')
-const percentLabelFoeEl = document.getElementById('percent-label-foe')
+const hudDamagePctEl = document.getElementById('hud-damage-pct') as HTMLSpanElement | null
+const hudDisplayNameEl = document.getElementById('hud-display-name') as HTMLSpanElement | null
+const hudPortraitImgEl = document.getElementById('hud-portrait-img') as HTMLImageElement | null
+const hudPortraitWrapEl = document.getElementById('hud-portrait-wrap') as HTMLDivElement | null
+const hudSmokeCanvasEl = document.getElementById('hud-smoke-canvas') as HTMLCanvasElement | null
 const victimHitFlashEl = document.getElementById('victim-hit-flash') as HTMLDivElement | null
 const stunnedOverlayEl = document.getElementById('stunned-overlay') as HTMLDivElement | null
 const stunnedBgEl = document.getElementById('stunned-bg') as HTMLImageElement | null
@@ -178,7 +189,6 @@ const jumpVfxEl = document.getElementById('jump-vfx') as HTMLDivElement | null
 const hudViewportEl = document.getElementById('hud-viewport') as HTMLDivElement | null
 const percentHudEl = document.getElementById('percent-hud') as HTMLDivElement | null
 const stockStripYouEl = document.getElementById('stock-strip-you') as HTMLDivElement | null
-const stockStripFoeEl = document.getElementById('stock-strip-foe') as HTMLDivElement | null
 const koAnnounceOverlayEl = document.getElementById('ko-announce-overlay') as HTMLDivElement | null
 const koAnnounceLineEl = document.getElementById('ko-announce-line') as HTMLParagraphElement | null
 const chargeBarWrap = document.getElementById('charge-bar-wrap') as HTMLDivElement | null
@@ -757,7 +767,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   const sun = new DirectionalLight(0xffffff, gameConfig.sunIntensity)
   /* Low sun angle → longer, harsher shadows on the deck. */
-  sun.position.set(58, 34, 42)
+  sun.position.set(gameConfig.sunPosX, gameConfig.sunPosY, gameConfig.sunPosZ)
   sun.castShadow = true
   sun.shadow.mapSize.set(4096, 4096)
   sun.shadow.camera.near = 0.5
@@ -866,6 +876,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     /* Keep sun + ambient so imported arena terrain (skipped below) still shades and receives shadows when unlit. */
     ambient.intensity = gameConfig.ambientIntensity
     sun.intensity = gameConfig.sunIntensity
+    sun.position.set(gameConfig.sunPosX, gameConfig.sunPosY, gameConfig.sunPosZ)
     scene.traverse((node) => {
       const mesh = node as Mesh
       if (!mesh.isMesh) return
@@ -1336,6 +1347,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (victimRole === myPvpRole()) {
       playerBananaSlipUntil = performance.now() + Math.max(0, durationMs)
       triggerStunnedHitOverlay()
+      triggerHudDamageShake(hudDamagePctEl, hudPortraitWrapEl, playerPercent)
       playBananaSlipOneShot()
       startBananaSlipCamRoll()
     } else {
@@ -1828,6 +1840,12 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let voiceInputBlocked = true
   let voiceResumeCountdownActive = false
 
+  /** Prior frame voice charge — used for “charge bar rising” portrait detection. */
+  let hudPrevVoiceCharge = 0
+  const hudSmokeLayer = hudSmokeCanvasEl ? new HudSmokeLayer(hudSmokeCanvasEl) : null
+  let hudSmokeSized = false
+  let hudPortraitResolvedUrl = ''
+
   /** Pistol mode (experimental): RMB hold = shout-charge a magazine; LMB click = fire snippet. */
   type PistolSlot = { offsetSec: number; durationSec: number }
   type PistolMagazine = { buf: AudioBuffer; slots: PistolSlot[] }
@@ -2006,6 +2024,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     resetMatchStockState()
     playerPercent = 0
     enemyPercent = 0
+    hudPortraitResolvedUrl = ''
+    hudPrevVoiceCharge = 0
     playerHurt = 'none'
     playerHurtRecoverLeft = 0
     playerInvulnUntil = 0
@@ -2068,6 +2088,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   function triggerLocalVictimWhiteFlash(): void {
     victimWhiteFlashUntil = performance.now() + gameConfig.hitVictimWhiteFlashMs
     triggerStunnedHitOverlay()
+    triggerHudDamageShake(hudDamagePctEl, hudPortraitWrapEl, playerPercent)
   }
 
   async function concludeRoundElimination(iWonRound: boolean): Promise<void> {
@@ -3407,13 +3428,41 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
   }
 
+  function tickLocalPlayerHud(deltaSec: number): void {
+    if (hudSmokeLayer && !hudSmokeSized) {
+      hudSmokeLayer.resize()
+      hudSmokeSized = true
+    }
+    if (hudSmokeLayer) {
+      hudSmokeLayer.tick(deltaSec, smokeIntensity01(Math.min(100, playerPercent)))
+    }
+
+    let nextPortrait = PORTRAIT_IDLE_URL
+    if (playerPercent >= 70) nextPortrait = PORTRAIT_HURT_URL
+    else if (stunnedFxActive) nextPortrait = PORTRAIT_STUNNED_URL
+    else {
+      const charging = chargingLmb || chargingRmb
+      const micOn = chargeHudMicAmpSmoothed > 0.035
+      const chargeRising = voiceChargeSmoothed > hudPrevVoiceCharge + 0.004
+      const scream =
+        charging && (micOn || chargeRising || voiceChargeSmoothed > 0.03)
+      if (scream) nextPortrait = PORTRAIT_SCREAM_URL
+    }
+    if (hudPortraitImgEl && nextPortrait !== hudPortraitResolvedUrl) {
+      hudPortraitResolvedUrl = nextPortrait
+      hudPortraitImgEl.src = nextPortrait
+    }
+
+    hudPrevVoiceCharge = voiceChargeSmoothed
+  }
+
   function syncHud(): void {
-    if (percentLabelYouEl) percentLabelYouEl.textContent = `${displayPlayerName()}[you]`
-    if (percentLabelFoeEl) percentLabelFoeEl.textContent = opponentHudName()
-    if (percentYouEl)
-      percentYouEl.textContent = `${Math.round(Math.min(999, Math.max(0, playerPercent)))}%`
-    if (percentFoeEl)
-      percentFoeEl.textContent = `${Math.round(Math.min(999, Math.max(0, enemyPercent)))}%`
+    if (hudDisplayNameEl) hudDisplayNameEl.textContent = displayPlayerName()
+    if (hudDamagePctEl) {
+      const v = Math.round(Math.min(999, Math.max(0, playerPercent)))
+      hudDamagePctEl.textContent = `${v}%`
+      hudDamagePctEl.style.color = launchPercentTextColor(Math.min(100, playerPercent))
+    }
     if (chargeBarMinMark) {
       chargeBarMinMark.style.bottom = `${Math.max(0, Math.min(1, gameConfig.voiceMinChargeToFire)) * 100}%`
     }
@@ -3466,13 +3515,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   function syncStocksHud(): void {
     const cap = Math.max(1, Math.round(gameConfig.startStocks))
     fillStockStrip(stockStripYouEl, stocksYou, cap, false)
-    fillStockStrip(stockStripFoeEl, stocksFoe, cap, false)
+    fillStockStrip(null, stocksFoe, cap, false)
   }
 
   function animateKoStockLoss(who: 'you' | 'foe'): void {
     const cap = Math.max(1, Math.round(gameConfig.startStocks))
     if (who === 'you') fillStockStrip(stockStripYouEl, stocksYou, cap, true)
-    else fillStockStrip(stockStripFoeEl, stocksFoe, cap, true)
+    else fillStockStrip(null, stocksFoe, cap, true)
   }
 
   function spawnSlotForRole(roleNet: 'host' | 'guest'): SpawnSlot {
@@ -4555,6 +4604,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
             ) {
               playerBananaSlipUntil = performance.now() + gameConfig.bananaSlipMs
               triggerStunnedHitOverlay()
+              triggerHudDamageShake(hudDamagePctEl, hudPortraitWrapEl, playerPercent)
               playBananaSlipOneShot()
               startBananaSlipCamRoll()
               bananaWorld.removePeelById(pl.id)
@@ -5310,6 +5360,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
 
     syncStunnedFxOverlay()
+    tickLocalPlayerHud(delta)
     updateDangerAuraFx(performance.now() * 0.001)
     updateOpponentDangerSmoke(performance.now() * 0.001)
 
@@ -5653,6 +5704,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         'lobbyMonkeyYawDeg',
         'lobbyMonkeyRollDeg',
         'lobbyMonkeyScale',
+        'hideLobbyUi',
+        'lobbyMonkeyFlatShading',
+        'lobbyMonkeyTexPixelated',
+        'lobbyMonkeyTexDownscale',
+        'sunPosX',
+        'sunPosY',
+        'sunPosZ',
       ],
       syncVisualsFromConfig: () => {
         skyDome.syncFromConfig()
