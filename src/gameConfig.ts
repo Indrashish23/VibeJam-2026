@@ -13,17 +13,17 @@ export const defaultGameConfig = {
   hideGameHud: 0,
 
   /** Screen-space charge wedge: inset from the right edge (rem). */
-  chargeHudRightRem: 7.5,
+  chargeHudRightRem: 0.85,
   /** Vertical offset from screen center (rem); positive moves the wedge down. */
   chargeHudVerticalBiasRem: 8.3,
   /** Max width of the wedge column (rem); pairs with viewport clamp in CSS. */
-  chargeHudWidthRem: 12.6,
+  chargeHudWidthRem: 11.2,
   /** Max height for the wedge (vh); capped in CSS with a rem ceiling. */
   chargeHudMaxHeightVh: 35,
   /** Uniform scale of the wedge art (1 = authored size). */
   chargeHudScale: 1.92,
   /** %/MAX label horizontal position (percent of wedge width from left). */
-  chargeHudPctLabelLeftPct: 5,
+  chargeHudPctLabelLeftPct: 5.5,
   /** %/MAX label vertical position (percent from top of wedge). */
   chargeHudPctLabelTopPct: 4.6,
   /** Pistol instruction overlay: distance from top of wedge (% height). */
@@ -58,8 +58,67 @@ export const defaultGameConfig = {
 
   /** Uniform scale for `#hud-viewport` (launch % + charge wedge cluster); 1 = default. */
   uiHudMasterScale: 1,
+  /** 1 = anchor launch-% cluster to the right; 0 = anchor left. */
+  percentHudAnchorRight: 0,
+  /** Extra horizontal inset from the anchored edge (rem); + = farther from edge (toward center). */
+  percentHudOffsetXRem: 2.7,
+  /** Vertical offset from bottom for the launch-% cluster (rem); + = higher. */
+  percentHudOffsetYRem: 1.05,
+  /** Subtle stacking / parallax offset (px); forwarded as translateZ on the cluster. */
+  percentHudOffsetZPx: 23,
   /** Scale only the launch-percent HUD block (inside master viewport scale). */
-  percentHudScale: 1.15,
+  percentHudScale: 0.65,
+  /** Multiplier on the large damage % digits (inside block scale). */
+  percentHudTextScale: 1.47,
+  /** Nudge the damage % digits horizontally (rem). */
+  percentHudTextOffsetXRem: -0.45,
+  /** Nudge the damage % digits vertically (rem). */
+  percentHudTextOffsetYRem: -0.65,
+  /** Multiplies the damage % clamp() font-size base (before percentHudTextScale). */
+  hudDamagePctFontClampMul: 1.11,
+  /** Uniform scale on the portrait + your stock badge column. */
+  percentHudPortraitScale: 1.33,
+  /** Smoke layer behind % / name (transform). */
+  hudSmokeOffsetXRem: 0,
+  hudSmokeOffsetYRem: 0,
+  hudSmokeOffsetZPx: 0,
+  hudSmokeScale: 1,
+  /** Column with smoke + damage % shell + player card (transform). */
+  hudLeftStackOffsetXRem: -6.1,
+  hudLeftStackOffsetYRem: -1.4,
+  hudLeftStackOffsetZPx: 0,
+  hudLeftStackScale: 1.07,
+  /** Wrapper around damage % span (transform; inner span keeps shake + text nudge). */
+  hudDamagePctShellOffsetXRem: 8,
+  hudDamagePctShellOffsetYRem: -0.25,
+  hudDamagePctShellOffsetZPx: -13,
+  hudDamagePctShellScale: 0.89,
+  /** Name card SVG container (transform). */
+  hudPlayerCardOffsetXRem: -1.15,
+  hudPlayerCardOffsetYRem: 0,
+  hudPlayerCardOffsetZPx: 0,
+  hudPlayerCardScale: 0.99,
+  /** Display name text (transform + font scale). */
+  hudDisplayNameOffsetXRem: 7.1,
+  hudDisplayNameOffsetYRem: -0.1,
+  hudDisplayNameOffsetZPx: 14,
+  hudDisplayNameScale: 1.59,
+  hudDisplayNameFontScale: 1.65,
+  /** Portrait column container (transform + portrait scale via percentHudPortraitScale). */
+  hudPortraitColumnOffsetXRem: -3.35,
+  hudPortraitColumnOffsetYRem: 8,
+  hudPortraitColumnOffsetZPx: -7,
+  /** Wrapper around portrait image (transform; inner keeps shake). */
+  hudPortraitWrapShellOffsetXRem: 2.25,
+  hudPortraitWrapShellOffsetYRem: 0,
+  hudPortraitWrapShellOffsetZPx: 0,
+  hudPortraitWrapShellScale: 1,
+  /** Your stock badge wrapper (transform + font scale on × / num). */
+  hudStockYouShellOffsetXRem: 2.5,
+  hudStockYouShellOffsetYRem: 2,
+  hudStockYouShellOffsetZPx: 0,
+  hudStockYouShellScale: 1,
+  hudStockYouFontScale: 1,
   /** Tweaks panel window UI scale (slider rows stay usable when shrunk). */
   tweaksPanelUiScale: 0.81,
   /** When 1 and Tweaks (T) is open, drag launch % + charge wedge anywhere on screen (positions persist per browser tab). */
@@ -86,29 +145,33 @@ export const defaultGameConfig = {
   postDitherEnabled: 1,
   /** Post dither strength 0–1 (maps to shader; higher = grainier / more retro crunch). */
   postDitherStrength: 0.32,
-  /** Launch % at which danger vignette, smoke, and red tint begin (local player). */
+  /** Launch % at which danger vignette and red tint begin on your screen; foot smoke uses same threshold but only renders on the opponent model (enemy sees yours; you see theirs). */
   dangerFxStartPercent: 50,
   /** Skybox base color channels (0–1) for the procedural sky dome. */
-  skyboxColorR: 0.14,
+  skyboxColorR: 0.66,
   skyboxColorG: 0.58,
   skyboxColorB: 0.43,
   /** Clouds: threshold where noise starts showing clouds (higher = fewer clouds). */
   skyCloudCoverage: 0.52,
   /** Clouds: softness of cloud edges in the procedural mask. */
-  skyCloudSoftness: 0.04,
+  skyCloudSoftness: 0.07,
   /** Clouds: noise frequency scale (higher = smaller/more clouds). */
-  skyCloudScale: 2.9,
+  skyCloudScale: 2.35,
   /** Clouds: advection speed across the dome. */
   skyCloudSpeed: 0.022,
   /** Clouds: blend strength over the base sky color. */
   skyCloudOpacity: 0.22,
 
   /** Fill light; keep low so the directional sun reads harsh against the skybox. */
-  ambientIntensity: 5,
+  ambientIntensity: 1,
   /** Key directional sun strength (shadow caster). */
-  sunIntensity: 13.7,
+  sunIntensity: 2,
+  /** Directional sun position (world units); shared by match + lobby preview. */
+  sunPosX: 62,
+  sunPosY: 34,
+  sunPosZ: 36,
   /** 1 = force unlit materials (ignores scene lighting) for flat readability/debugging. */
-  lightingUnlitMode: 0,
+  lightingUnlitMode: 1,
   /** 1 = force unlit materials on the local player avatar only. */
   lightingUnlitSelfModel: 0,
   /** 1 = force unlit materials on the enemy / bot avatar only. */
@@ -199,20 +262,20 @@ export const defaultGameConfig = {
   /** Extra projectile size bonus at full charge `t=1` (0.2 = +20%, 1 = +100%). */
   projectileSizeChargeMaxBonus: 0.57,
   /** Horizontal knockback on player when bot lands a hit (non-parried). */
-  knockbackOnPlayer: 20,
+  knockbackOnPlayer: 60,
   /** Converts horizontal knock impulse into upward vy (pop when hurt; tune with capsule slide). */
-  knockVictimLiftMul: 0.52,
+  knockVictimLiftMul: 0.74,
   /** Extra vy when the shot connects from below you (uses aim vector Y from shot → victim). */
-  knockVictimBelowAimMul: 0.62,
+  knockVictimBelowAimMul: 0.88,
   /** Extra bot vy from knock strength (launch arc vs sliding on the deck). */
   knockBotVertBoostMul: 0.4,
   /** Extra bot vy when the shot is from below (normalized fist→body Y, × strength). */
   knockBotBelowAimMul: 0.58,
   /** Base knock on bot (multiplied by voice `t` lerp). */
-  knockbackOnBot: 62,
+  knockbackOnBot: 60,
   /** At quiet voice (t=0) knock = base × this; at loud (t=1) × that. */
-  knockVoiceMinMul: 0.4,
-  knockVoiceMaxMul: 1.05,
+  knockVoiceMinMul: 0.38,
+  knockVoiceMaxMul: 1,
   /** PvE: percent added when the bot’s fist hits you. */
   botFistPercentGain: 12,
   /** 0..1: bot fist knock lerp (uses knockVoice min/max). */
@@ -226,13 +289,13 @@ export const defaultGameConfig = {
   /** Minimum charge bar (0–1) before a release spawns a fist. */
   voiceMinChargeToFire: 0.36,
   /** Percent added to victim at minimum valid charge (at voiceMinChargeToFire). */
-  percentGainMin: 4,
+  percentGainMin: 7.5,
   /** Percent added at full charge (1). */
-  percentGainMax: 22,
+  percentGainMax: 27.5,
   /** Knock scale floor from victim launch percent (at 0%). */
   launchKnockFloor: 0.04,
   /** Multiplier on (percent/100)^exponent for knock scaling. */
-  launchKnockScale: 10,
+  launchKnockScale: 7.5,
   /** Exponent on normalized percent for launch knock (higher = gentler at low %). */
   launchKnockExponent: 2.15,
   /** Horizontal knock decay while tumbling from a hit (lower = flies farther before sliding). */
@@ -298,20 +361,20 @@ export const defaultGameConfig = {
   /** Enemy mesh flash cadence during respawn invuln (blinks per second). */
   respawnFlashHz: 10,
   botBodyRadius: 0.72,
-  botPunchRange: 3.8,
+  botPunchRange: 2,
   botHitRadius: 0.95,
   /** Smart bot: preferred spacing around the player before switching to flanking. */
   botSmartPreferredRange: 5.8,
   /** Smart bot: half-band around preferred range considered "in ring". */
   botSmartRangeBand: 1.25,
   /** Smart bot: if closer than this, prioritize retreat. */
-  botSmartRetreatRange: 3.1,
+  botSmartRetreatRange: 1.7,
   /** Smart bot movement speed as multiplier of player move speed. */
-  botSmartMoveSpeedMul: 0.52,
+  botSmartMoveSpeedMul: 0.2,
   /** Smart bot approach wobble/flank blend while closing distance. */
-  botSmartApproachFlankBias: 0.38,
-  /** Smart bot: attack window as multiplier of botPunchRange. */
-  botSmartAttackRangeMul: 1.75,
+  botSmartApproachFlankBias: 1,
+  /** Smart bot: attack window as multiplier of botPunchRange (kept high so smart bot still pressures from range). */
+  botSmartAttackRangeMul: 4,
   /** Smart bot: telegraph/aim wind-up before firing (ms). */
   botSmartAimMs: 340,
   /** Smart bot: cooldown after firing (ms). */
@@ -661,10 +724,35 @@ export const defaultGameConfig = {
   voiceHitImpactEchoMul: 0.32,
   /** Seconds of delay before the echo tap (slight slapback). */
   voiceHitImpactEchoDelaySec: 0.088,
-  /** 0 = off. Hit-confirm tick when your shot connects (`Assets/SFX/hitmarker.ogg`). */
-  hitMarkerSfxEnabled: 1,
-  /** Gain × for hitmarker × SFX chain. */
-  hitMarkerSfxVolumeMul: 0.55,
+  /** 0 = off. Tiered hit-impact one-shot (`Assets/SFX/HitEffects/*.ogg`) on confirmed hit. */
+  hitImpactTierSfxEnabled: 1,
+  /** Victim launch % <22. */
+  hitImpactUnder20VolumeMul: 0.68,
+  /** Victim launch % 22..49 (`Over20%` / `Over20%v2` random). */
+  hitImpactOver20VolumeMul: 0.68,
+  /** Victim launch % 50..69. */
+  hitImpactOver50VolumeMul: 0.7,
+  /** Victim launch % >=70. */
+  hitImpactOver70VolumeMul: 0.74,
+
+  /** 1 = hide main-menu HTML card (buttons) for screenshots; Tweaks panel still works. */
+  hideLobbyUi: 0,
+  /** Lobby monkey: faceted per-face shading. */
+  lobbyMonkeyFlatShading: 1,
+  /** Lobby monkey: nearest-neighbor maps (chunky texels). */
+  lobbyMonkeyTexPixelated: 1,
+  /** Lobby monkey: 4× downscale embedded maps (reload menu after toggling). */
+  lobbyMonkeyTexDownscale: 1,
+
+  /** Menu-only: lobby 3D preview monkey position (world units). */
+  lobbyMonkeyPosX: 13.5,
+  lobbyMonkeyPosY: 4,
+  lobbyMonkeyPosZ: 8,
+  /** Lobby monkey Euler degrees (applied YXZ). */
+  lobbyMonkeyPitchDeg: 0,
+  lobbyMonkeyYawDeg: -122,
+  lobbyMonkeyRollDeg: 0,
+  lobbyMonkeyScale: 12.4,
 } as const
 
 export type GameConfigKey = keyof typeof defaultGameConfig

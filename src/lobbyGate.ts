@@ -4,6 +4,10 @@ import { isMultiplayerTransportConfigured } from './net/transportConfig'
 import { PublicLobbyDirectoryClient, type PublicLobbyListing } from './net/publicLobbyDirectory'
 import { isMapId, MAP_DEFS, type MapId } from './maps'
 import { clearTutorialDone, TUTORIAL_ENABLED } from './tutorial'
+import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js'
+import { gameConfig } from './gameConfig'
+import { mountLobbyBackdrop } from './lobbyBackdrop'
+import { mountTweaksPanel } from './tweaksPanel'
 
 function randomRoomId(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
@@ -105,11 +109,74 @@ function selectedLobbyVisibility(ui: ReturnType<typeof wireLobbyDom>): 'public' 
  * Display name gate, then pick offline or online (code share / join / public browser).
  * Realtime connection is established in-game; no infra details here.
  */
-export function runLobbyGate(initialDisplayName: string): Promise<LobbyResult> {
+export async function runLobbyGate(initialDisplayName: string): Promise<LobbyResult> {
+  const curtain = document.getElementById('lobby-boot-curtain') as HTMLDivElement | null
+  curtain?.removeAttribute('hidden')
+  curtain?.setAttribute('aria-hidden', 'false')
+
+  const gameRoot = document.getElementById('game-root') as HTMLDivElement
+  gameRoot.hidden = false
+  gameRoot.classList.add('game-root--lobby')
+  gameRoot.classList.add('game-root--hud-suspended')
+
+  let backdrop: Awaited<ReturnType<typeof mountLobbyBackdrop>>
+  try {
+    backdrop = await mountLobbyBackdrop(gameRoot)
+  } catch (err) {
+    curtain?.setAttribute('hidden', '')
+    curtain?.setAttribute('aria-hidden', 'true')
+    throw err
+  }
+
+  const tweaksHost = document.getElementById('tweaks-panel-host')
+  let disposeLobbyTweaks: (() => void) | null = null
+  if (tweaksHost) {
+    const controls = new PointerLockControls(backdrop.camera, gameRoot)
+    const mounted = mountTweaksPanel(tweaksHost, {
+      controls,
+      camera: backdrop.camera,
+      ambient: backdrop.ambient,
+      sun: backdrop.sun,
+      keysThatSkipRoundReset: [
+        'hideLobbyUi',
+        'lobbyMonkeyFlatShading',
+        'lobbyMonkeyTexPixelated',
+        'lobbyMonkeyTexDownscale',
+        'lightingUnlitMode',
+        'skyboxColorR',
+        'skyboxColorG',
+        'skyboxColorB',
+        'skyCloudCoverage',
+        'skyCloudSoftness',
+        'skyCloudScale',
+        'skyCloudSpeed',
+        'skyCloudOpacity',
+        'ambientIntensity',
+        'sunIntensity',
+        'sunPosX',
+        'sunPosY',
+        'sunPosZ',
+        'lobbyMonkeyPosX',
+        'lobbyMonkeyPosY',
+        'lobbyMonkeyPosZ',
+        'lobbyMonkeyPitchDeg',
+        'lobbyMonkeyYawDeg',
+        'lobbyMonkeyRollDeg',
+        'lobbyMonkeyScale',
+      ],
+      syncVisualsFromConfig: () => {
+        backdrop.syncLobbyBackdropFromConfig()
+        document.body.classList.toggle('hide-lobby-html-ui', gameConfig.hideLobbyUi >= 0.5)
+      },
+      onToggle: () => {},
+    })
+    disposeLobbyTweaks = () => mounted.dispose()
+  }
+
   const ui = wireLobbyDom()
   let displayName = initialDisplayName
 
-  return new Promise((resolve) => {
+  return await new Promise<LobbyResult>((resolve) => {
     const onlineUnavailable = (): boolean => !isMultiplayerTransportConfigured()
 
     let browserClient: PublicLobbyDirectoryClient | null = null
@@ -131,6 +198,14 @@ export function runLobbyGate(initialDisplayName: string): Promise<LobbyResult> {
       if (settled) return
       settled = true
       stopBrowserClient()
+      disposeLobbyTweaks?.()
+      disposeLobbyTweaks = null
+      tweaksHost?.replaceChildren()
+      document.body.classList.remove('hide-lobby-html-ui')
+      backdrop.dispose()
+      const c = document.getElementById('lobby-boot-curtain') as HTMLDivElement | null
+      c?.setAttribute('hidden', '')
+      c?.setAttribute('aria-hidden', 'true')
       ui.overlay.hidden = true
       resolve(result)
     }
@@ -191,6 +266,9 @@ export function runLobbyGate(initialDisplayName: string): Promise<LobbyResult> {
     }
 
     ui.overlay.hidden = false
+    /* Reveal menu before removing boot curtain so the canvas never flashes without the card. */
+    curtain?.setAttribute('hidden', '')
+    curtain?.setAttribute('aria-hidden', 'true')
     ui.intro.textContent = `Signed in as ${displayName}. Host a public match (listed for anyone), a private code lobby, join a friend’s code, or play offline.`
     ui.err.hidden = true
     ui.err.textContent = ''
@@ -349,4 +427,5 @@ export function runLobbyGate(initialDisplayName: string): Promise<LobbyResult> {
     }
   })
 }
+
 

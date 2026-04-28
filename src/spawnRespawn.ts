@@ -25,9 +25,9 @@ export function pickGroundedRespawnFoot(
   if (candidatesFeetApprox.length === 0) return null
   const cand = [...candidatesFeetApprox]
   shuffleInPlace(cand)
-  const rayStartY = 220
-  const maxDist = rayStartY + 400
   for (const approx of cand) {
+    const rayStartY = Math.max(220, approx.y + 220)
+    const maxDist = rayStartY + 500
     const hit = terrain.raycastDown(approx.x, rayStartY, approx.z, maxDist)
     if (!hit) continue
     const feet = new Vector3(hit.point.x, hit.point.y, hit.point.z)

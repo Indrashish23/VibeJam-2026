@@ -1,14 +1,6 @@
-import {
-  BoxGeometry,
-  Color,
-  Mesh,
-  MeshStandardMaterial,
-  PerspectiveCamera,
-  Quaternion,
-  Scene,
-  Vector3,
-} from 'three'
+import { PerspectiveCamera, Scene, Vector3 } from 'three'
 import { gameConfig } from '../gameConfig'
+import { VoiceProjectileVisual } from './voiceProjectileVisual'
 
 /** Visual / hit size for the voice projectile (matches former fist radius). */
 export const PROJECTILE_R = 0.2
@@ -55,7 +47,7 @@ export type FireOptions = {
 export class PlayerArms {
   private readonly camera: PerspectiveCamera
   private readonly scene: Scene
-  private readonly mesh: Mesh
+  private readonly projVfx: VoiceProjectileVisual
 
   private readonly proj: ProjectileState
 
@@ -73,23 +65,12 @@ export class PlayerArms {
   private readonly _tmp = new Vector3()
   /** Scratch for `getProjectileContactPoint` (avoid per-hit `target.clone()` alloc). */
   private readonly _cpScratch = new Vector3()
-  private readonly _meshQuat = new Quaternion()
 
   constructor(camera: PerspectiveCamera, scene: Scene) {
     this.camera = camera
     this.scene = scene
 
-    const mat = new MeshStandardMaterial({
-      color: new Color(0xc45c6b),
-      roughness: 0.55,
-      metalness: 0.15,
-    })
-    const geo = new BoxGeometry(0.38, 0.38, 0.42)
-    this.mesh = new Mesh(geo, mat)
-    this.mesh.castShadow = true
-    this.mesh.receiveShadow = true
-    this.mesh.visible = false
-    scene.add(this.mesh)
+    this.projVfx = new VoiceProjectileVisual(scene)
 
     this.proj = {
       active: false,
@@ -107,9 +88,7 @@ export class PlayerArms {
   }
 
   dispose(): void {
-    this.scene.remove(this.mesh)
-    this.mesh.geometry.dispose()
-    ;(this.mesh.material as MeshStandardMaterial).dispose()
+    this.projVfx.dispose(this.scene)
   }
 
   private shoulderWorld(out: Vector3): void {
@@ -266,22 +245,36 @@ export class PlayerArms {
 
   update(delta: number): void {
     if (!this.proj.active) {
-      this.mesh.visible = false
+      this.projVfx.update({
+        active: false,
+        position: this.proj.pos,
+        sizeMul: 1,
+        camera: this.camera,
+        delta,
+      })
       return
     }
 
     if (this.hitscanMode) {
-      this.mesh.visible = false
+      this.projVfx.update({
+        active: false,
+        position: this.proj.pos,
+        sizeMul: this.proj.sizeMul,
+        camera: this.camera,
+        delta,
+      })
       return
     }
 
     this.integrate(delta)
 
-    this._meshQuat.copy(this.camera.quaternion)
-    this.mesh.setRotationFromQuaternion(this._meshQuat)
-    this.mesh.position.copy(this.proj.pos)
-    this.mesh.scale.setScalar(this.proj.sizeMul)
-    this.mesh.visible = true
+    this.projVfx.update({
+      active: this.proj.flying,
+      position: this.proj.pos,
+      sizeMul: this.proj.sizeMul,
+      camera: this.camera,
+      delta,
+    })
   }
 
   private integrate(delta: number): void {
@@ -371,8 +364,6 @@ export class PlayerArms {
     this.proj.sizeMul = 1
     this.proj.pistolMode = false
     this.hitscanMode = false
-    this.mesh.scale.setScalar(1)
-    this.mesh.visible = false
     this.dealt = true
   }
 

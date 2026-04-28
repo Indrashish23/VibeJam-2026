@@ -36,7 +36,7 @@ import { RenderPixelatedPass } from 'three/addons/postprocessing/RenderPixelated
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js'
 import { gameConfig } from './gameConfig'
-import { applyPlayerRecordToHud, bumpPlayerRecord } from './playerRecord'
+import { bumpPlayerRecord } from './playerRecord'
 import { isMapId, loadMap, type MapHandle, type MapId, type SpawnSlot } from './maps'
 import { pickGroundedRespawnFoot } from './spawnRespawn'
 import { BotFighter, type BotMode } from './boxing/bot'
@@ -90,7 +90,7 @@ import {
   wireBackgroundMusicToFirstGesture,
 } from './audio/backgroundMusic'
 import { playFootstepOneShot } from './audio/footstepsSfx'
-import { playHitmarkerOneShot } from './audio/combatSfx'
+import { playTieredHitImpactOneShot } from './audio/combatSfx'
 import { playBananaSlipOneShot, playJumpOneShot, playLandOneShot } from './audio/playerMoveSfx'
 import { playEnemySfxSpatialAt, resumeEnemySfxAudio, type SfxKind } from './audio/enemySfx'
 import { mountUserSettingsPanel, setUserSettingsPointerControls } from './userSettingsUI'
@@ -102,6 +102,16 @@ import {
   isMpDebugMode,
   type MpDiagSnapshot,
 } from './mpDebugReport'
+import {
+  HudSmokeLayer,
+  launchPercentTextColor,
+  PORTRAIT_HURT_URL,
+  PORTRAIT_IDLE_URL,
+  PORTRAIT_SCREAM_URL,
+  PORTRAIT_STUNNED_URL,
+  smokeIntensity01,
+  triggerHudDamageShake,
+} from './hud/localPlayerHud'
 /** Stunned FX SVGs live in `public/ui/` so Vercel/production resolves them without bundling `../Assets/`. */
 const stunnedEffectBgUrl = `${import.meta.env.BASE_URL}ui/StunnedEffectBg.svg`
 const stunnedStarUrl = `${import.meta.env.BASE_URL}ui/StunnedStar.svg`
@@ -137,10 +147,11 @@ const usernameForm = document.getElementById('username-form') as HTMLFormElement
 const usernameInput = document.getElementById('username-input') as HTMLInputElement
 const gameRoot = document.getElementById('game-root') as HTMLDivElement
 
-const percentYouEl = document.getElementById('percent-you')
-const percentFoeEl = document.getElementById('percent-foe')
-const percentLabelYouEl = document.getElementById('percent-label-you')
-const percentLabelFoeEl = document.getElementById('percent-label-foe')
+const hudDamagePctEl = document.getElementById('hud-damage-pct') as HTMLSpanElement | null
+const hudDisplayNameEl = document.getElementById('hud-display-name') as HTMLSpanElement | null
+const hudPortraitImgEl = document.getElementById('hud-portrait-img') as HTMLImageElement | null
+const hudPortraitWrapEl = document.getElementById('hud-portrait-wrap') as HTMLDivElement | null
+const hudSmokeCanvasEl = document.getElementById('hud-smoke-canvas') as HTMLCanvasElement | null
 const victimHitFlashEl = document.getElementById('victim-hit-flash') as HTMLDivElement | null
 const stunnedOverlayEl = document.getElementById('stunned-overlay') as HTMLDivElement | null
 const stunnedBgEl = document.getElementById('stunned-bg') as HTMLImageElement | null
@@ -166,16 +177,32 @@ const invulnShineEl = document.getElementById('invuln-shine') as HTMLDivElement 
 const winGameSplashEl = document.getElementById('win-game-splash') as HTMLDivElement | null
 const winGameSplashTxtEl =
   winGameSplashEl?.querySelector('.win-game-splash__txt') as HTMLDivElement | null
+const winGameSplashSubEl = document.getElementById('win-game-splash-sub') as HTMLSpanElement | null
+const winReturnLobbyOverlayEl = document.getElementById(
+  'win-return-lobby-overlay',
+) as HTMLDivElement | null
+const sessionReloadOverlayEl = document.getElementById('session-reload-overlay') as HTMLDivElement | null
 const countdownOverlay = document.getElementById('countdown-overlay') as HTMLDivElement | null
 const countdownNumEl = document.getElementById('countdown-num') as HTMLSpanElement | null
 const dashScanEl = document.getElementById('dash-scanlines') as HTMLDivElement | null
 const jumpVfxEl = document.getElementById('jump-vfx') as HTMLDivElement | null
 const hudViewportEl = document.getElementById('hud-viewport') as HTMLDivElement | null
 const percentHudEl = document.getElementById('percent-hud') as HTMLDivElement | null
-const stockStripYouEl = document.getElementById('stock-strip-you') as HTMLDivElement | null
-const stockStripFoeEl = document.getElementById('stock-strip-foe') as HTMLDivElement | null
+const hudStockYouNumEl = document.getElementById('hud-stock-you-num') as HTMLSpanElement | null
+const hudStockYouWrapEl = document.getElementById('hud-stock-you-wrap') as HTMLDivElement | null
+const hudLeftStackEl = document.getElementById('hud-left-stack') as HTMLDivElement | null
+const hudDamagePctShellEl = document.getElementById('hud-damage-pct-shell') as HTMLSpanElement | null
+const hudPlayerCardEl = document.getElementById('hud-player-card') as HTMLDivElement | null
+const hudPortraitColumnEl = document.getElementById('hud-portrait-column') as HTMLDivElement | null
+const hudPortraitWrapShellEl = document.getElementById('hud-portrait-wrap-shell') as HTMLDivElement | null
+const hudStockYouShellEl = document.getElementById('hud-stock-you-shell') as HTMLDivElement | null
+const legacyHudStockFoeShellEl = document.getElementById('hud-stock-foe-shell') as HTMLDivElement | null
+/* Safety net: remove any stale foe stock HUD shell from older local markup/builds. */
+legacyHudStockFoeShellEl?.remove()
 const koAnnounceOverlayEl = document.getElementById('ko-announce-overlay') as HTMLDivElement | null
-const koAnnounceLineEl = document.getElementById('ko-announce-line') as HTMLParagraphElement | null
+const koAnnounceNameEl = document.getElementById('ko-announce-name') as HTMLParagraphElement | null
+const koAnnounceStockRowEl = document.getElementById('ko-announce-stock-row') as HTMLDivElement | null
+const koAnnounceStockNumEl = document.getElementById('ko-announce-stock-num') as HTMLSpanElement | null
 const chargeBarWrap = document.getElementById('charge-bar-wrap') as HTMLDivElement | null
 const chargeBarFill = document.getElementById('charge-bar-fill') as HTMLDivElement | null
 const chargeBarMinMark = document.getElementById('charge-bar-min') as HTMLDivElement | null
@@ -204,7 +231,6 @@ if (chargeBarWrap) {
 }
 restoreHudElementPosition(percentHudEl, 'percentHud')
 restoreHudElementPosition(chargeBarWrap, 'chargeHud')
-applyPlayerRecordToHud()
 
 function setChargeBarDisplayPct(pct0to100: number): void {
   if (!chargeBarWrap) return
@@ -237,10 +263,102 @@ function syncChargeHudLayout(): void {
   }
 }
 
+function setHudTransform(
+  el: HTMLElement | null,
+  oxRem: number,
+  oyRem: number,
+  ozPx: number,
+  scale: number,
+): void {
+  if (!el) return
+  el.style.transform = `translate3d(${oxRem}rem, ${oyRem}rem, ${ozPx}px) scale(${scale})`
+}
+
 function syncUiHudChrome(): void {
   const g = gameConfig
   hudViewportEl?.style.setProperty('--ui-hud-master', String(g.uiHudMasterScale))
-  percentHudEl?.style.setProperty('--percent-hud-scale', String(g.percentHudScale))
+  if (percentHudEl) {
+    const anchorRight = g.percentHudAnchorRight >= 0.5
+    const inset = 1.2 + g.percentHudOffsetXRem
+    const bottom = 2.2 + g.percentHudOffsetYRem
+    percentHudEl.style.setProperty('--percent-hud-scale', String(g.percentHudScale))
+    percentHudEl.style.setProperty('--percent-hud-right', anchorRight ? `${inset}rem` : 'auto')
+    percentHudEl.style.setProperty('--percent-hud-left', anchorRight ? 'auto' : `${inset}rem`)
+    percentHudEl.style.setProperty('--percent-hud-bottom', `${bottom}rem`)
+    percentHudEl.style.setProperty('--percent-hud-z', `${g.percentHudOffsetZPx}px`)
+    percentHudEl.style.setProperty(
+      '--percent-hud-origin',
+      anchorRight ? 'bottom right' : 'bottom left',
+    )
+    percentHudEl.style.setProperty('--hud-damage-pct-scale', String(g.percentHudTextScale))
+    percentHudEl.style.setProperty('--hud-damage-pct-ox', `${g.percentHudTextOffsetXRem}rem`)
+    percentHudEl.style.setProperty('--hud-damage-pct-oy', `${g.percentHudTextOffsetYRem}rem`)
+    percentHudEl.classList.toggle('percent-hud--anchor-left', !anchorRight)
+  }
+
+  hudDamagePctEl?.style.setProperty(
+    '--hud-damage-pct-font-clamp-mul',
+    String(g.hudDamagePctFontClampMul),
+  )
+  hudDisplayNameEl?.style.setProperty(
+    '--hud-display-name-font-scale',
+    String(g.hudDisplayNameFontScale),
+  )
+  setHudTransform(
+    hudDisplayNameEl,
+    g.hudDisplayNameOffsetXRem,
+    g.hudDisplayNameOffsetYRem,
+    g.hudDisplayNameOffsetZPx,
+    g.hudDisplayNameScale,
+  )
+
+  setHudTransform(
+    hudLeftStackEl,
+    g.hudLeftStackOffsetXRem,
+    g.hudLeftStackOffsetYRem,
+    g.hudLeftStackOffsetZPx,
+    g.hudLeftStackScale,
+  )
+  setHudTransform(
+    hudSmokeCanvasEl,
+    g.hudSmokeOffsetXRem,
+    g.hudSmokeOffsetYRem,
+    g.hudSmokeOffsetZPx,
+    g.hudSmokeScale,
+  )
+  setHudTransform(
+    hudDamagePctShellEl,
+    g.hudDamagePctShellOffsetXRem,
+    g.hudDamagePctShellOffsetYRem,
+    g.hudDamagePctShellOffsetZPx,
+    g.hudDamagePctShellScale,
+  )
+  setHudTransform(
+    hudPlayerCardEl,
+    g.hudPlayerCardOffsetXRem,
+    g.hudPlayerCardOffsetYRem,
+    g.hudPlayerCardOffsetZPx,
+    g.hudPlayerCardScale,
+  )
+
+  if (hudPortraitColumnEl) {
+    hudPortraitColumnEl.style.transform = `translate3d(${g.hudPortraitColumnOffsetXRem}rem, ${g.hudPortraitColumnOffsetYRem}rem, ${g.hudPortraitColumnOffsetZPx}px) scale(${g.percentHudPortraitScale})`
+  }
+  setHudTransform(
+    hudPortraitWrapShellEl,
+    g.hudPortraitWrapShellOffsetXRem,
+    g.hudPortraitWrapShellOffsetYRem,
+    g.hudPortraitWrapShellOffsetZPx,
+    g.hudPortraitWrapShellScale,
+  )
+  setHudTransform(
+    hudStockYouShellEl,
+    g.hudStockYouShellOffsetXRem,
+    g.hudStockYouShellOffsetYRem,
+    g.hudStockYouShellOffsetZPx,
+    g.hudStockYouShellScale,
+  )
+  hudStockYouShellEl?.style.setProperty('--hud-stock-you-font-scale', String(g.hudStockYouFontScale))
 }
 
 function syncTweaksPanelChrome(): void {
@@ -419,6 +537,20 @@ function sleepMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+/** Black full-screen gate before `location.reload` when returning to the main menu. */
+const SESSION_RELOAD_GATE_MS = 3000
+
+function runSessionReloadGateThen(reload: () => void): void {
+  const el = sessionReloadOverlayEl
+  if (el) {
+    el.hidden = false
+    el.setAttribute('aria-hidden', 'false')
+    el.setAttribute('role', 'status')
+    el.setAttribute('aria-live', 'polite')
+  }
+  window.setTimeout(reload, SESSION_RELOAD_GATE_MS)
+}
+
 function runUsernameGate(): Promise<void> {
   const stored = readStoredPlayerName()
   if (stored) {
@@ -497,6 +629,9 @@ function takeOnlineRematchReloadLobby(): LobbyResult | null {
 }
 
 async function initGame(lobby: LobbyResult): Promise<void> {
+  gameRoot.classList.remove('game-root--lobby')
+  gameRoot.classList.add('game-root--hud-suspended')
+
   if (DEBUG_MP)
     debugMpLog(
       `initGame role=${lobby.mode === 'online' ? lobby.role : 'offline'} mp=${lobby.mode} map=${lobby.mapId}`,
@@ -544,6 +679,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   /** Percent HUD foe line: peer hello name, else public-listing host name for guests; never internal dummy label. */
   function opponentHudName(): string {
+    if (lobbySmartBotActive && bot.mode === 'smart') return 'Bot'
     if (lobby.mode === 'online') {
       const n = mpOpponentName?.trim()
       if (n) return n
@@ -723,7 +859,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   const sun = new DirectionalLight(0xffffff, gameConfig.sunIntensity)
   /* Low sun angle → longer, harsher shadows on the deck. */
-  sun.position.set(58, 34, 42)
+  sun.position.set(gameConfig.sunPosX, gameConfig.sunPosY, gameConfig.sunPosZ)
   sun.castShadow = true
   sun.shadow.mapSize.set(4096, 4096)
   sun.shadow.camera.near = 0.5
@@ -756,7 +892,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   function isUnderLitGltfArenaMap(node: Object3D): boolean {
     let cur: Object3D | null = node
     while (cur) {
-      if (cur.name === 'map:island' || cur.name === 'map:godotExport') return true
+      if (cur.name === 'map:godotExport' || cur.name === 'map:floatingIslandStage') return true
       cur = cur.parent
     }
     return false
@@ -832,6 +968,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     /* Keep sun + ambient so imported arena terrain (skipped below) still shades and receives shadows when unlit. */
     ambient.intensity = gameConfig.ambientIntensity
     sun.intensity = gameConfig.sunIntensity
+    sun.position.set(gameConfig.sunPosX, gameConfig.sunPosY, gameConfig.sunPosZ)
     scene.traverse((node) => {
       const mesh = node as Mesh
       if (!mesh.isMesh) return
@@ -870,6 +1007,16 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   const terrainPhysics = await TerrainPhysics.create()
   let map: MapHandle = await loadMap(lobby.mapId, scene, hubRoot)
   terrainPhysics.setTerrainMeshes(map.collisionMeshes, map.rapierCuboids)
+
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        gameRoot.classList.remove('game-root--hud-suspended')
+        syncGameHudVisibility()
+        resolve()
+      })
+    })
+  })
 
   scene.add(camera)
 
@@ -1302,6 +1449,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (victimRole === myPvpRole()) {
       playerBananaSlipUntil = performance.now() + Math.max(0, durationMs)
       triggerStunnedHitOverlay()
+      triggerHudDamageShake(hudDamagePctEl, hudPortraitWrapEl, playerPercent)
       playBananaSlipOneShot()
       startBananaSlipCamRoll()
     } else {
@@ -1567,11 +1715,12 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     'radial-gradient(ellipse 70% 85% at 50% 52%, rgba(255,85,70,0.72) 0%, rgba(200,30,25,0.35) 45%, transparent 70%)'
   gameRoot.appendChild(dangerLaunchTintEl)
 
-  const dangerSmokeCount = 16
-  const dangerSmokePos = new Float32Array(dangerSmokeCount * 3)
-  const dangerSmokeGeom = new BufferGeometry()
-  dangerSmokeGeom.setAttribute('position', new BufferAttribute(dangerSmokePos, 3))
-  const dangerSmokeMat = new PointsMaterial({
+  /** High-% foot smoke: only at the opponent’s world position (local player never sees it on self). */
+  const opponentDangerSmokeCount = 16
+  const opponentDangerSmokePos = new Float32Array(opponentDangerSmokeCount * 3)
+  const opponentDangerSmokeGeom = new BufferGeometry()
+  opponentDangerSmokeGeom.setAttribute('position', new BufferAttribute(opponentDangerSmokePos, 3))
+  const opponentDangerSmokeMat = new PointsMaterial({
     color: new Color(0xa89898),
     size: 0.58,
     transparent: true,
@@ -1580,11 +1729,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     depthTest: false,
     sizeAttenuation: true,
   })
-  const dangerSmoke = new Points(dangerSmokeGeom, dangerSmokeMat)
-  dangerSmoke.frustumCulled = false
-  dangerSmoke.renderOrder = 50
-  dangerSmoke.visible = false
-  scene.add(dangerSmoke)
+  const opponentDangerSmoke = new Points(opponentDangerSmokeGeom, opponentDangerSmokeMat)
+  opponentDangerSmoke.frustumCulled = false
+  opponentDangerSmoke.renderOrder = 50
+  opponentDangerSmoke.visible = false
+  scene.add(opponentDangerSmoke)
 
   let vy = 0
   let grounded = false
@@ -1793,6 +1942,12 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let voiceInputBlocked = true
   let voiceResumeCountdownActive = false
 
+  /** Prior frame voice charge — used for “charge bar rising” portrait detection. */
+  let hudPrevVoiceCharge = 0
+  const hudSmokeLayer = hudSmokeCanvasEl ? new HudSmokeLayer(hudSmokeCanvasEl) : null
+  let hudSmokeSized = false
+  let hudPortraitResolvedUrl = ''
+
   /** Pistol mode (experimental): RMB hold = shout-charge a magazine; LMB click = fire snippet. */
   type PistolSlot = { offsetSec: number; durationSec: number }
   type PistolMagazine = { buf: AudioBuffer; slots: PistolSlot[] }
@@ -1971,6 +2126,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     resetMatchStockState()
     playerPercent = 0
     enemyPercent = 0
+    hudPortraitResolvedUrl = ''
+    hudPrevVoiceCharge = 0
     playerHurt = 'none'
     playerHurtRecoverLeft = 0
     playerInvulnUntil = 0
@@ -2033,9 +2190,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   function triggerLocalVictimWhiteFlash(): void {
     victimWhiteFlashUntil = performance.now() + gameConfig.hitVictimWhiteFlashMs
     triggerStunnedHitOverlay()
+    triggerHudDamageShake(hudDamagePctEl, hudPortraitWrapEl, playerPercent)
   }
 
   async function concludeRoundElimination(iWonRound: boolean): Promise<void> {
+    if (opponentForfeitHandled) return
     if (seriesTransitionActive || matchOutcome) return
     hideKoAnnouncementImmediate()
     console.info('[matchEnd] concludeRoundElimination', {
@@ -2050,9 +2209,16 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     const epochAtStart = pvpMatchEpoch
     try {
       if (iWonRound) tutorialBotRingouts += 1
-      if (iWonRound) await playWinGameSplashSequence()
+      await playGameOutcomeSplashSequence(iWonRound ? 'win' : 'lose')
       if (epochAtStart !== pvpMatchEpoch) return
-      endMatch(iWonRound ? 'win' : 'lose')
+      if (opponentForfeitHandled) return
+      if (iWonRound) {
+        await sleepMs(2000)
+        if (!applyMatchEndCore('win')) return
+        returnToLobbyReload(isOnline && lobby.mode === 'online')
+      } else {
+        endMatch('lose')
+      }
     } finally {
       seriesTransitionActive = false
     }
@@ -2063,6 +2229,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     hideKoAnnouncementImmediate()
     hideMatchEndOverlayFully()
     if (matchEndOverlay) matchEndOverlay.hidden = true
+    countdownNumEl.classList.remove('countdown-num--go')
+    countdownOverlay.classList.remove('countdown-overlay--go-phase')
     countdownOverlay.classList.add('countdown-overlay--opaque')
     if (countdownTitleEl) {
       countdownTitleEl.hidden = false
@@ -2080,9 +2248,21 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       await sleepMs(840)
     }
     if (countdownTitleEl) countdownTitleEl.hidden = true
-    countdownOverlay.hidden = true
+    countdownNumEl.textContent = 'GO'
+    countdownNumEl.classList.add('countdown-num--go')
+    countdownOverlay.classList.add('countdown-overlay--go-phase')
     countdownOverlay.classList.remove('countdown-overlay--pulse')
-    countdownOverlay.classList.remove('countdown-overlay--opaque')
+    void countdownOverlay.offsetWidth
+    countdownOverlay.classList.add('countdown-overlay--pulse')
+    await sleepMs(620)
+
+    countdownOverlay.hidden = true
+    countdownOverlay.classList.remove(
+      'countdown-overlay--pulse',
+      'countdown-overlay--opaque',
+      'countdown-overlay--go-phase',
+    )
+    countdownNumEl.classList.remove('countdown-num--go')
   }
 
   async function runMatchBeginCountdown(): Promise<void> {
@@ -2219,8 +2399,30 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (matchEndLobbyBtnEl) matchEndLobbyBtnEl.hidden = false
   }
 
+  /** Hide HUD layers that fight with the single match-result / forfeit surface. */
+  function squelchCompetingEndOfMatchUi(): void {
+    if (matchCancelledOverlay) matchCancelledOverlay.hidden = true
+    if (winReturnLobbyOverlayEl) {
+      winReturnLobbyOverlayEl.hidden = true
+    }
+    hideWinGameSplash()
+    hideKoAnnouncementImmediate()
+    if (countdownOverlay) {
+      countdownOverlay.hidden = true
+      countdownOverlay.classList.remove('countdown-overlay--pulse', 'countdown-overlay--opaque')
+    }
+    hideLeaveMatchDialog()
+    if (mpToast) {
+      mpToast.hidden = true
+      mpToast.classList.remove('mp-toast--bad')
+    }
+    if (stunnedOverlayEl) stunnedOverlayEl.hidden = true
+  }
+
   function returnToLobbyReload(notifyOpponent: boolean = false): void {
     leavingToLobby = true
+    squelchCompetingEndOfMatchUi()
+    gameRoot.classList.add('game-root--hud-suspended')
     if (notifyOpponent && isOnline && lobby.mode === 'online' && (mpSocket?.readyState === 1 || rtcGame)) {
       try {
         sendGameTraffic({ type: 'matchCancelled' })
@@ -2238,15 +2440,15 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     } catch {
       /* ignore */
     }
-    const delay = notifyOpponent ? 150 : 80
-    window.setTimeout(() => {
+    runSessionReloadGateThen(() => {
       window.location.reload()
-    }, delay)
+    })
   }
 
   function showOpponentForfeitAndReturn(): void {
     if (opponentForfeitHandled) return
     opponentForfeitHandled = true
+    squelchCompetingEndOfMatchUi()
     clearMovementKeys()
     hideWinGameSplash()
     winFinisher = null
@@ -2376,8 +2578,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           isYouVictim ? displayPlayerName() : opponentHudName(),
           before,
           after,
+          isYouVictim ? 'you' : 'foe',
         )
-        animateKoStockLoss(isYouVictim ? 'you' : 'foe')
         scheduleKoAnnouncementDismiss(gameConfig.koAnnounceHoldMs)
         if (lobby.role === 'host') {
           scheduleAuthRespawnHost(vr)
@@ -2426,7 +2628,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           ? data.aggressorRole
           : undefined
       if (aggressorRole === lobby.role) {
-        triggerAggressorHitConfirmFx()
+        triggerAggressorHitConfirmFx(enemyPercent)
         const vr = data.victimRole === 'host' || data.victimRole === 'guest' ? data.victimRole : undefined
         if (vr && vr !== lobby.role) {
           bot.flashVictimInvuln(gameConfig.hitVictimWhiteFlashMs)
@@ -2486,7 +2688,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
 
     if (ty === 'authMatchEnd' && lobby.mode === 'online' && typeof data.winnerRole === 'string') {
-      if (!matchOutcome && !seriesTransitionActive) {
+      if (!opponentForfeitHandled && !matchOutcome && !seriesTransitionActive) {
         const wr =
           data.winnerRole === 'host' || data.winnerRole === 'guest' ? data.winnerRole : undefined
         if (wr) void concludeRoundElimination(wr === lobby.role)
@@ -2504,12 +2706,21 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
 
     if (ty === 'matchCancelled' && lobby.mode === 'online') {
-      if (matchCancelledOverlay) {
+      if (opponentForfeitHandled) return
+      if (
+        matchEndOverlay &&
+        !matchEndOverlay.hidden &&
+        matchEndCardEl?.classList.contains('match-end-card--forfeit')
+      ) {
+        return
+      }
+      if (matchCancelledOverlay && !matchOutcome && !seriesTransitionActive) {
         try {
           controls.unlock()
         } catch {
           /* ignore */
         }
+        squelchCompetingEndOfMatchUi()
         matchCancelledOverlay.hidden = false
         requestAnimationFrame(() => matchCancelledOkBtn?.focus())
       } else {
@@ -2862,8 +3073,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     triggerLocalVictimWhiteFlash()
   }
 
-  function triggerAggressorHitConfirmFx(): void {
-    playHitmarkerOneShot()
+  function triggerAggressorHitConfirmFx(victimPercentAfterHit: number): void {
+    playTieredHitImpactOneShot(victimPercentAfterHit)
     const sm = getCameraShakeMul()
     shakeIntensity = Math.max(shakeIntensity, gameConfig.pvpAggressorHitShake * sm)
     flashIntensity = Math.max(flashIntensity, gameConfig.pvpAggressorHitFlash)
@@ -3330,13 +3541,42 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
   }
 
+  function tickLocalPlayerHud(deltaSec: number): void {
+    if (hudSmokeLayer && !hudSmokeSized) {
+      hudSmokeLayer.resize()
+      hudSmokeSized = true
+    }
+    if (hudSmokeLayer) {
+      hudSmokeLayer.tick(deltaSec, smokeIntensity01(Math.min(100, playerPercent)))
+    }
+
+    let nextPortrait = PORTRAIT_IDLE_URL
+    if (stunnedFxActive) {
+      nextPortrait = PORTRAIT_STUNNED_URL
+    } else {
+      const charging = chargingLmb || chargingRmb
+      const micOn = chargeHudMicAmpSmoothed > 0.035
+      const chargeRising = voiceChargeSmoothed > hudPrevVoiceCharge + 0.004
+      const scream =
+        charging && (micOn || chargeRising || voiceChargeSmoothed > 0.03)
+      if (scream) nextPortrait = PORTRAIT_SCREAM_URL
+      else if (playerPercent >= 70) nextPortrait = PORTRAIT_HURT_URL
+    }
+    if (hudPortraitImgEl && nextPortrait !== hudPortraitResolvedUrl) {
+      hudPortraitResolvedUrl = nextPortrait
+      hudPortraitImgEl.src = nextPortrait
+    }
+
+    hudPrevVoiceCharge = voiceChargeSmoothed
+  }
+
   function syncHud(): void {
-    if (percentLabelYouEl) percentLabelYouEl.textContent = `${displayPlayerName()}[you]`
-    if (percentLabelFoeEl) percentLabelFoeEl.textContent = opponentHudName()
-    if (percentYouEl)
-      percentYouEl.textContent = `${Math.round(Math.min(999, Math.max(0, playerPercent)))}%`
-    if (percentFoeEl)
-      percentFoeEl.textContent = `${Math.round(Math.min(999, Math.max(0, enemyPercent)))}%`
+    if (hudDisplayNameEl) hudDisplayNameEl.textContent = displayPlayerName()
+    if (hudDamagePctEl) {
+      const v = Math.round(Math.min(999, Math.max(0, playerPercent)))
+      hudDamagePctEl.textContent = `${v}%`
+      hudDamagePctEl.style.color = launchPercentTextColor(Math.min(100, playerPercent))
+    }
     if (chargeBarMinMark) {
       chargeBarMinMark.style.bottom = `${Math.max(0, Math.min(1, gameConfig.voiceMinChargeToFire)) * 100}%`
     }
@@ -3365,37 +3605,24 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       stocksYou = stocksGuest
       stocksFoe = stocksHost
     }
-    syncStocksHud()
+    /* Caller syncs HUD badges — may defer so KO padlock animation can show `before` → `after`. */
   }
 
-  function fillStockStrip(
-    el: HTMLDivElement | null,
-    filled: number,
-    cap: number,
-    playLastLost: boolean,
-  ): void {
-    if (!el) return
-    el.replaceChildren()
-    for (let i = 0; i < cap; i++) {
-      const pip = document.createElement('span')
-      pip.className = 'stock-pip'
-      const on = i < filled
-      if (on) pip.classList.add('stock-pip--on')
-      else if (playLastLost && i === filled) pip.classList.add('stock-pip--lost-pop')
-      el.appendChild(pip)
-    }
+  function syncStockBadgeNums(): void {
+    if (hudStockYouNumEl) hudStockYouNumEl.textContent = String(Math.max(0, stocksYou))
   }
 
   function syncStocksHud(): void {
-    const cap = Math.max(1, Math.round(gameConfig.startStocks))
-    fillStockStrip(stockStripYouEl, stocksYou, cap, false)
-    fillStockStrip(stockStripFoeEl, stocksFoe, cap, false)
+    syncStockBadgeNums()
   }
 
-  function animateKoStockLoss(who: 'you' | 'foe'): void {
-    const cap = Math.max(1, Math.round(gameConfig.startStocks))
-    if (who === 'you') fillStockStrip(stockStripYouEl, stocksYou, cap, true)
-    else fillStockStrip(stockStripFoeEl, stocksFoe, cap, true)
+  function flashVictimStockBadge(who: 'you' | 'foe'): void {
+    if (who !== 'you') return
+    const el = hudStockYouWrapEl
+    if (!el) return
+    el.classList.remove('hud-stock-badge--flash')
+    void el.offsetWidth
+    el.classList.add('hud-stock-badge--flash')
   }
 
   function spawnSlotForRole(roleNet: 'host' | 'guest'): SpawnSlot {
@@ -3406,8 +3633,15 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   let koAnnounceHoldTimer: ReturnType<typeof window.setTimeout> | null = null
   let koAnnounceFadeTimer: ReturnType<typeof window.setTimeout> | null = null
+  let koPadlockTimer: ReturnType<typeof window.setTimeout> | null = null
+  let koPadlockAborted = false
 
   function clearKoAnnouncementTimers(): void {
+    koPadlockAborted = true
+    if (koPadlockTimer !== null) {
+      window.clearTimeout(koPadlockTimer)
+      koPadlockTimer = null
+    }
     if (koAnnounceHoldTimer !== null) {
       window.clearTimeout(koAnnounceHoldTimer)
       koAnnounceHoldTimer = null
@@ -3426,15 +3660,80 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     koAnnounceOverlayEl.hidden = true
   }
 
-  function showKoAnnouncement(displayName: string, stocksBefore: number, stocksAfter: number): void {
-    if (!koAnnounceOverlayEl || !koAnnounceLineEl) return
+  function showKoAnnouncement(
+    displayName: string,
+    stocksBefore: number,
+    stocksAfter: number,
+    victim?: 'you' | 'foe',
+  ): void {
+    if (!koAnnounceOverlayEl || !koAnnounceNameEl) return
     clearKoAnnouncementTimers()
-    const nm = displayName.trim()
-    if (stocksBefore > stocksAfter) {
-      koAnnounceLineEl.textContent = `${nm.toUpperCase()}  ×${stocksBefore} → ×${stocksAfter}`
+    koPadlockAborted = false
+
+    const nm = displayName.trim().toUpperCase()
+    koAnnounceNameEl.textContent = nm
+
+    const loss =
+      victim &&
+      koAnnounceStockRowEl &&
+      koAnnounceStockNumEl &&
+      stocksBefore > stocksAfter
+
+    if (loss) {
+      koAnnounceStockRowEl.hidden = false
+
+      const syncVictimBadge = (n: number): void => {
+        if (victim === 'you' && hudStockYouNumEl) hudStockYouNumEl.textContent = String(n)
+      }
+
+      let n = stocksBefore
+      koAnnounceStockNumEl.textContent = String(n)
+      syncVictimBadge(n)
+
+      const tickMs = 92
+      const pulseTick = (): void => {
+        if (!koAnnounceStockNumEl) return
+        koAnnounceStockNumEl.classList.remove('hud-stock-num--tick')
+        void koAnnounceStockNumEl.offsetWidth
+        koAnnounceStockNumEl.classList.add('hud-stock-num--tick')
+        const badgeNum = victim === 'you' ? hudStockYouNumEl : null
+        badgeNum?.classList.remove('hud-stock-num--tick')
+        void badgeNum?.offsetWidth
+        badgeNum?.classList.add('hud-stock-num--tick')
+      }
+
+      const finishPadlock = (): void => {
+        syncStocksHud()
+        flashVictimStockBadge(victim!)
+      }
+
+      const step = (): void => {
+        if (koPadlockAborted || !koAnnounceStockNumEl) return
+        if (n <= stocksAfter) {
+          finishPadlock()
+          return
+        }
+        n -= 1
+        koAnnounceStockNumEl.textContent = String(n)
+        syncVictimBadge(n)
+        pulseTick()
+        if (n === stocksAfter) {
+          finishPadlock()
+          return
+        }
+        koPadlockTimer = window.setTimeout(step, tickMs)
+      }
+
+      if (n === stocksAfter) {
+        finishPadlock()
+      } else {
+        koPadlockTimer = window.setTimeout(step, tickMs)
+      }
     } else {
-      koAnnounceLineEl.textContent = nm.toUpperCase()
+      if (koAnnounceStockRowEl) koAnnounceStockRowEl.hidden = true
+      syncStocksHud()
     }
+
     koAnnounceOverlayEl.hidden = false
     koAnnounceOverlayEl.classList.remove('ko-announce-overlay--visible')
     void koAnnounceOverlayEl.offsetWidth
@@ -3446,7 +3745,15 @@ async function initGame(lobby: LobbyResult): Promise<void> {
    * Optional callback runs when the fade begins (offline respawn applies here).
    */
   function scheduleKoAnnouncementDismiss(delayMs: number, onFadeBegin?: () => void): void {
-    clearKoAnnouncementTimers()
+    /* Do not clear padlock timers here — padlock runs in parallel after `showKoAnnouncement`. */
+    if (koAnnounceHoldTimer !== null) {
+      window.clearTimeout(koAnnounceHoldTimer)
+      koAnnounceHoldTimer = null
+    }
+    if (koAnnounceFadeTimer !== null) {
+      window.clearTimeout(koAnnounceFadeTimer)
+      koAnnounceFadeTimer = null
+    }
     koAnnounceHoldTimer = window.setTimeout(() => {
       koAnnounceHoldTimer = null
       if (!koAnnounceOverlayEl) return
@@ -3577,9 +3884,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       startStocks: gameConfig.startStocks,
     })
 
-    syncStocksHud()
-
     if (after <= 0) {
+      syncStocksHud()
       console.info('[stockKO] last stock — match end', { victim })
       winFinisher = null
       hideWinGameSplash()
@@ -3592,8 +3898,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       victim === 'you' ? displayPlayerName() : opponentHudName(),
       before,
       after,
+      victim,
     )
-    animateKoStockLoss(victim)
 
     scheduleKoAnnouncementDismiss(gameConfig.koAnnounceHoldMs, () => {
       applyOfflineRespawnFeet(victim)
@@ -3854,6 +4160,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (!winGameSplashEl) return
     winGameSplashEl.classList.remove('win-game-splash--pulse')
     winGameSplashEl.hidden = true
+    if (winGameSplashSubEl) winGameSplashSubEl.textContent = ''
   }
 
   function showWinGameSplash(): void {
@@ -3864,8 +4171,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     winGameSplashEl.classList.add('win-game-splash--pulse')
   }
 
-  async function playWinGameSplashSequence(): Promise<void> {
+  async function playGameOutcomeSplashSequence(outcome: 'win' | 'lose'): Promise<void> {
     if (!winGameSplashEl) return
+    if (winGameSplashSubEl) {
+      winGameSplashSubEl.textContent = outcome === 'win' ? 'YOU WIN' : 'YOU LOSE'
+    }
     showWinGameSplash()
     const minHoldMs = Math.max(250, gameConfig.winRingoutPresentDelayMs)
     const started = performance.now()
@@ -3915,14 +4225,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     winFinisher = null
     const before = stocksFoe
     stocksFoe = Math.max(0, stocksFoe - 1)
-    syncStocksHud()
     if (stocksFoe <= 0) {
+      syncStocksHud()
       void concludeRoundElimination(true)
       return
     }
     offlineBlastKoPending = 'foe'
-    showKoAnnouncement(opponentHudName(), before, stocksFoe)
-    animateKoStockLoss('foe')
+    showKoAnnouncement(opponentHudName(), before, stocksFoe, 'foe')
     scheduleKoAnnouncementDismiss(gameConfig.koAnnounceHoldMs, () => {
       applyOfflineRespawnFeet('foe')
       offlineBlastKoPending = null
@@ -3981,20 +4290,25 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     tryPointerLock()
   }
 
-  function endMatch(outcome: 'win' | 'lose'): void {
-    if (matchOutcome) return
+  function applyMatchEndCore(outcome: 'win' | 'lose'): boolean {
+    if (matchOutcome) return false
     hideKoAnnouncementImmediate()
     clearMovementKeys()
     hideWinGameSplash()
     winFinisher = null
     matchOutcome = outcome
     bumpPlayerRecord(outcome)
-    applyPlayerRecordToHud()
     matchEndCardEl?.classList.remove('match-end-card--forfeit')
     triggerHitImpactFx()
     voice.resumeAudio()
     voice.playFallbackHitSound()
     controls.unlock()
+    return true
+  }
+
+  function endMatch(outcome: 'win' | 'lose'): void {
+    if (!applyMatchEndCore(outcome)) return
+    squelchCompetingEndOfMatchUi()
     if (matchEndOverlay) matchEndOverlay.hidden = false
     if (matchEndTitle) {
       matchEndTitle.textContent = outcome === 'win' ? 'You win!' : 'You lose!'
@@ -4111,7 +4425,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       }, 5200)
     }
 
-    if (!voiceInputBlocked) await runVoiceResumeCountdown()
+    if (!voiceInputBlocked) await runMatchBeginCountdown()
     if (!lobbySmartBotActive) return
     tryPointerLock()
     syncHostSmartBotVoiceHandler()
@@ -4273,7 +4587,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       bot.setPlayerCharging(chargingLmb)
       bot.setIntentInputs(playerPercent, enemyPercent)
       bot.setAiSuppressed(true)
-      bot.update(delta, camera.position, terrainPhysics, false)
+      bot.update(delta, camera.position, terrainPhysics, false, camera)
       updateWinFinisher(delta)
       advanceWinFlashTimer()
       return
@@ -4285,7 +4599,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     bot.setPlayerCharging(chargingLmb)
     bot.setIntentInputs(playerPercent, enemyPercent)
     bot.setAiSuppressed(false)
-    bot.update(delta, camera.position, terrainPhysics, playerProjActive)
+    bot.update(delta, camera.position, terrainPhysics, playerProjActive, camera)
 
     /* Player projectile vs bot — dedicated listen server validates shots when authPvp() */
     const localInvulnShoot = performance.now() >= respawnInvulnUntilYou
@@ -4304,7 +4618,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         const isPistolShot = arms.peekIsPistolShot()
         const hitAudio = arms.takeHitAudio()
         arms.markDealt()
-        playHitmarkerOneShot()
         voice.playBufferSpatialAt(hitAudio, bot.bodyCenter, camera)
         const botAimY = knockDirFromFistImpact(_fp, _knDir)
         /* Pistol shots use dedicated multipliers so spam-clicks can't fling the bot off-stage. */
@@ -4313,6 +4626,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         const gain = percentGainFromCharge(shotT) * pistolPctMul
         const prevEnemyPct = enemyPercent
         enemyPercent = Math.min(999, enemyPercent + gain)
+        playTieredHitImpactOneShot(enemyPercent)
         syncHud()
         if (isPvp()) {
           sendMp({ type: 'hitMelee', dx: _knDir.x, dz: _knDir.z })
@@ -4436,6 +4750,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
             ) {
               playerBananaSlipUntil = performance.now() + gameConfig.bananaSlipMs
               triggerStunnedHitOverlay()
+              triggerHudDamageShake(hudDamagePctEl, hudPortraitWrapEl, playerPercent)
               playBananaSlipOneShot()
               startBananaSlipCamRoll()
               bananaWorld.removePeelById(pl.id)
@@ -4467,7 +4782,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         if (map.isBlastZone(camera.position)) {
           if (offlineBlastKoPending === 'you') return
           if (nowMs < respawnInvulnUntilYou) return
-          if (lobbyDummyPractice || lobbySmartBotActive) {
+          if (lobbyDummyPractice) {
             applyRoundReset()
             return
           }
@@ -4477,7 +4792,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         if (map.isBlastZone(bot.root.position)) {
           if (offlineBlastKoPending === 'foe') return
           if (nowMs < respawnInvulnUntilFoe) return
-          if (lobbyDummyPractice || lobbySmartBotActive) {
+          if (lobbyDummyPractice) {
             applyRoundReset()
             return
           }
@@ -4907,8 +5222,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (over <= 0.001) {
       dangerAuraOverlay.style.opacity = '0'
       dangerLaunchTintEl.style.opacity = '0'
-      dangerSmoke.visible = false
-      dangerSmokeMat.opacity = 0
       return
     }
     /* Full intensity by +100% past the start threshold (e.g. 50→150%). */
@@ -4920,21 +5233,35 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
     const tint = Math.min(0.52, 0.06 + t * 0.32 + pulse2 * t * 0.14)
     dangerLaunchTintEl.style.opacity = tint.toFixed(3)
+  }
 
-    dangerSmoke.visible = true
-    dangerSmokeMat.opacity = Math.min(0.55, 0.08 + t * 0.32)
-    const footY = feetY()
-    for (let i = 0; i < dangerSmokeCount; i++) {
+  /** Foot smoke for the opponent when their launch % is high (they do not see this on their own screen). */
+  function updateOpponentDangerSmoke(nowSec: number): void {
+    const start = Math.max(0, Math.min(500, gameConfig.dangerFxStartPercent))
+    const over = Math.max(0, enemyPercent - start)
+    if (over <= 0.001) {
+      opponentDangerSmoke.visible = false
+      opponentDangerSmokeMat.opacity = 0
+      return
+    }
+    const t = Math.min(1, over / 100)
+    opponentDangerSmoke.visible = true
+    opponentDangerSmokeMat.opacity = Math.min(0.55, 0.08 + t * 0.32)
+    const fo = bot.getFootOffset()
+    const cx = bot.root.position.x
+    const cz = bot.root.position.z
+    const footY = bot.root.position.y - fo
+    for (let i = 0; i < opponentDangerSmokeCount; i++) {
       const k = i * 3
       const seed = i * 0.61803398875
       const ring = 0.24 + (i % 5) * 0.06 + 0.08 * Math.sin(nowSec * 0.9 + seed * 5)
       const ang = nowSec * (0.38 + t * 0.42) + seed * Math.PI * 2
       const rise = ((nowSec * (0.22 + t * 0.24) + seed * 2.7) % 1) * (0.75 + t * 0.55)
-      dangerSmokePos[k] = camera.position.x + Math.cos(ang) * ring
-      dangerSmokePos[k + 1] = footY + 0.18 + rise
-      dangerSmokePos[k + 2] = camera.position.z + Math.sin(ang) * ring
+      opponentDangerSmokePos[k] = cx + Math.cos(ang) * ring
+      opponentDangerSmokePos[k + 1] = footY + 0.18 + rise
+      opponentDangerSmokePos[k + 2] = cz + Math.sin(ang) * ring
     }
-    dangerSmokeGeom.attributes.position.needsUpdate = true
+    opponentDangerSmokeGeom.attributes.position.needsUpdate = true
   }
 
   let debugMpHb = 0
@@ -5179,7 +5506,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
 
     syncStunnedFxOverlay()
+    tickLocalPlayerHud(delta)
     updateDangerAuraFx(performance.now() * 0.001)
+    updateOpponentDangerSmoke(performance.now() * 0.001)
 
     applyHitPresentation(delta)
 
@@ -5481,6 +5810,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   const tweaksHost = document.getElementById('tweaks-panel-host')
   if (tweaksHost) {
+    tweaksHost.replaceChildren()
     mountTweaksPanel(tweaksHost, {
       controls,
       camera,
@@ -5490,7 +5820,15 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         'hideGameHud',
         'hudDragLayoutEnabled',
         'uiHudMasterScale',
+        'percentHudAnchorRight',
+        'percentHudOffsetXRem',
+        'percentHudOffsetYRem',
+        'percentHudOffsetZPx',
         'percentHudScale',
+        'percentHudTextScale',
+        'percentHudTextOffsetXRem',
+        'percentHudTextOffsetYRem',
+        'percentHudPortraitScale',
         'tweaksPanelUiScale',
         'chargeHudRightRem',
         'chargeHudVerticalBiasRem',
@@ -5513,6 +5851,20 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         'chargeHudMicRmsSpan',
         'chargeHudMicSmoothing',
         'chargeHudMicPulseScale',
+        'lobbyMonkeyPosX',
+        'lobbyMonkeyPosY',
+        'lobbyMonkeyPosZ',
+        'lobbyMonkeyPitchDeg',
+        'lobbyMonkeyYawDeg',
+        'lobbyMonkeyRollDeg',
+        'lobbyMonkeyScale',
+        'hideLobbyUi',
+        'lobbyMonkeyFlatShading',
+        'lobbyMonkeyTexPixelated',
+        'lobbyMonkeyTexDownscale',
+        'sunPosX',
+        'sunPosY',
+        'sunPosZ',
       ],
       syncVisualsFromConfig: () => {
         skyDome.syncFromConfig()
@@ -5537,6 +5889,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       onResetHudLayout: () => {
         resetGameplayHudLayout(percentHudEl, chargeBarWrap)
         syncChargeHudLayout()
+        syncUiHudChrome()
       },
       onTriggerKnockbackDev: () => {
         if (multiplayerBlocksPlay()) return
@@ -5630,11 +5983,16 @@ wireBackgroundMusicToFirstGesture()
 }
 
 runUsernameGate()
-  .then(() => takeOnlineRematchReloadLobby() ?? runLobbyGate(readStoredPlayerName()?.trim() || 'Angler'))
-  .then((lobby) => {
-    gameRoot.hidden = false
-    return initGame(lobby)
+  .then(() => {
+    const rematch = takeOnlineRematchReloadLobby()
+    if (rematch) {
+      gameRoot.classList.add('game-root--hud-suspended')
+      gameRoot.hidden = false
+      return rematch
+    }
+    return runLobbyGate(readStoredPlayerName()?.trim() || 'Angler')
   })
+  .then((lobby) => initGame(lobby))
   .catch((err) => {
     console.error('[vibejam] init failed', err)
   })

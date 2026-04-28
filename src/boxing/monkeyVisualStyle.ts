@@ -2,6 +2,8 @@ import {
   CompressedTexture,
   CubeTexture,
   DataTexture,
+  LinearFilter,
+  LinearMipmapLinearFilter,
   Mesh,
   MeshPhysicalMaterial,
   MeshStandardMaterial,
@@ -152,6 +154,63 @@ export function applyMonkeyFlatVertexPixelatedStyle(root: Object3D): void {
         if (t instanceof Texture) {
           downscaleTextureImage(t)
           pixelateTexture(t)
+        }
+      }
+    }
+  })
+}
+
+/** Lobby GLB load: flat shading + optional tex downscale / nearest sampling from `gameConfig`. */
+export function applyLobbyMonkeyLoadedStyle(
+  root: Object3D,
+  opts: { flatShading: boolean; texNearest: boolean; texDownscale: boolean },
+): void {
+  root.traverse((o) => {
+    const mesh = o as Mesh
+    if (!mesh.isMesh || !mesh.material) return
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+    for (const raw of mats) {
+      if (!isPbrMat(raw)) continue
+      raw.flatShading = opts.flatShading
+      raw.needsUpdate = true
+      for (const prop of TEX_PROPS) {
+        const t = (raw as unknown as Record<string, unknown>)[prop]
+        if (!(t instanceof Texture)) continue
+        if (opts.texDownscale) downscaleTextureImage(t)
+        if (opts.texNearest) pixelateTexture(t)
+        else {
+          t.magFilter = LinearFilter
+          t.minFilter = LinearMipmapLinearFilter
+          t.generateMipmaps = true
+          t.needsUpdate = true
+        }
+      }
+    }
+  })
+}
+
+/** Runtime Tweaks: update flat shading + texture filter without reloading GLB. */
+export function syncLobbyMonkeyPresentation(
+  root: Object3D | null,
+  opts: { flatShading: boolean; texNearest: boolean },
+): void {
+  if (!root) return
+  root.traverse((o) => {
+    const mesh = o as Mesh
+    if (!mesh.isMesh || !mesh.material) return
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+    for (const raw of mats) {
+      if (!isPbrMat(raw)) continue
+      raw.flatShading = opts.flatShading
+      raw.needsUpdate = true
+      for (const prop of TEX_PROPS) {
+        const t = (raw as unknown as Record<string, unknown>)[prop]
+        if (!(t instanceof Texture)) continue
+        if (opts.texNearest) pixelateTexture(t)
+        else {
+          t.magFilter = LinearFilter
+          t.minFilter = LinearMipmapLinearFilter
+          t.needsUpdate = true
         }
       }
     }

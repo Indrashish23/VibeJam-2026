@@ -64,7 +64,7 @@ function defaultArenaSpawnPoints(): Vector3[] {
 /**
  * Island: spread around origin, ray will correct Y.
  */
-function islandSpawnPoints(): Vector3[] {
+function gltfArenaBananaSpawnPoints(): Vector3[] {
   return [
     new Vector3(4, 0, 4),
     new Vector3(-5, 0, 2),
@@ -75,7 +75,7 @@ function islandSpawnPoints(): Vector3[] {
 }
 
 export function getBananaSpawnCandidates(mapId: MapId): Vector3[] {
-  if (mapId === 'island' || mapId === 'godotExport') return islandSpawnPoints()
+  if (mapId === 'godotExport' || mapId === 'floatingIslandStage') return gltfArenaBananaSpawnPoints()
   return defaultArenaSpawnPoints()
 }
 

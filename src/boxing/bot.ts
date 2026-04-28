@@ -14,6 +14,7 @@ import {
   MeshPhysicalMaterial,
   MeshStandardMaterial,
   Object3D,
+  PerspectiveCamera,
   Scene,
   Vector3,
 } from 'three'
@@ -24,6 +25,7 @@ import {
   applyMonkeyFlatVertexPixelatedStyle,
 } from './monkeyVisualStyle'
 import { PROJECTILE_R } from './playerArms'
+import { VoiceProjectileVisual } from './voiceProjectileVisual'
 import {
   pickClipForSlot,
   type AvatarBaseClip,
@@ -144,7 +146,7 @@ export class BotFighter {
   private recordingTelegraph = false
   private recordingTelegraphMix = 0
   private recordingShakeT = 0
-  readonly projMesh: Mesh
+  readonly projVfx: VoiceProjectileVisual
 
   private readonly feetFromCenter: number
 
@@ -249,16 +251,7 @@ export class BotFighter {
     this.mesh.receiveShadow = true
     this.root.add(this.mesh)
 
-    const pm = new MeshStandardMaterial({
-      color: new Color(0xff7a4a),
-      roughness: 0.42,
-      metalness: 0.2,
-    })
-    this.projMesh = new Mesh(new BoxGeometry(PROJECTILE_R * 2, PROJECTILE_R * 2, PROJECTILE_R * 2), pm)
-    this.projMesh.castShadow = true
-    this.projMesh.receiveShadow = true
-    this.projMesh.visible = false
-    scene.add(this.projMesh)
+    this.projVfx = new VoiceProjectileVisual(scene)
 
     this.root.position.copy(startPos)
     this.networkTargetPos.copy(this.root.position)
@@ -621,11 +614,9 @@ export class BotFighter {
 
   dispose(scene: Scene): void {
     scene.remove(this.root)
-    scene.remove(this.projMesh)
+    this.projVfx.dispose(scene)
     this.mesh.geometry.dispose()
     ;(this.mesh.material as MeshStandardMaterial).dispose()
-    this.projMesh.geometry.dispose()
-    ;(this.projMesh.material as MeshStandardMaterial).dispose()
     if (this.monkeyMixer) {
       if (this.monkeyFinishedHandler) {
         this.monkeyMixer.removeEventListener('finished', this.monkeyFinishedHandler)
@@ -1293,8 +1284,6 @@ export class BotFighter {
     this.projDealt = true
     this.projHitAudio = null
     this.projSizeMul = 1
-    this.projMesh.scale.setScalar(1)
-    this.projMesh.visible = false
   }
 
   /** Voice clip attached to the current bot shot (if any), for victim-side spatial playback. */
@@ -1440,6 +1429,7 @@ export class BotFighter {
     playerPos: Vector3,
     terrain: TerrainPhysics,
     _playerProjectileActive: boolean,
+    viewCamera: PerspectiveCamera,
   ): void {
     this.updateRecordingTelegraph(delta)
     this.applyVictimInvulnFlash()
@@ -1463,11 +1453,13 @@ export class BotFighter {
 
       this.integrateProjectile(delta)
       this.clearProjectileNearLocalPlayer(playerPos)
-      if (this.projActive) {
-        this.projMesh.position.copy(this.projPos)
-        this.projMesh.scale.setScalar(this.projSizeMul)
-        this.projMesh.visible = true
-      }
+      this.projVfx.update({
+        active: this.projActive && this.projFlying,
+        position: this.projPos,
+        sizeMul: this.projSizeMul,
+        camera: viewCamera,
+        delta,
+      })
       this.applyRespawnMeshFlash()
       return
     }
@@ -1574,10 +1566,13 @@ export class BotFighter {
     }
 
     this.integrateProjectile(delta)
-    if (this.projActive) {
-      this.projMesh.position.copy(this.projPos)
-      this.projMesh.visible = true
-    }
+    this.projVfx.update({
+      active: this.projActive && this.projFlying,
+      position: this.projPos,
+      sizeMul: this.projSizeMul,
+      camera: viewCamera,
+      delta,
+    })
     this.applyRespawnMeshFlash()
   }
 
