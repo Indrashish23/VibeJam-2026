@@ -361,20 +361,20 @@ export const defaultGameConfig = {
   /** Enemy mesh flash cadence during respawn invuln (blinks per second). */
   respawnFlashHz: 10,
   botBodyRadius: 0.72,
-  botPunchRange: 3.8,
+  botPunchRange: 2,
   botHitRadius: 0.95,
   /** Smart bot: preferred spacing around the player before switching to flanking. */
   botSmartPreferredRange: 5.8,
   /** Smart bot: half-band around preferred range considered "in ring". */
   botSmartRangeBand: 1.25,
   /** Smart bot: if closer than this, prioritize retreat. */
-  botSmartRetreatRange: 3.1,
+  botSmartRetreatRange: 1.7,
   /** Smart bot movement speed as multiplier of player move speed. */
-  botSmartMoveSpeedMul: 0.52,
+  botSmartMoveSpeedMul: 0.2,
   /** Smart bot approach wobble/flank blend while closing distance. */
-  botSmartApproachFlankBias: 0.38,
-  /** Smart bot: attack window as multiplier of botPunchRange. */
-  botSmartAttackRangeMul: 1.75,
+  botSmartApproachFlankBias: 1,
+  /** Smart bot: attack window as multiplier of botPunchRange (kept high so smart bot still pressures from range). */
+  botSmartAttackRangeMul: 4,
   /** Smart bot: telegraph/aim wind-up before firing (ms). */
   botSmartAimMs: 340,
   /** Smart bot: cooldown after firing (ms). */

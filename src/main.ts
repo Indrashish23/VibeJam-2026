@@ -90,7 +90,7 @@ import {
   wireBackgroundMusicToFirstGesture,
 } from './audio/backgroundMusic'
 import { playFootstepOneShot } from './audio/footstepsSfx'
-import { playTieredHitImpactOneShot } from './audio/combatSfx'
+import { playRandomBotHitVoiceOneShot, playTieredHitImpactOneShot } from './audio/combatSfx'
 import { playBananaSlipOneShot, playJumpOneShot, playLandOneShot } from './audio/playerMoveSfx'
 import { playEnemySfxSpatialAt, resumeEnemySfxAudio, type SfxKind } from './audio/enemySfx'
 import { mountUserSettingsPanel, setUserSettingsPointerControls } from './userSettingsUI'
@@ -679,6 +679,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   /** Percent HUD foe line: peer hello name, else public-listing host name for guests; never internal dummy label. */
   function opponentHudName(): string {
+    if (lobbySmartBotActive && bot.mode === 'smart') return 'Bot'
     if (lobby.mode === 'online') {
       const n = mpOpponentName?.trim()
       if (n) return n
@@ -4424,7 +4425,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       }, 5200)
     }
 
-    if (!voiceInputBlocked) await runVoiceResumeCountdown()
+    if (!voiceInputBlocked) await runMatchBeginCountdown()
     if (!lobbySmartBotActive) return
     tryPointerLock()
     syncHostSmartBotVoiceHandler()
@@ -4678,6 +4679,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         const prevPlPct = playerPercent
         const bg = Math.max(0, gameConfig.botFistPercentGain)
         playerPercent = Math.min(999, playerPercent + bg)
+        playRandomBotHitVoiceOneShot()
         syncHud()
         const crossed150 = prevPlPct < 150 && playerPercent >= 150
         if (crossed150) triggerLaunchPercent150Spectacle()
@@ -4781,7 +4783,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         if (map.isBlastZone(camera.position)) {
           if (offlineBlastKoPending === 'you') return
           if (nowMs < respawnInvulnUntilYou) return
-          if (lobbyDummyPractice || lobbySmartBotActive) {
+          if (lobbyDummyPractice) {
             applyRoundReset()
             return
           }
@@ -4791,7 +4793,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         if (map.isBlastZone(bot.root.position)) {
           if (offlineBlastKoPending === 'foe') return
           if (nowMs < respawnInvulnUntilFoe) return
-          if (lobbyDummyPractice || lobbySmartBotActive) {
+          if (lobbyDummyPractice) {
             applyRoundReset()
             return
           }
