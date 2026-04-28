@@ -2486,6 +2486,14 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   function showOpponentForfeitAndReturn(): void {
     if (opponentForfeitHandled) return
+    /* If the match has already ended, the post-match overlay (Requeue / Return-to-Lobby)
+     * is up and each peer makes an independent decision. The opponent leaving — usually
+     * because they hit Requeue and triggered a reload — must NOT clobber our match-end
+     * UI or auto-return us to the lobby. */
+    if (matchOutcome !== null) {
+      opponentForfeitHandled = true
+      return
+    }
     opponentForfeitHandled = true
     squelchCompetingEndOfMatchUi()
     clearMovementKeys()
@@ -5778,6 +5786,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       mpSocket.addEventListener('close', () => {
         debugMpLog('ws close')
         if (leavingToLobby) return
+        /* The match has already ended — both peers are on independent post-match UIs.
+         * Don't auto-return either of them; the user will pick Requeue or Return-to-Lobby. */
+        if (matchOutcome !== null) return
         if (peerSeenInRoom && lobby.mode === 'online') {
           showOpponentForfeitAndReturn()
           return
