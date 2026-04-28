@@ -90,7 +90,7 @@ import {
   wireBackgroundMusicToFirstGesture,
 } from './audio/backgroundMusic'
 import { playFootstepOneShot } from './audio/footstepsSfx'
-import { playRandomBotHitVoiceOneShot, playTieredHitImpactOneShot } from './audio/combatSfx'
+import { playTieredHitImpactOneShot } from './audio/combatSfx'
 import { playBananaSlipOneShot, playJumpOneShot, playLandOneShot } from './audio/playerMoveSfx'
 import { playEnemySfxSpatialAt, resumeEnemySfxAudio, type SfxKind } from './audio/enemySfx'
 import { mountUserSettingsPanel, setUserSettingsPointerControls } from './userSettingsUI'
@@ -4679,7 +4679,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         const prevPlPct = playerPercent
         const bg = Math.max(0, gameConfig.botFistPercentGain)
         playerPercent = Math.min(999, playerPercent + bg)
-        playRandomBotHitVoiceOneShot()
         syncHud()
         const crossed150 = prevPlPct < 150 && playerPercent >= 150
         if (crossed150) triggerLaunchPercent150Spectacle()
