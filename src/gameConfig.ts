@@ -351,6 +351,12 @@ export const defaultGameConfig = {
    * and lose paths (your own ringout also gets the cinematic moment).
    */
   winRingoutPreSplashDelayMs: 3000,
+  /**
+   * After the GAME splash + match-end overlay paints, automatically dissolve
+   * back to the main menu. The "Return to Lobby" button is just a skip; this
+   * timer fires the same path even if the user does nothing.
+   */
+  matchEndAutoReturnMs: 2400,
   /** Outside platform half-extent + this (XZ) or below yKill = blast. */
   blastMargin: 12,
   /** When 1, draw a green ring-out boundary loop on the deck (Tweaks → Arena). */

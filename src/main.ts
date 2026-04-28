@@ -56,7 +56,7 @@ import {
   TUTORIAL_ENABLED,
   type TutorialApi,
 } from './tutorial'
-import { runLobbyGate, randomRoomId, type LobbyResult, type MatchIntent } from './lobbyGate'
+import { runLobbyGate, type LobbyResult } from './lobbyGate'
 import {
   base64ToBlob,
   blobToBase64,
@@ -164,9 +164,6 @@ const matchEndSub = document.getElementById('match-end-sub')
 const matchEndCardEl =
   matchEndOverlay?.querySelector('.match-end-card') as HTMLDivElement | null
 const matchEndLobbyBtnEl = document.getElementById('match-end-lobby-btn') as HTMLButtonElement | null
-const matchEndSecondaryBtnEl = document.getElementById(
-  'match-end-secondary-btn',
-) as HTMLButtonElement | null
 const leaveMatchOverlay = document.getElementById('leave-match-overlay') as HTMLDivElement | null
 const leaveMatchConfirmBtn = document.getElementById('leave-match-confirm') as HTMLButtonElement | null
 const leaveMatchCancelBtn = document.getElementById('leave-match-cancel') as HTMLButtonElement | null
@@ -539,8 +536,13 @@ function sleepMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-/** Black full-screen gate before `location.reload` when returning to the main menu. */
-const SESSION_RELOAD_GATE_MS = 3000
+/**
+ * Dissolve-to-black gate before `location.reload` when returning to the main menu.
+ * Total time = fade-in (matches the CSS `transition: opacity` duration) + a short
+ * hold so the screen sits fully black before the page swaps under us.
+ */
+const SESSION_RELOAD_FADE_MS = 700
+const SESSION_RELOAD_HOLD_MS = 150
 
 function runSessionReloadGateThen(reload: () => void): void {
   const el = sessionReloadOverlayEl
@@ -549,8 +551,12 @@ function runSessionReloadGateThen(reload: () => void): void {
     el.setAttribute('aria-hidden', 'false')
     el.setAttribute('role', 'status')
     el.setAttribute('aria-live', 'polite')
+    /* Force a layout read so the browser commits opacity:0 before we add the
+     * --visible class; otherwise the transition is skipped and we get a cut. */
+    void el.getBoundingClientRect()
+    el.classList.add('session-reload-overlay--visible')
   }
-  window.setTimeout(reload, SESSION_RELOAD_GATE_MS)
+  window.setTimeout(reload, SESSION_RELOAD_FADE_MS + SESSION_RELOAD_HOLD_MS)
 }
 
 function runUsernameGate(): Promise<void> {
@@ -583,96 +589,19 @@ function runUsernameGate(): Promise<void> {
   })
 }
 
-/** Legacy sessionStorage key from older builds (rematch reload) — still read so stale keys clear. */
-const ONLINE_REMATCH_RELOAD_KEY = 'vibejam_online_rematch_reload_lobby'
-/** Set by the post-match popup so a `window.location.reload()` jumps straight back into the chosen flow. */
-const REPLAY_INTENT_KEY = 'vibejam_replay_intent_on_load'
+/** Legacy sessionStorage keys from older builds — purge on boot so they never leak. */
+const LEGACY_RELOAD_STORAGE_KEYS = [
+  'vibejam_online_rematch_reload_lobby',
+  'vibejam_replay_intent_on_load',
+] as const
 
-const VALID_INTENTS: ReadonlySet<MatchIntent> = new Set([
-  'quickMatch',
-  'private',
-  'practice',
-  'vsBot',
-])
-
-type StoredReplayIntent = {
-  intent: MatchIntent
-  mapId: MapId
-}
-
-function takeReplayIntentOnLoad(): StoredReplayIntent | null {
-  let raw: string | null = null
-  try {
-    raw = sessionStorage.getItem(REPLAY_INTENT_KEY)
-    sessionStorage.removeItem(REPLAY_INTENT_KEY)
-  } catch {
-    raw = null
-  }
-  if (!raw) return null
-  try {
-    const data = JSON.parse(raw) as Partial<{ intent: string; mapId: string }>
-    if (
-      typeof data.intent === 'string' &&
-      VALID_INTENTS.has(data.intent as MatchIntent) &&
-      typeof data.mapId === 'string' &&
-      isMapId(data.mapId)
-    ) {
-      return { intent: data.intent as MatchIntent, mapId: data.mapId }
-    }
-  } catch {
-    /* ignore malformed replay intent */
-  }
-  return null
-}
-
-function buildLobbyFromIntent(intent: MatchIntent, mapId: MapId): LobbyResult | null {
-  if (intent === 'quickMatch') {
-    /* Quick match needs the queue room; can't be resolved synchronously here. */
-    return null
-  }
-  const roomId = randomRoomId()
-  const shortCode = roomId.replace(/^vj-/, '')
-  if (intent === 'private') {
-    return {
-      mode: 'online',
-      role: 'host',
-      roomId,
-      shortCode,
-      mapId,
-      intent: 'private',
-    }
-  }
-  if (intent === 'practice') {
-    return {
-      mode: 'online',
-      role: 'host',
-      roomId,
-      shortCode,
-      mapId,
-      intent: 'practice',
-      startWithDummyPractice: true,
-    }
-  }
-  if (intent === 'vsBot') {
-    return {
-      mode: 'online',
-      role: 'host',
-      roomId,
-      shortCode,
-      mapId,
-      intent: 'vsBot',
-      startWithSmartBot: true,
-    }
-  }
-  return null
-}
-
-/** Clear the legacy rematch storage key without trusting its contents. */
 function clearLegacyRematchKey(): void {
-  try {
-    sessionStorage.removeItem(ONLINE_REMATCH_RELOAD_KEY)
-  } catch {
-    /* ignore */
+  for (const key of LEGACY_RELOAD_STORAGE_KEYS) {
+    try {
+      sessionStorage.removeItem(key)
+    } catch {
+      /* ignore */
+    }
   }
 }
 
@@ -2407,43 +2336,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (matchEndOverlay) matchEndOverlay.hidden = true
     matchEndCardEl?.classList.remove('match-end-card--forfeit')
     if (matchEndLobbyBtnEl) matchEndLobbyBtnEl.hidden = true
-    if (matchEndSecondaryBtnEl) matchEndSecondaryBtnEl.hidden = true
   }
 
   function showMatchEndLobbyControls(): void {
     if (!matchOutcome) return
     if (matchEndLobbyBtnEl) matchEndLobbyBtnEl.hidden = false
-    if (matchEndSecondaryBtnEl) {
-      const label = currentMatchSecondaryLabel()
-      if (label) {
-        matchEndSecondaryBtnEl.textContent = label
-        matchEndSecondaryBtnEl.hidden = false
-      } else {
-        matchEndSecondaryBtnEl.hidden = true
-      }
-    }
-  }
-
-  function currentMatchIntent(): MatchIntent | null {
-    if (lobby.mode !== 'online') return null
-    return lobby.intent
-  }
-
-  function currentMatchSecondaryLabel(): string | null {
-    const intent = currentMatchIntent()
-    if (!intent) return null
-    switch (intent) {
-      case 'quickMatch':
-        return 'Requeue'
-      case 'private':
-        return 'Rematch'
-      case 'practice':
-        return 'Practice Again'
-      case 'vsBot':
-        return 'Fight Bot Again'
-      default:
-        return null
-    }
   }
 
   /** Hide HUD layers that fight with the single match-result / forfeit surface. */
@@ -2467,6 +2364,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   function returnToLobbyReload(notifyOpponent: boolean = false): void {
+    if (leavingToLobby) return
     leavingToLobby = true
     squelchCompetingEndOfMatchUi()
     gameRoot.classList.add('game-root--hud-suspended')
@@ -4368,38 +4266,18 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (matchEndTitle) {
       matchEndTitle.textContent = outcome === 'win' ? 'You win!' : 'You lose!'
     }
-    const intent = currentMatchIntent()
     if (matchEndSub) {
-      matchEndSub.textContent = matchEndSubCopy(outcome, intent)
+      matchEndSub.textContent = outcome === 'win'
+        ? 'The other fighter ran out of stocks.'
+        : 'You ran out of stocks.'
     }
     showMatchEndLobbyControls()
-  }
-
-  function matchEndSubCopy(outcome: 'win' | 'lose', intent: MatchIntent | null): string {
-    const wonStocks = outcome === 'win'
-      ? 'The other fighter ran out of stocks.'
-      : 'You ran out of stocks.'
-    if (!intent) return wonStocks
-    switch (intent) {
-      case 'quickMatch':
-        return outcome === 'win'
-          ? `${wonStocks} Requeue for another match or head back to the lobby.`
-          : `${wonStocks} Requeue for a rematch or head back to the lobby.`
-      case 'private':
-        return outcome === 'win'
-          ? `${wonStocks} Start a new private game or head back to the lobby.`
-          : `${wonStocks} Start a new private game or head back to the lobby.`
-      case 'practice':
-        return outcome === 'win'
-          ? `${wonStocks} Run another practice round or head back to the lobby.`
-          : `${wonStocks} Run another practice round or head back to the lobby.`
-      case 'vsBot':
-        return outcome === 'win'
-          ? `${wonStocks} Fight the bot again or head back to the lobby.`
-          : `${wonStocks} Take another shot at the bot or head back to the lobby.`
-      default:
-        return wonStocks
-    }
+    /* Auto-return to the menu with a dissolve transition. The visible button is a
+     * skip — clicking it just fires the same path early. */
+    window.setTimeout(() => {
+      if (leavingToLobby) return
+      returnToLobbyReload(isOnline && lobby.mode === 'online')
+    }, gameConfig.matchEndAutoReturnMs)
   }
 
   function recreateBot(mode: BotMode): void {
@@ -4655,13 +4533,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   function resolveCombat(delta: number): void {
-    if (
-      matchOutcome ||
-      voiceResumeCountdownActive ||
-      multiplayerBlocksPlay() ||
-      seriesTransitionActive
-    )
-      return
+    if (matchOutcome || voiceResumeCountdownActive || multiplayerBlocksPlay()) return
 
     if (winFinisher) {
       if (map.isBlastZone(camera.position)) {
@@ -4677,6 +4549,18 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       bot.update(delta, camera.position, terrainPhysics, false, camera)
       updateWinFinisher(delta)
       advanceWinFlashTimer()
+      return
+    }
+
+    /* Cinematic pause between final-stock KO detection and the GAME splash:
+     * keep arms + bot ticking so the launched body keeps falling through physics
+     * (no AI decisions, no new combat hits — just animation + integration). */
+    if (seriesTransitionActive) {
+      arms.update(delta)
+      bot.setPlayerCharging(false)
+      bot.setIntentInputs(playerPercent, enemyPercent)
+      bot.setAiSuppressed(true)
+      bot.update(delta, camera.position, terrainPhysics, false, camera)
       return
     }
 
@@ -5869,21 +5753,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     returnToLobbyReload(isOnline && lobby.mode === 'online')
   })
 
-  matchEndSecondaryBtnEl?.addEventListener('click', () => {
-    const intent = currentMatchIntent()
-    if (!intent) {
-      returnToLobbyReload(isOnline && lobby.mode === 'online')
-      return
-    }
-    try {
-      const payload: StoredReplayIntent = { intent, mapId: lobby.mapId }
-      sessionStorage.setItem(REPLAY_INTENT_KEY, JSON.stringify(payload))
-    } catch {
-      /* If storage is blocked, fall through to a normal lobby return. */
-    }
-    returnToLobbyReload(isOnline && lobby.mode === 'online')
-  })
-
   leaveMatchCancelBtn?.addEventListener('click', () => hideLeaveMatchDialog())
   leaveMatchConfirmBtn?.addEventListener('click', () => {
     hideLeaveMatchDialog()
@@ -6098,27 +5967,8 @@ wireBackgroundMusicToFirstGesture()
 }
 
 async function resolveLobbyAfterReload(): Promise<LobbyResult> {
-  /* Drop any stale legacy rematch state from older builds. */
+  /* Drop any stale legacy rematch / replay-intent state from older builds. */
   clearLegacyRematchKey()
-
-  const replay = takeReplayIntentOnLoad()
-  if (replay) {
-    const playerName = readStoredPlayerName()?.trim() || 'Angler'
-    if (replay.intent === 'quickMatch') {
-      /* Route requeue through the normal lobby gate with autoStart so the user sees
-       * the same backdrop + queue overlay as if they had clicked Quick Match,
-       * instead of staring at a black gameRoot for the full queue duration. */
-      return runLobbyGate(playerName, {
-        autoStart: { intent: 'quickMatch', mapId: replay.mapId },
-      })
-    }
-    const lobby = buildLobbyFromIntent(replay.intent, replay.mapId)
-    if (lobby) {
-      gameRoot.classList.add('game-root--hud-suspended')
-      gameRoot.hidden = false
-      return lobby
-    }
-  }
   return runLobbyGate(readStoredPlayerName()?.trim() || 'Angler')
 }
 

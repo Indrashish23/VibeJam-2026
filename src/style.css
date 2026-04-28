@@ -971,7 +971,9 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   display: none !important;
 }
 
-/* Full-screen black gate before `location.reload()` when returning to the menu (3s + text). */
+/* Smooth dissolve-to-black overlay used when returning to the menu after a match.
+ * Always present in the DOM but visually inert until `--visible` is added; opacity
+ * transitions cleanly so we never get a hard cut. */
 .session-reload-overlay {
   position: fixed;
   inset: 0;
@@ -980,11 +982,18 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   align-items: center;
   justify-content: center;
   background: #000;
-  pointer-events: auto;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.7s cubic-bezier(0.45, 0.1, 0.3, 1);
 }
 
 .session-reload-overlay[hidden] {
   display: none !important;
+}
+
+.session-reload-overlay--visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .session-reload-overlay__txt {
@@ -996,6 +1005,12 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   font-weight: 500;
   letter-spacing: 0.08em;
   color: rgba(245, 245, 245, 0.82);
+  opacity: 0;
+  transition: opacity 0.45s ease-out 0.25s;
+}
+
+.session-reload-overlay--visible .session-reload-overlay__txt {
+  opacity: 0.82;
 }
 
 .rematch-sequence {
