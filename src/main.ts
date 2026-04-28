@@ -196,6 +196,9 @@ const hudPlayerCardEl = document.getElementById('hud-player-card') as HTMLDivEle
 const hudPortraitColumnEl = document.getElementById('hud-portrait-column') as HTMLDivElement | null
 const hudPortraitWrapShellEl = document.getElementById('hud-portrait-wrap-shell') as HTMLDivElement | null
 const hudStockYouShellEl = document.getElementById('hud-stock-you-shell') as HTMLDivElement | null
+const legacyHudStockFoeShellEl = document.getElementById('hud-stock-foe-shell') as HTMLDivElement | null
+/* Safety net: remove any stale foe stock HUD shell from older local markup/builds. */
+legacyHudStockFoeShellEl?.remove()
 const koAnnounceOverlayEl = document.getElementById('ko-announce-overlay') as HTMLDivElement | null
 const koAnnounceNameEl = document.getElementById('ko-announce-name') as HTMLParagraphElement | null
 const koAnnounceStockRowEl = document.getElementById('ko-announce-stock-row') as HTMLDivElement | null
@@ -888,7 +891,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   function isUnderLitGltfArenaMap(node: Object3D): boolean {
     let cur: Object3D | null = node
     while (cur) {
-      if (cur.name === 'map:godotExport') return true
+      if (cur.name === 'map:godotExport' || cur.name === 'map:floatingIslandStage') return true
       cur = cur.parent
     }
     return false

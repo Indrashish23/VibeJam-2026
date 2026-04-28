@@ -75,7 +75,7 @@ function gltfArenaBananaSpawnPoints(): Vector3[] {
 }
 
 export function getBananaSpawnCandidates(mapId: MapId): Vector3[] {
-  if (mapId === 'godotExport') return gltfArenaBananaSpawnPoints()
+  if (mapId === 'godotExport' || mapId === 'floatingIslandStage') return gltfArenaBananaSpawnPoints()
   return defaultArenaSpawnPoints()
 }
 

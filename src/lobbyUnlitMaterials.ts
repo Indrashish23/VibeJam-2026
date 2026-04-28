@@ -7,7 +7,7 @@ import { type Material, Mesh, MeshBasicMaterial, type Object3D } from 'three'
 function isUnderGodotArenaExport(node: Object3D): boolean {
   let cur: Object3D | null = node
   while (cur) {
-    if (cur.name === 'map:godotExport') return true
+    if (cur.name === 'map:godotExport' || cur.name === 'map:floatingIslandStage') return true
     cur = cur.parent
   }
   return false

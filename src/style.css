@@ -1489,6 +1489,11 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   align-self: center;
 }
 
+/* Safety net while foe HUD stock stays disabled. */
+#hud-stock-foe-shell {
+  display: none !important;
+}
+
 .hud-portrait-img {
   display: block;
   width: 100%;
