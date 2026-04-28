@@ -374,8 +374,11 @@ export const TWEAK_RANGE = {
   voiceHitImpactSfxVolumeMul: { min: 0, max: 1, step: 0.02 },
   voiceHitImpactEchoMul: { min: 0, max: 1, step: 0.02 },
   voiceHitImpactEchoDelaySec: { min: 0.02, max: 0.35, step: 0.004 },
-  hitMarkerSfxEnabled: { min: 0, max: 1, step: 1 },
-  hitMarkerSfxVolumeMul: { min: 0, max: 1, step: 0.02 },
+  hitImpactTierSfxEnabled: { min: 0, max: 1, step: 1 },
+  hitImpactUnder20VolumeMul: { min: 0, max: 1, step: 0.02 },
+  hitImpactOver20VolumeMul: { min: 0, max: 1, step: 0.02 },
+  hitImpactOver50VolumeMul: { min: 0, max: 1, step: 0.02 },
+  hitImpactOver70VolumeMul: { min: 0, max: 1, step: 0.02 },
 } satisfies Record<GameConfigKey, { min: number; max: number; step: number }>
 
 /** Human-readable labels for the tweaks panel (fallback: raw config key). */
@@ -727,8 +730,11 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   voiceHitImpactSfxVolumeMul: 'Voice hit: impact dry level × (0–1)',
   voiceHitImpactEchoMul: 'Voice hit: impact echo tap × dry (0–1)',
   voiceHitImpactEchoDelaySec: 'Voice hit: echo delay (seconds)',
-  hitMarkerSfxEnabled: 'Hitmarker SFX (0/1)',
-  hitMarkerSfxVolumeMul: 'Hitmarker level ×',
+  hitImpactTierSfxEnabled: 'Hit impact tier SFX (0/1)',
+  hitImpactUnder20VolumeMul: 'Hit impact: Under 22% level ×',
+  hitImpactOver20VolumeMul: 'Hit impact: 22–49% level ×',
+  hitImpactOver50VolumeMul: 'Hit impact: 50–69% level ×',
+  hitImpactOver70VolumeMul: 'Hit impact: 70%+ level ×',
 
   lobbyMonkeyPosX: 'Lobby monkey X (world m)',
   lobbyMonkeyPosY: 'Lobby monkey Y (world m)',
@@ -1059,9 +1065,16 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
     'Second tap level relative to dry (0 = dry only). Routed through same spatial panner with delay.',
   voiceHitImpactEchoDelaySec:
     'Delay before the echo tap (slapback). Capped ~20–350 ms in range for sensible slapback.',
-  hitMarkerSfxEnabled:
-    '0 = off. 1 = play `hitmarker.ogg` when your hit registers (PvP shot connect or local vs bot).',
-  hitMarkerSfxVolumeMul: 'Hitmarker gain × SFX chain (Settings → sound effects × Tweaks SFX).',
+  hitImpactTierSfxEnabled:
+    '0 = off. 1 = on. Plays one of the `Assets/SFX/HitEffects/*.ogg` clips when your hit confirms, selected by victim launch %.',
+  hitImpactUnder20VolumeMul:
+    'Gain × SFX chain when victim launch % is below 22 (uses `Under 20%.ogg`).',
+  hitImpactOver20VolumeMul:
+    'Gain × SFX chain for victim launch % 22..49 (randomly picks `Over20%.ogg` or `Over20%v2.ogg`).',
+  hitImpactOver50VolumeMul:
+    'Gain × SFX chain for victim launch % 50..69 (`Over50%.ogg`).',
+  hitImpactOver70VolumeMul:
+    'Gain × SFX chain for victim launch % 70+ (`Over70%.ogg`).',
 
   hideLobbyUi:
     '1 = hides the main-menu card (buttons, browser) so only the 3D canvas shows; Tweaks stays open for capture. 0 = normal.',
@@ -1411,8 +1424,11 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'voiceHitImpactSfxVolumeMul',
       'voiceHitImpactEchoMul',
       'voiceHitImpactEchoDelaySec',
-      'hitMarkerSfxEnabled',
-      'hitMarkerSfxVolumeMul',
+      'hitImpactTierSfxEnabled',
+      'hitImpactUnder20VolumeMul',
+      'hitImpactOver20VolumeMul',
+      'hitImpactOver50VolumeMul',
+      'hitImpactOver70VolumeMul',
       'proximityVoipOutputMul',
       'proximityVoipRefDistance',
       'proximityVoipMaxDistance',

@@ -724,10 +724,16 @@ export const defaultGameConfig = {
   voiceHitImpactEchoMul: 0.32,
   /** Seconds of delay before the echo tap (slight slapback). */
   voiceHitImpactEchoDelaySec: 0.088,
-  /** 0 = off. Hit-confirm tick when your shot connects (`Assets/SFX/hitmarker.ogg`). */
-  hitMarkerSfxEnabled: 1,
-  /** Gain × for hitmarker × SFX chain. */
-  hitMarkerSfxVolumeMul: 0.55,
+  /** 0 = off. Tiered hit-impact one-shot (`Assets/SFX/HitEffects/*.ogg`) on confirmed hit. */
+  hitImpactTierSfxEnabled: 1,
+  /** Victim launch % <22. */
+  hitImpactUnder20VolumeMul: 0.68,
+  /** Victim launch % 22..49 (`Over20%` / `Over20%v2` random). */
+  hitImpactOver20VolumeMul: 0.68,
+  /** Victim launch % 50..69. */
+  hitImpactOver50VolumeMul: 0.7,
+  /** Victim launch % >=70. */
+  hitImpactOver70VolumeMul: 0.74,
 
   /** 1 = hide main-menu HTML card (buttons) for screenshots; Tweaks panel still works. */
   hideLobbyUi: 0,

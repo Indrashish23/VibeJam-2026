@@ -90,7 +90,7 @@ import {
   wireBackgroundMusicToFirstGesture,
 } from './audio/backgroundMusic'
 import { playFootstepOneShot } from './audio/footstepsSfx'
-import { playHitmarkerOneShot } from './audio/combatSfx'
+import { playTieredHitImpactOneShot } from './audio/combatSfx'
 import { playBananaSlipOneShot, playJumpOneShot, playLandOneShot } from './audio/playerMoveSfx'
 import { playEnemySfxSpatialAt, resumeEnemySfxAudio, type SfxKind } from './audio/enemySfx'
 import { mountUserSettingsPanel, setUserSettingsPointerControls } from './userSettingsUI'
@@ -190,15 +190,12 @@ const hudViewportEl = document.getElementById('hud-viewport') as HTMLDivElement 
 const percentHudEl = document.getElementById('percent-hud') as HTMLDivElement | null
 const hudStockYouNumEl = document.getElementById('hud-stock-you-num') as HTMLSpanElement | null
 const hudStockYouWrapEl = document.getElementById('hud-stock-you-wrap') as HTMLDivElement | null
-const hudStockFoeNumEl = document.getElementById('hud-stock-foe-num') as HTMLSpanElement | null
-const hudStockFoeWrapEl = document.getElementById('hud-stock-foe-wrap') as HTMLDivElement | null
 const hudLeftStackEl = document.getElementById('hud-left-stack') as HTMLDivElement | null
 const hudDamagePctShellEl = document.getElementById('hud-damage-pct-shell') as HTMLSpanElement | null
 const hudPlayerCardEl = document.getElementById('hud-player-card') as HTMLDivElement | null
 const hudPortraitColumnEl = document.getElementById('hud-portrait-column') as HTMLDivElement | null
 const hudPortraitWrapShellEl = document.getElementById('hud-portrait-wrap-shell') as HTMLDivElement | null
 const hudStockYouShellEl = document.getElementById('hud-stock-you-shell') as HTMLDivElement | null
-const hudStockFoeShellEl = document.getElementById('hud-stock-foe-shell') as HTMLDivElement | null
 const koAnnounceOverlayEl = document.getElementById('ko-announce-overlay') as HTMLDivElement | null
 const koAnnounceNameEl = document.getElementById('ko-announce-name') as HTMLParagraphElement | null
 const koAnnounceStockRowEl = document.getElementById('ko-announce-stock-row') as HTMLDivElement | null
@@ -359,14 +356,6 @@ function syncUiHudChrome(): void {
     g.hudStockYouShellScale,
   )
   hudStockYouShellEl?.style.setProperty('--hud-stock-you-font-scale', String(g.hudStockYouFontScale))
-  setHudTransform(
-    hudStockFoeShellEl,
-    g.hudStockYouShellOffsetXRem,
-    g.hudStockYouShellOffsetYRem,
-    g.hudStockYouShellOffsetZPx,
-    g.hudStockYouShellScale,
-  )
-  hudStockFoeShellEl?.style.setProperty('--hud-stock-you-font-scale', String(g.hudStockYouFontScale))
 }
 
 function syncTweaksPanelChrome(): void {
@@ -2635,7 +2624,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           ? data.aggressorRole
           : undefined
       if (aggressorRole === lobby.role) {
-        triggerAggressorHitConfirmFx()
+        triggerAggressorHitConfirmFx(enemyPercent)
         const vr = data.victimRole === 'host' || data.victimRole === 'guest' ? data.victimRole : undefined
         if (vr && vr !== lobby.role) {
           bot.flashVictimInvuln(gameConfig.hitVictimWhiteFlashMs)
@@ -3080,8 +3069,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     triggerLocalVictimWhiteFlash()
   }
 
-  function triggerAggressorHitConfirmFx(): void {
-    playHitmarkerOneShot()
+  function triggerAggressorHitConfirmFx(victimPercentAfterHit: number): void {
+    playTieredHitImpactOneShot(victimPercentAfterHit)
     const sm = getCameraShakeMul()
     shakeIntensity = Math.max(shakeIntensity, gameConfig.pvpAggressorHitShake * sm)
     flashIntensity = Math.max(flashIntensity, gameConfig.pvpAggressorHitFlash)
@@ -3617,7 +3606,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   function syncStockBadgeNums(): void {
     if (hudStockYouNumEl) hudStockYouNumEl.textContent = String(Math.max(0, stocksYou))
-    if (hudStockFoeNumEl) hudStockFoeNumEl.textContent = String(Math.max(0, stocksFoe))
   }
 
   function syncStocksHud(): void {
@@ -3625,7 +3613,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   function flashVictimStockBadge(who: 'you' | 'foe'): void {
-    const el = who === 'you' ? hudStockYouWrapEl : hudStockFoeWrapEl
+    if (who !== 'you') return
+    const el = hudStockYouWrapEl
     if (!el) return
     el.classList.remove('hud-stock-badge--flash')
     void el.offsetWidth
@@ -3691,7 +3680,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
       const syncVictimBadge = (n: number): void => {
         if (victim === 'you' && hudStockYouNumEl) hudStockYouNumEl.textContent = String(n)
-        if (victim === 'foe' && hudStockFoeNumEl) hudStockFoeNumEl.textContent = String(n)
       }
 
       let n = stocksBefore
@@ -3704,7 +3692,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         koAnnounceStockNumEl.classList.remove('hud-stock-num--tick')
         void koAnnounceStockNumEl.offsetWidth
         koAnnounceStockNumEl.classList.add('hud-stock-num--tick')
-        const badgeNum = victim === 'you' ? hudStockYouNumEl : hudStockFoeNumEl
+        const badgeNum = victim === 'you' ? hudStockYouNumEl : null
         badgeNum?.classList.remove('hud-stock-num--tick')
         void badgeNum?.offsetWidth
         badgeNum?.classList.add('hud-stock-num--tick')
@@ -4626,7 +4614,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         const isPistolShot = arms.peekIsPistolShot()
         const hitAudio = arms.takeHitAudio()
         arms.markDealt()
-        playHitmarkerOneShot()
         voice.playBufferSpatialAt(hitAudio, bot.bodyCenter, camera)
         const botAimY = knockDirFromFistImpact(_fp, _knDir)
         /* Pistol shots use dedicated multipliers so spam-clicks can't fling the bot off-stage. */
@@ -4635,6 +4622,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         const gain = percentGainFromCharge(shotT) * pistolPctMul
         const prevEnemyPct = enemyPercent
         enemyPercent = Math.min(999, enemyPercent + gain)
+        playTieredHitImpactOneShot(enemyPercent)
         syncHud()
         if (isPvp()) {
           sendMp({ type: 'hitMelee', dx: _knDir.x, dz: _knDir.z })

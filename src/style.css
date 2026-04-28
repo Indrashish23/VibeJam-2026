@@ -1211,10 +1211,6 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   align-self: flex-start;
 }
 
-.percent-hud--anchor-left .hud-stock-foe-shell {
-  align-self: flex-start;
-}
-
 .game-root.game-root--hud-drag .percent-hud,
 .game-root.game-root--hud-drag #charge-bar-wrap {
   pointer-events: auto !important;
@@ -1286,21 +1282,7 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   margin-bottom: -0.15rem;
 }
 
-.hud-stock-foe-shell {
-  align-self: flex-end;
-  margin-bottom: -0.15rem;
-}
-
-/* Slight visual separation from your badge (portrait column). */
-.hud-stock-badge--foe {
-  border-color: rgba(235, 64, 44, 0.88);
-  box-shadow:
-    3px 4px 0 rgba(0, 0, 0, 0.65),
-    inset 0 1px 0 rgba(255, 120, 100, 0.1);
-}
-
-.hud-stock-you-shell .hud-stock-x,
-.hud-stock-foe-shell .hud-stock-x {
+.hud-stock-you-shell .hud-stock-x {
   font-family: system-ui, sans-serif;
   font-size: calc(
     clamp(1.05rem, min(2.8vw, 3.2vmin), 1.45rem) * var(--hud-stock-you-font-scale, 1)
@@ -1311,8 +1293,7 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   user-select: none;
 }
 
-.hud-stock-you-shell .hud-stock-num,
-.hud-stock-foe-shell .hud-stock-num {
+.hud-stock-you-shell .hud-stock-num {
   font-family: 'Tourney', system-ui, sans-serif;
   font-size: calc(
     clamp(1.25rem, min(3.2vw, 3.8vmin), 1.75rem) * var(--hud-stock-you-font-scale, 1)
