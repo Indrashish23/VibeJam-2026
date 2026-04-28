@@ -112,7 +112,7 @@ export const defaultGameConfig = {
   sunPosY: 34,
   sunPosZ: 36,
   /** 1 = force unlit materials (ignores scene lighting) for flat readability/debugging. */
-  lightingUnlitMode: 0,
+  lightingUnlitMode: 1,
   /** 1 = force unlit materials on the local player avatar only. */
   lightingUnlitSelfModel: 0,
   /** 1 = force unlit materials on the enemy / bot avatar only. */
