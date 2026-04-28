@@ -1208,20 +1208,45 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   z-index: 50;
   transform: scale(var(--ui-hud-master, 1));
   transform-origin: center center;
+  perspective: 900px;
 }
 
 .percent-hud {
+  --percent-hud-right: 1.2rem;
+  --percent-hud-left: auto;
+  --percent-hud-bottom: 2.2rem;
+  --percent-hud-z: 0px;
+  --percent-hud-origin: bottom right;
   position: absolute;
-  right: 1.2rem;
-  bottom: 2.2rem;
+  right: var(--percent-hud-right);
+  left: var(--percent-hud-left);
+  bottom: var(--percent-hud-bottom);
   width: min(44rem, calc(100vw - 2.5rem));
   z-index: 50;
   pointer-events: none;
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
-  transform: scale(var(--percent-hud-scale, 1));
-  transform-origin: bottom right;
+  transform: translate3d(0, 0, var(--percent-hud-z)) scale(var(--percent-hud-scale, 1));
+  transform-origin: var(--percent-hud-origin);
+  transform-style: preserve-3d;
+}
+
+.percent-hud--anchor-left .percent-hud__main-row {
+  flex-direction: row-reverse;
+}
+
+.percent-hud--anchor-left .percent-hud__left-stack {
+  align-items: flex-start;
+}
+
+.percent-hud--anchor-left .player-record-hud {
+  align-items: flex-start;
+  text-align: left;
+}
+
+.percent-hud--anchor-left .hud-portrait-column {
+  align-self: flex-start;
 }
 
 .player-record-hud {
@@ -1305,7 +1330,6 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   bottom: 2.2rem;
   z-index: 51;
   pointer-events: none;
-  transform: scale(var(--percent-hud-scale, 1));
   transform-origin: bottom left;
 }
 
@@ -1315,6 +1339,8 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   align-items: center;
   align-self: flex-end;
   gap: 0.12rem;
+  transform: scale(var(--hud-portrait-scale, 1));
+  transform-origin: bottom center;
 }
 
 .hud-stock-badge {
@@ -1438,12 +1464,17 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
 
 .hud-damage-pct {
   --hud-hit-shake: 12px;
+  --hud-damage-pct-scale: 1;
+  --hud-damage-pct-ox: 0rem;
+  --hud-damage-pct-oy: 0rem;
   position: relative;
+  left: var(--hud-damage-pct-ox);
+  top: var(--hud-damage-pct-oy);
   z-index: 1;
   align-self: flex-end;
   margin-right: -0.04em;
   font-family: 'Tourney', Impact, sans-serif;
-  font-size: clamp(96px, 17vw, 170px);
+  font-size: calc(clamp(96px, 17vw, 170px) * var(--hud-damage-pct-scale));
   font-style: italic;
   font-weight: 700;
   line-height: 0.88;

@@ -58,8 +58,24 @@ export const defaultGameConfig = {
 
   /** Uniform scale for `#hud-viewport` (launch % + charge wedge cluster); 1 = default. */
   uiHudMasterScale: 1,
+  /** 1 = anchor launch-% cluster to screen right (opposite foe stocks on the left); 0 = anchor left. */
+  percentHudAnchorRight: 1,
+  /** Extra horizontal inset from the anchored edge (rem); + = farther from edge (toward center). */
+  percentHudOffsetXRem: 0,
+  /** Vertical offset from bottom for the launch-% cluster (rem); + = higher. */
+  percentHudOffsetYRem: 0,
+  /** Subtle stacking / parallax offset (px); forwarded as translateZ on the cluster. */
+  percentHudOffsetZPx: 0,
   /** Scale only the launch-percent HUD block (inside master viewport scale). */
   percentHudScale: 1.15,
+  /** Multiplier on the large damage % digits (inside block scale). */
+  percentHudTextScale: 1,
+  /** Nudge the damage % digits horizontally (rem). */
+  percentHudTextOffsetXRem: 0,
+  /** Nudge the damage % digits vertically (rem). */
+  percentHudTextOffsetYRem: 0,
+  /** Uniform scale on the portrait + your stock badge column. */
+  percentHudPortraitScale: 1,
   /** Tweaks panel window UI scale (slider rows stay usable when shrunk). */
   tweaksPanelUiScale: 0.81,
   /** When 1 and Tweaks (T) is open, drag launch % + charge wedge anywhere on screen (positions persist per browser tab). */

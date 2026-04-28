@@ -260,7 +260,25 @@ function syncChargeHudLayout(): void {
 function syncUiHudChrome(): void {
   const g = gameConfig
   hudViewportEl?.style.setProperty('--ui-hud-master', String(g.uiHudMasterScale))
-  percentHudEl?.style.setProperty('--percent-hud-scale', String(g.percentHudScale))
+  if (percentHudEl) {
+    const anchorRight = g.percentHudAnchorRight >= 0.5
+    const inset = 1.2 + g.percentHudOffsetXRem
+    const bottom = 2.2 + g.percentHudOffsetYRem
+    percentHudEl.style.setProperty('--percent-hud-scale', String(g.percentHudScale))
+    percentHudEl.style.setProperty('--percent-hud-right', anchorRight ? `${inset}rem` : 'auto')
+    percentHudEl.style.setProperty('--percent-hud-left', anchorRight ? 'auto' : `${inset}rem`)
+    percentHudEl.style.setProperty('--percent-hud-bottom', `${bottom}rem`)
+    percentHudEl.style.setProperty('--percent-hud-z', `${g.percentHudOffsetZPx}px`)
+    percentHudEl.style.setProperty(
+      '--percent-hud-origin',
+      anchorRight ? 'bottom right' : 'bottom left',
+    )
+    percentHudEl.style.setProperty('--hud-damage-pct-scale', String(g.percentHudTextScale))
+    percentHudEl.style.setProperty('--hud-damage-pct-ox', `${g.percentHudTextOffsetXRem}rem`)
+    percentHudEl.style.setProperty('--hud-damage-pct-oy', `${g.percentHudTextOffsetYRem}rem`)
+    percentHudEl.style.setProperty('--hud-portrait-scale', String(g.percentHudPortraitScale))
+    percentHudEl.classList.toggle('percent-hud--anchor-left', !anchorRight)
+  }
 }
 
 function syncTweaksPanelChrome(): void {
@@ -5760,7 +5778,15 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         'hideGameHud',
         'hudDragLayoutEnabled',
         'uiHudMasterScale',
+        'percentHudAnchorRight',
+        'percentHudOffsetXRem',
+        'percentHudOffsetYRem',
+        'percentHudOffsetZPx',
         'percentHudScale',
+        'percentHudTextScale',
+        'percentHudTextOffsetXRem',
+        'percentHudTextOffsetYRem',
+        'percentHudPortraitScale',
         'tweaksPanelUiScale',
         'chargeHudRightRem',
         'chargeHudVerticalBiasRem',
@@ -5821,6 +5847,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       onResetHudLayout: () => {
         resetGameplayHudLayout(percentHudEl, chargeBarWrap)
         syncChargeHudLayout()
+        syncUiHudChrome()
       },
       onTriggerKnockbackDev: () => {
         if (multiplayerBlocksPlay()) return
