@@ -1,15 +1,19 @@
 import { readStoredPlayerName, savePlayerName } from './playerName'
 import { loadUserSettings } from './userSettingsStorage'
 import { isMultiplayerTransportConfigured } from './net/transportConfig'
-import { PublicLobbyDirectoryClient, type PublicLobbyListing } from './net/publicLobbyDirectory'
 import { isMapId, MAP_DEFS, type MapId } from './maps'
 import { clearTutorialDone, TUTORIAL_ENABLED } from './tutorial'
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js'
 import { gameConfig } from './gameConfig'
 import { mountLobbyBackdrop } from './lobbyBackdrop'
 import { mountTweaksPanel } from './tweaksPanel'
+import {
+  QUICK_MATCH_TIMEOUT_MS,
+  runQuickMatchQueue,
+  type QuickMatchResult,
+} from './net/quickMatchQueue'
 
-function randomRoomId(): string {
+export function randomRoomId(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
   let s = ''
   for (let i = 0; i < 6; i++) {
@@ -38,6 +42,12 @@ function saveStoredMapId(id: MapId): void {
   }
 }
 
+/**
+ * `intent` distinguishes how the match was launched so post-match UI can branch
+ * (Requeue / Rematch / Practice Again / Fight Bot Again).
+ */
+export type MatchIntent = 'quickMatch' | 'private' | 'practice' | 'vsBot'
+
 export type LobbyResult =
   | { mode: 'offline'; mapId: MapId }
   | {
@@ -46,53 +56,54 @@ export type LobbyResult =
       roomId: string
       shortCode: string
       mapId: MapId
+      intent: MatchIntent
       startWithDummyPractice?: boolean
       startWithSmartBot?: boolean
-      /** `public` = listed in the browser room list; `private` = join by code only. */
-      lobbyVisibility?: 'public' | 'private'
-      /** Guest joining from the public browser: host display name from the listing (until hello overwrites HUD). */
-      listingHostName?: string
     }
 
 function wireLobbyDom(): {
   overlay: HTMLDivElement
   intro: HTMLElement
   err: HTMLElement
-  create: HTMLButtonElement
+  quickMatch: HTMLButtonElement
+  hostPrivate: HTMLButtonElement
   practice: HTMLButtonElement
-  soloBot: HTMLButtonElement
+  vsBot: HTMLButtonElement
   joinCode: HTMLInputElement
   joinBtn: HTMLButtonElement
-  offline: HTMLButtonElement
   replayTutorial: HTMLButtonElement | null
   changeName: HTMLButtonElement
-  visPrivate: HTMLInputElement
-  visPublic: HTMLInputElement
-  browserSection: HTMLDivElement
-  browserList: HTMLUListElement
-  browserRefresh: HTMLButtonElement
-  browserHint: HTMLElement
   mapSelect: HTMLSelectElement
 } {
   return {
     overlay: document.getElementById('lobby-overlay') as HTMLDivElement,
     intro: document.getElementById('lobby-intro') as HTMLElement,
     err: document.getElementById('lobby-error') as HTMLElement,
-    create: document.getElementById('lobby-create') as HTMLButtonElement,
+    quickMatch: document.getElementById('lobby-quick-match') as HTMLButtonElement,
+    hostPrivate: document.getElementById('lobby-host-private') as HTMLButtonElement,
     practice: document.getElementById('lobby-practice') as HTMLButtonElement,
-    soloBot: document.getElementById('lobby-solo-bot') as HTMLButtonElement,
+    vsBot: document.getElementById('lobby-vs-bot') as HTMLButtonElement,
     joinCode: document.getElementById('lobby-join-code') as HTMLInputElement,
     joinBtn: document.getElementById('lobby-join') as HTMLButtonElement,
-    offline: document.getElementById('lobby-offline') as HTMLButtonElement,
     replayTutorial: document.getElementById('lobby-replay-tutorial') as HTMLButtonElement | null,
     changeName: document.getElementById('lobby-change-name') as HTMLButtonElement,
-    visPrivate: document.getElementById('lobby-vis-private') as HTMLInputElement,
-    visPublic: document.getElementById('lobby-vis-public') as HTMLInputElement,
-    browserSection: document.getElementById('lobby-browser-section') as HTMLDivElement,
-    browserList: document.getElementById('lobby-browser-list') as HTMLUListElement,
-    browserRefresh: document.getElementById('lobby-browser-refresh') as HTMLButtonElement,
-    browserHint: document.getElementById('lobby-browser-hint') as HTMLElement,
     mapSelect: document.getElementById('lobby-map') as HTMLSelectElement,
+  }
+}
+
+function wireQueueDom(): {
+  overlay: HTMLDivElement | null
+  timer: HTMLElement | null
+  cancel: HTMLButtonElement | null
+  title: HTMLElement | null
+  sub: HTMLElement | null
+} {
+  return {
+    overlay: document.getElementById('queue-overlay') as HTMLDivElement | null,
+    timer: document.getElementById('queue-timer-value'),
+    cancel: document.getElementById('queue-cancel-btn') as HTMLButtonElement | null,
+    title: document.getElementById('queue-title'),
+    sub: document.querySelector('#queue-overlay .queue-sub'),
   }
 }
 
@@ -101,12 +112,15 @@ function selectedMapId(ui: ReturnType<typeof wireLobbyDom>): MapId {
   return isMapId(v) ? v : 'default'
 }
 
-function selectedLobbyVisibility(ui: ReturnType<typeof wireLobbyDom>): 'public' | 'private' {
-  return ui.visPublic.checked ? 'public' : 'private'
+function formatTimerMs(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  const m = Math.floor(total / 60)
+  const s = total % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
 }
 
 /**
- * Display name gate, then pick offline or online (code share / join / public browser).
+ * Display name gate, then pick Quick Match / Host Private / Join via Code / Practice / Vs Bot.
  * Realtime connection is established in-game; no infra details here.
  */
 export async function runLobbyGate(initialDisplayName: string): Promise<LobbyResult> {
@@ -174,30 +188,37 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
   }
 
   const ui = wireLobbyDom()
+  const queueUi = wireQueueDom()
   let displayName = initialDisplayName
 
   return await new Promise<LobbyResult>((resolve) => {
     const onlineUnavailable = (): boolean => !isMultiplayerTransportConfigured()
 
-    let browserClient: PublicLobbyDirectoryClient | null = null
-    let browserPruneTimer: ReturnType<typeof setInterval> | null = null
+    let settled = false
+    let queueAbort: (() => void) | null = null
+    let queueTimerHandle: ReturnType<typeof setInterval> | null = null
 
-    function stopBrowserClient(): void {
-      if (browserPruneTimer !== null) {
-        window.clearInterval(browserPruneTimer)
-        browserPruneTimer = null
+    const stopQueue = (): void => {
+      if (queueTimerHandle !== null) {
+        window.clearInterval(queueTimerHandle)
+        queueTimerHandle = null
       }
-      if (browserClient) {
-        browserClient.disconnect()
-        browserClient = null
+      const ab = queueAbort
+      queueAbort = null
+      if (ab) {
+        try {
+          ab()
+        } catch {
+          /* ignore */
+        }
       }
+      if (queueUi.overlay) queueUi.overlay.hidden = true
     }
 
-    let settled = false
     const finish = (result: LobbyResult) => {
       if (settled) return
       settled = true
-      stopBrowserClient()
+      stopQueue()
       disposeLobbyTweaks?.()
       disposeLobbyTweaks = null
       tweaksHost?.replaceChildren()
@@ -220,59 +241,13 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
       ui.err.textContent = ''
     }
 
-    function renderBrowserList(list: PublicLobbyListing[]): void {
-      ui.browserList.replaceChildren()
-      if (list.length === 0) {
-        const li = document.createElement('li')
-        li.className = 'lobby-browser-empty'
-        li.textContent = 'No public lobbies right now. Try Refresh or host one as Public.'
-        ui.browserList.appendChild(li)
-        return
-      }
-      for (const row of list) {
-        const li = document.createElement('li')
-        li.className = 'lobby-browser-row'
-        const btn = document.createElement('button')
-        btn.type = 'button'
-        btn.className = 'lobby-browser-join'
-        btn.textContent = `Join ${row.hostName} (${row.shortCode})`
-        btn.title = `Join room ${row.roomId}`
-        btn.addEventListener('click', () => {
-          clearErr()
-          stopBrowserClient()
-          finish({
-            mode: 'online',
-            role: 'guest',
-            roomId: row.roomId,
-            shortCode: row.shortCode,
-            listingHostName: row.hostName,
-            mapId: selectedMapId(ui),
-          })
-        })
-        li.appendChild(btn)
-        ui.browserList.appendChild(li)
-      }
-    }
-
-    function startBrowserClient(): void {
-      stopBrowserClient()
-      if (!isMultiplayerTransportConfigured()) return
-      const client = new PublicLobbyDirectoryClient((list) => renderBrowserList(list))
-      browserClient = client
-      client.connect()
-      browserPruneTimer = window.setInterval(() => {
-        browserClient?.pruneStaleNow()
-      }, 3000)
-    }
-
     ui.overlay.hidden = false
     /* Reveal menu before removing boot curtain so the canvas never flashes without the card. */
     curtain?.setAttribute('hidden', '')
     curtain?.setAttribute('aria-hidden', 'true')
-    ui.intro.textContent = `Signed in as ${displayName}. Host a public match (listed for anyone), a private code lobby, join a friend’s code, or play offline.`
+    ui.intro.textContent = `Signed in as ${displayName}. Quick match for fast PvP, host a private game with a code, or warm up against a bot.`
     ui.err.hidden = true
     ui.err.textContent = ''
-    ui.visPublic.checked = true
 
     if (ui.mapSelect) {
       /* Repopulate options so the map registry is the single source of truth. */
@@ -291,16 +266,12 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
       })
     }
 
-    if (!onlineUnavailable()) {
-      queueMicrotask(() => startBrowserClient())
-    }
-
     ui.changeName.onclick = () => {
       clearErr()
       const userOv = document.getElementById('username-overlay') as HTMLDivElement
-      const gameRoot = document.getElementById('game-root') as HTMLDivElement
+      const gameRootEl = document.getElementById('game-root') as HTMLDivElement
       ui.overlay.hidden = true
-      gameRoot.hidden = true
+      gameRootEl.hidden = true
       userOv.hidden = false
       const input = document.getElementById('username-input') as HTMLInputElement
       input.value = readStoredPlayerName() ?? displayName
@@ -315,14 +286,9 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
         displayName = name
         userOv.hidden = true
         ui.overlay.hidden = false
-        ui.intro.textContent = `Signed in as ${displayName}. Host a public match (listed for anyone), a private code lobby, join a friend’s code, or play offline.`
+        ui.intro.textContent = `Signed in as ${displayName}. Quick match for fast PvP, host a private game with a code, or warm up against a bot.`
       }
       form.addEventListener('submit', onSubmit, { once: true })
-    }
-
-    ui.offline.onclick = () => {
-      clearErr()
-      finish({ mode: 'offline', mapId: selectedMapId(ui) })
     }
 
     if (ui.replayTutorial) {
@@ -338,10 +304,100 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
       }
     }
 
-    ui.create.onclick = () => {
+    function startQuickMatch(): void {
+      if (settled) return
+      if (onlineUnavailable()) {
+        setErr('Online play isn’t available right now. Try Practice or Vs Bot instead.')
+        return
+      }
+      const mapId = selectedMapId(ui)
+      const playerName = displayName
+      ui.overlay.hidden = true
+      if (queueUi.overlay) {
+        queueUi.overlay.hidden = false
+        if (queueUi.title) queueUi.title.textContent = 'Searching for opponent…'
+        if (queueUi.sub)
+          queueUi.sub.textContent =
+            'If no one shows up within 20 seconds you\u2019ll fight a smart bot.'
+      }
+      const queueStartedAt = Date.now()
+      if (queueUi.timer) queueUi.timer.textContent = formatTimerMs(0)
+      queueTimerHandle = window.setInterval(() => {
+        if (!queueUi.timer) return
+        queueUi.timer.textContent = formatTimerMs(Date.now() - queueStartedAt)
+      }, 250)
+
+      const onCancel = () => {
+        if (settled) return
+        stopQueue()
+        if (queueUi.cancel) queueUi.cancel.removeEventListener('click', onCancel)
+        ui.overlay.hidden = false
+        clearErr()
+      }
+      queueUi.cancel?.addEventListener('click', onCancel)
+
+      const queueHandle = runQuickMatchQueue({
+        playerName,
+        timeoutMs: QUICK_MATCH_TIMEOUT_MS,
+        onTimeoutPhase: () => {
+          if (queueUi.title) queueUi.title.textContent = 'No opponent found'
+          if (queueUi.sub)
+            queueUi.sub.textContent = 'Spinning up a smart bot match — get ready.'
+        },
+      })
+      queueAbort = () => queueHandle.cancel()
+
+      queueHandle.promise
+        .then((result: QuickMatchResult) => {
+          if (settled) return
+          if (queueUi.cancel) queueUi.cancel.removeEventListener('click', onCancel)
+          if (result.outcome === 'paired') {
+            finish({
+              mode: 'online',
+              role: result.role,
+              roomId: result.roomId,
+              shortCode: result.shortCode,
+              mapId,
+              intent: 'quickMatch',
+            })
+            return
+          }
+          if (result.outcome === 'botFallback') {
+            const roomId = randomRoomId()
+            const shortCode = roomId.replace(/^vj-/, '')
+            finish({
+              mode: 'online',
+              role: 'host',
+              roomId,
+              shortCode,
+              mapId,
+              intent: 'quickMatch',
+              startWithSmartBot: true,
+            })
+            return
+          }
+          /* cancelled — return to menu without resolving */
+          stopQueue()
+          ui.overlay.hidden = false
+        })
+        .catch((err: unknown) => {
+          console.warn('[quickMatch] queue failed', err)
+          stopQueue()
+          if (settled) return
+          ui.overlay.hidden = false
+          setErr('Quick match failed to start. Try again, or pick another option.')
+        })
+    }
+
+    ui.quickMatch.onclick = () => {
+      clearErr()
+      startQuickMatch()
+    }
+
+    ui.hostPrivate.onclick = () => {
       clearErr()
       if (onlineUnavailable()) {
-        setErr('Online play isn’t available right now. Try Play offline, or try again later.')
+        setErr('Online play isn’t available right now.')
         return
       }
       const roomId = randomRoomId()
@@ -351,7 +407,7 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
         role: 'host',
         roomId,
         shortCode,
-        lobbyVisibility: selectedLobbyVisibility(ui),
+        intent: 'private',
         mapId: selectedMapId(ui),
       })
     }
@@ -359,7 +415,7 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
     ui.practice.onclick = () => {
       clearErr()
       if (onlineUnavailable()) {
-        setErr('Practice with Dummy needs online lobby transport configured.')
+        setErr('Practice needs online lobby transport configured.')
         return
       }
       const roomId = randomRoomId()
@@ -369,16 +425,16 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
         role: 'host',
         roomId,
         shortCode,
+        intent: 'practice',
         startWithDummyPractice: true,
-        lobbyVisibility: 'private',
         mapId: selectedMapId(ui),
       })
     }
 
-    ui.soloBot.onclick = () => {
+    ui.vsBot.onclick = () => {
       clearErr()
       if (onlineUnavailable()) {
-        setErr('Solo vs Bot needs online lobby transport configured.')
+        setErr('Vs Bot needs online lobby transport configured.')
         return
       }
       const roomId = randomRoomId()
@@ -388,8 +444,8 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
         role: 'host',
         roomId,
         shortCode,
+        intent: 'vsBot',
         startWithSmartBot: true,
-        lobbyVisibility: 'private',
         mapId: selectedMapId(ui),
       })
     }
@@ -397,7 +453,7 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
     ui.joinBtn.onclick = () => {
       clearErr()
       if (onlineUnavailable()) {
-        setErr('Online play isn’t available right now. Try Play offline.')
+        setErr('Online play isn’t available right now.')
         return
       }
       const raw = ui.joinCode.value.trim().toLowerCase().replace(/[^a-z0-9]/g, '')
@@ -412,20 +468,9 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
         role: 'guest',
         roomId,
         shortCode,
-        lobbyVisibility: 'private',
+        intent: 'private',
         mapId: selectedMapId(ui),
       })
     }
-
-    ui.browserRefresh.onclick = () => {
-      clearErr()
-      if (onlineUnavailable()) {
-        setErr('Online play isn’t available right now.')
-        return
-      }
-      startBrowserClient()
-    }
   })
 }
-
-

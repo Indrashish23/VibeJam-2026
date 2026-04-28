@@ -146,7 +146,7 @@
     </div>
 
     <div id="lobby-overlay" class="lobby-overlay" hidden>
-      <div class="lobby-card lobby-card--wide">
+      <div class="lobby-card lobby-card--menu">
         <h2 class="lobby-title">Play</h2>
         <p id="lobby-intro" class="lobby-intro"></p>
         <button type="button" id="lobby-change-name" class="lobby-link-btn">
@@ -160,70 +160,68 @@
             <option value="godotExport">Godot export test</option>
           </select>
         </label>
-        <div class="lobby-columns">
-          <div class="lobby-column">
-            <h3 class="lobby-column-title">Host game</h3>
-            <fieldset class="lobby-vis-fieldset">
-              <legend class="lobby-vis-legend">Match visibility (host)</legend>
-              <label
-                class="lobby-vis-option"
-                title="Only players with your lobby code can join. Your room is not listed in the public browser."
-              >
-                <input type="radio" name="lobby-vis" id="lobby-vis-private" value="private" />
-                Private (code only)
-              </label>
-              <label
-                class="lobby-vis-option"
-                title="While you wait for an opponent, your lobby appears in the public list so anyone can join without a code."
-              >
-                <input type="radio" name="lobby-vis" id="lobby-vis-public" value="public" checked />
-                Public (listed — join without code)
-              </label>
-            </fieldset>
-            <div class="lobby-actions">
-              <button type="button" id="lobby-create" class="lobby-btn">Create lobby</button>
-              <button type="button" id="lobby-practice" class="lobby-btn lobby-btn--ghost">
-                Practice with Dummy
-              </button>
-              <button type="button" id="lobby-solo-bot" class="lobby-btn lobby-btn--ghost">
-                Solo vs Bot
-              </button>
-            </div>
-          </div>
-          <div class="lobby-column">
-            <h3 class="lobby-column-title">Join game</h3>
-            <div id="lobby-browser-section" class="lobby-browser-section">
-              <div class="lobby-browser-head">
-                <span class="lobby-browser-title">Public lobbies</span>
-                <button type="button" id="lobby-browser-refresh" class="lobby-btn lobby-btn--small">
-                  Refresh list
-                </button>
-              </div>
-              <p
-                id="lobby-browser-hint"
-                class="lobby-browser-hint"
-                title="Hosts who chose “Public” appear here while they wait. Click a row to join that room."
-              >
-                Open games from players who chose Public when hosting. Click Refresh, then Join on a row.
-              </p>
-              <ul id="lobby-browser-list" class="lobby-browser-list"></ul>
-            </div>
+        <div class="lobby-actions">
+          <button
+            type="button"
+            id="lobby-quick-match"
+            class="lobby-btn lobby-btn--primary lobby-btn--hero"
+            title="Find an opponent automatically. If none in 20s, you'll fight a smart bot."
+          >
+            Quick Match
+          </button>
+          <button
+            type="button"
+            id="lobby-host-private"
+            class="lobby-btn"
+            title="Create a private match and share the code with a friend."
+          >
+            Host Private Game
+          </button>
+          <div class="lobby-join-section">
             <label class="lobby-join-row">
-              <span>Join with a friend’s code</span>
+              <span>Join via Code</span>
               <input id="lobby-join-code" maxlength="16" autocomplete="off" placeholder="abc123" />
             </label>
             <button type="button" id="lobby-join" class="lobby-btn">Join with code</button>
           </div>
+          <div class="lobby-secondary-actions">
+            <button type="button" id="lobby-practice" class="lobby-btn lobby-btn--ghost">
+              Practice
+            </button>
+            <button type="button" id="lobby-vs-bot" class="lobby-btn lobby-btn--ghost">
+              Vs Bot
+            </button>
+          </div>
         </div>
         <div class="lobby-offline-wrap">
-          <button type="button" id="lobby-offline" class="lobby-btn lobby-btn--ghost">Play offline</button>
           <button
             type="button"
             id="lobby-replay-tutorial"
-            class="lobby-btn lobby-btn--ghost"
+            class="lobby-btn lobby-btn--ghost lobby-btn--small"
             title="Run the HOWL tutorial again from the start (offline, default map)."
           >
             Replay Tutorial
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="queue-overlay" class="queue-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="queue-title">
+      <div class="queue-card">
+        <h2 id="queue-title" class="queue-title">Searching for opponent…</h2>
+        <p class="queue-sub">If no one shows up within 20 seconds you'll fight a smart bot.</p>
+        <div class="queue-spinner" aria-hidden="true">
+          <div class="queue-spinner__dot"></div>
+          <div class="queue-spinner__dot"></div>
+          <div class="queue-spinner__dot"></div>
+        </div>
+        <p class="queue-timer-row">
+          <span class="queue-timer-label">Time</span>
+          <strong id="queue-timer-value" class="queue-timer-value">0:00</strong>
+        </p>
+        <div class="queue-actions">
+          <button type="button" id="queue-cancel-btn" class="lobby-btn lobby-btn--ghost">
+            Cancel
           </button>
         </div>
       </div>
@@ -426,8 +424,11 @@
           <h2 id="match-end-title" class="match-end-title">You win!</h2>
           <p id="match-end-sub" class="match-end-sub"></p>
           <div id="match-end-actions" class="match-end-actions">
-            <button type="button" id="match-end-lobby-btn" class="match-end-btn match-end-btn--primary">
-              Back to lobby
+            <button type="button" id="match-end-secondary-btn" class="match-end-btn match-end-btn--primary" hidden>
+              Requeue
+            </button>
+            <button type="button" id="match-end-lobby-btn" class="match-end-btn">
+              Return to Lobby
             </button>
           </div>
         </div>

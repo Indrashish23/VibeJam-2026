@@ -56,7 +56,7 @@ import {
   TUTORIAL_ENABLED,
   type TutorialApi,
 } from './tutorial'
-import { runLobbyGate, type LobbyResult } from './lobbyGate'
+import { runLobbyGate, randomRoomId, type LobbyResult, type MatchIntent } from './lobbyGate'
 import {
   base64ToBlob,
   blobToBase64,
@@ -68,8 +68,11 @@ import {
   type MultiplayerWire,
 } from './net/multiplayerSocket'
 import { createBrowserHostAuthority } from './net/browserHostAuthority'
-import { PublicLobbyDirectoryClient } from './net/publicLobbyDirectory'
 import { isAuthoritativeListenServer } from './net/transportConfig'
+import {
+  QUICK_MATCH_TIMEOUT_MS,
+  runQuickMatchQueue,
+} from './net/quickMatchQueue'
 import { simBananaThrowToLanding, feetOnPeel, isFeetInPickUpRange } from './net/bananaSim'
 import { BananaWorld } from './powerups/bananaWorld'
 import { MegaphoneFpProp } from './weapons/megaphoneProp'
@@ -165,6 +168,9 @@ const matchEndSub = document.getElementById('match-end-sub')
 const matchEndCardEl =
   matchEndOverlay?.querySelector('.match-end-card') as HTMLDivElement | null
 const matchEndLobbyBtnEl = document.getElementById('match-end-lobby-btn') as HTMLButtonElement | null
+const matchEndSecondaryBtnEl = document.getElementById(
+  'match-end-secondary-btn',
+) as HTMLButtonElement | null
 const leaveMatchOverlay = document.getElementById('leave-match-overlay') as HTMLDivElement | null
 const leaveMatchConfirmBtn = document.getElementById('leave-match-confirm') as HTMLButtonElement | null
 const leaveMatchCancelBtn = document.getElementById('leave-match-cancel') as HTMLButtonElement | null
@@ -583,49 +589,95 @@ function runUsernameGate(): Promise<void> {
 
 /** Legacy sessionStorage key from older builds (rematch reload) — still read so stale keys clear. */
 const ONLINE_REMATCH_RELOAD_KEY = 'vibejam_online_rematch_reload_lobby'
+/** Set by the post-match popup so a `window.location.reload()` jumps straight back into the chosen flow. */
+const REPLAY_INTENT_KEY = 'vibejam_replay_intent_on_load'
 
-function takeOnlineRematchReloadLobby(): LobbyResult | null {
+const VALID_INTENTS: ReadonlySet<MatchIntent> = new Set([
+  'quickMatch',
+  'private',
+  'practice',
+  'vsBot',
+])
+
+type StoredReplayIntent = {
+  intent: MatchIntent
+  mapId: MapId
+}
+
+function takeReplayIntentOnLoad(): StoredReplayIntent | null {
   let raw: string | null = null
   try {
-    raw = sessionStorage.getItem(ONLINE_REMATCH_RELOAD_KEY)
+    raw = sessionStorage.getItem(REPLAY_INTENT_KEY)
+    sessionStorage.removeItem(REPLAY_INTENT_KEY)
   } catch {
     raw = null
   }
   if (!raw) return null
   try {
-    const data = JSON.parse(raw) as Partial<Extract<LobbyResult, { mode: 'online' }>>
+    const data = JSON.parse(raw) as Partial<{ intent: string; mapId: string }>
     if (
-      data.mode === 'online' &&
-      (data.role === 'host' || data.role === 'guest') &&
-      typeof data.roomId === 'string' &&
-      typeof data.shortCode === 'string' &&
+      typeof data.intent === 'string' &&
+      VALID_INTENTS.has(data.intent as MatchIntent) &&
+      typeof data.mapId === 'string' &&
       isMapId(data.mapId)
     ) {
-      try {
-        sessionStorage.removeItem(ONLINE_REMATCH_RELOAD_KEY)
-      } catch {
-        /* ignore */
-      }
-      return {
-        mode: 'online',
-        role: data.role,
-        roomId: data.roomId,
-        shortCode: data.shortCode,
-        mapId: data.mapId,
-        lobbyVisibility: data.lobbyVisibility === 'public' ? 'public' : 'private',
-        listingHostName:
-          typeof data.listingHostName === 'string' ? data.listingHostName : undefined,
-      }
+      return { intent: data.intent as MatchIntent, mapId: data.mapId }
     }
   } catch {
-    /* ignore malformed rematch state */
+    /* ignore malformed replay intent */
   }
+  return null
+}
+
+function buildLobbyFromIntent(intent: MatchIntent, mapId: MapId): LobbyResult | null {
+  if (intent === 'quickMatch') {
+    /* Quick match needs the queue room; can't be resolved synchronously here. */
+    return null
+  }
+  const roomId = randomRoomId()
+  const shortCode = roomId.replace(/^vj-/, '')
+  if (intent === 'private') {
+    return {
+      mode: 'online',
+      role: 'host',
+      roomId,
+      shortCode,
+      mapId,
+      intent: 'private',
+    }
+  }
+  if (intent === 'practice') {
+    return {
+      mode: 'online',
+      role: 'host',
+      roomId,
+      shortCode,
+      mapId,
+      intent: 'practice',
+      startWithDummyPractice: true,
+    }
+  }
+  if (intent === 'vsBot') {
+    return {
+      mode: 'online',
+      role: 'host',
+      roomId,
+      shortCode,
+      mapId,
+      intent: 'vsBot',
+      startWithSmartBot: true,
+    }
+  }
+  return null
+}
+
+/** Clear the legacy rematch storage key without trusting its contents. */
+function clearLegacyRematchKey(): void {
   try {
     sessionStorage.removeItem(ONLINE_REMATCH_RELOAD_KEY)
   } catch {
     /* ignore */
   }
-  return null
 }
 
 async function initGame(lobby: LobbyResult): Promise<void> {
@@ -677,16 +729,12 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   const guestAwaitingHostHello = lobby.mode === 'online' && lobby.role === 'guest'
   let guestSawHostHello = !guestAwaitingHostHello
 
-  /** Percent HUD foe line: peer hello name, else public-listing host name for guests; never internal dummy label. */
+  /** Percent HUD foe line: peer hello name, falling back to a generic label until the hello arrives. */
   function opponentHudName(): string {
     if (lobbySmartBotActive && bot.mode === 'smart') return 'Bot'
     if (lobby.mode === 'online') {
       const n = mpOpponentName?.trim()
       if (n) return n
-      if (lobby.role === 'guest') {
-        const listed = lobby.listingHostName?.trim()
-        if (listed) return listed
-      }
     }
     return 'Opponent'
   }
@@ -1105,42 +1153,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     ])
   }
   syncBlastBoundsLine()
-
-  let publicHostDirClient: PublicLobbyDirectoryClient | null = null
-  let publicHostDirTimer: ReturnType<typeof setInterval> | null = null
-
-  function stopPublicHostAnnounce(): void {
-    if (publicHostDirTimer !== null) {
-      window.clearInterval(publicHostDirTimer)
-      publicHostDirTimer = null
-    }
-    if (publicHostDirClient) {
-      publicHostDirClient.disconnect()
-      publicHostDirClient = null
-    }
-  }
-
-  function maybeStartPublicHostAnnounce(): void {
-    stopPublicHostAnnounce()
-    if (!isOnline || lobby.mode !== 'online') return
-    if (lobby.role !== 'host') return
-    if (lobby.lobbyVisibility !== 'public') return
-    if (lobby.startWithDummyPractice || lobby.startWithSmartBot) return
-    if (mpPhase !== 'waiting') return
-    const client = new PublicLobbyDirectoryClient(() => {})
-    publicHostDirClient = client
-    client.connect()
-    const pulse = () => {
-      if (mpPhase !== 'waiting' || !publicHostDirClient) {
-        stopPublicHostAnnounce()
-        return
-      }
-      const hostName = readStoredPlayerName()?.trim() || displayPlayerName()
-      publicHostDirClient.sendHostPing(lobby.roomId, lobby.shortCode, hostName)
-    }
-    pulse()
-    publicHostDirTimer = window.setInterval(pulse, 4000)
-  }
 
   function isPvp(): boolean {
     return isOnline && mpPhase === 'live' && bot.mode === 'network'
@@ -2214,11 +2226,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       if (opponentForfeitHandled) return
       if (iWonRound) {
         await sleepMs(2000)
-        if (!applyMatchEndCore('win')) return
-        returnToLobbyReload(isOnline && lobby.mode === 'online')
-      } else {
-        endMatch('lose')
+        if (epochAtStart !== pvpMatchEpoch) return
+        if (opponentForfeitHandled) return
       }
+      endMatch(iWonRound ? 'win' : 'lose')
     } finally {
       seriesTransitionActive = false
     }
@@ -2310,7 +2321,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   async function runMpBeginNow(): Promise<void> {
     if (lobby.mode !== 'online') return
     if (mpSeqStarted || mpPhase === 'live') return
-    stopPublicHostAnnounce()
     lobbyDummyPractice = false
     lobbySmartBotActive = false
     mpSeqStarted = true
@@ -2378,11 +2388,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       if (mpPresenceCount < 2) return
       if (guestAwaitingHostHello && !guestSawHostHello) return
       if (!mpOpponentName) {
-        const hint =
-          lobby.mode === 'online' && lobby.role === 'guest'
-            ? lobby.listingHostName?.trim() || null
-            : null
-        mpOpponentName = hint || 'Player'
+        mpOpponentName = 'Player'
       }
       void runMpBeginNow()
     }, 550)
@@ -2392,11 +2398,43 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (matchEndOverlay) matchEndOverlay.hidden = true
     matchEndCardEl?.classList.remove('match-end-card--forfeit')
     if (matchEndLobbyBtnEl) matchEndLobbyBtnEl.hidden = true
+    if (matchEndSecondaryBtnEl) matchEndSecondaryBtnEl.hidden = true
   }
 
   function showMatchEndLobbyControls(): void {
     if (!matchOutcome) return
     if (matchEndLobbyBtnEl) matchEndLobbyBtnEl.hidden = false
+    if (matchEndSecondaryBtnEl) {
+      const label = currentMatchSecondaryLabel()
+      if (label) {
+        matchEndSecondaryBtnEl.textContent = label
+        matchEndSecondaryBtnEl.hidden = false
+      } else {
+        matchEndSecondaryBtnEl.hidden = true
+      }
+    }
+  }
+
+  function currentMatchIntent(): MatchIntent | null {
+    if (lobby.mode !== 'online') return null
+    return lobby.intent
+  }
+
+  function currentMatchSecondaryLabel(): string | null {
+    const intent = currentMatchIntent()
+    if (!intent) return null
+    switch (intent) {
+      case 'quickMatch':
+        return 'Requeue'
+      case 'private':
+        return 'Rematch'
+      case 'practice':
+        return 'Practice Again'
+      case 'vsBot':
+        return 'Fight Bot Again'
+      default:
+        return null
+    }
   }
 
   /** Hide HUD layers that fight with the single match-result / forfeit surface. */
@@ -4313,13 +4351,38 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (matchEndTitle) {
       matchEndTitle.textContent = outcome === 'win' ? 'You win!' : 'You lose!'
     }
+    const intent = currentMatchIntent()
     if (matchEndSub) {
-      matchEndSub.textContent =
-        outcome === 'win'
-          ? 'The other fighter ran out of stocks. Return to the lobby to play again.'
-          : 'You ran out of stocks.'
+      matchEndSub.textContent = matchEndSubCopy(outcome, intent)
     }
     showMatchEndLobbyControls()
+  }
+
+  function matchEndSubCopy(outcome: 'win' | 'lose', intent: MatchIntent | null): string {
+    const wonStocks = outcome === 'win'
+      ? 'The other fighter ran out of stocks.'
+      : 'You ran out of stocks.'
+    if (!intent) return wonStocks
+    switch (intent) {
+      case 'quickMatch':
+        return outcome === 'win'
+          ? `${wonStocks} Requeue for another match or head back to the lobby.`
+          : `${wonStocks} Requeue for a rematch or head back to the lobby.`
+      case 'private':
+        return outcome === 'win'
+          ? `${wonStocks} Start a new private game or head back to the lobby.`
+          : `${wonStocks} Start a new private game or head back to the lobby.`
+      case 'practice':
+        return outcome === 'win'
+          ? `${wonStocks} Run another practice round or head back to the lobby.`
+          : `${wonStocks} Run another practice round or head back to the lobby.`
+      case 'vsBot':
+        return outcome === 'win'
+          ? `${wonStocks} Fight the bot again or head back to the lobby.`
+          : `${wonStocks} Take another shot at the bot or head back to the lobby.`
+      default:
+        return wonStocks
+    }
   }
 
   function recreateBot(mode: BotMode): void {
@@ -4374,12 +4437,17 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     lobbyDummyPractice = true
     lobbySmartBotActive = false
     if (mpWaitLayer) mpWaitLayer.hidden = true
+    if (mpCodeHud) mpCodeHud.hidden = true
     updateMicBlockedUi()
+    resetMatchStockState()
 
     if (botMode !== 'dummy') recreateBot('dummy')
     else applyRoundReset()
 
-    if (mpToast) {
+    /* Practice from the menu is a single-player session in an unlisted room; surprise
+     * PvP joins are not possible (no public directory and the code isn't shared), but
+     * the existing online-host plumbing still keeps the wire alive for parity. */
+    if (mpToast && lobby.intent !== 'practice') {
       mpToast.textContent = 'Practice vs dummy — a real match still starts when someone joins.'
       mpToast.hidden = false
       mpToast.classList.remove('mp-toast--bad')
@@ -4406,12 +4474,14 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     lobbyDummyPractice = false
     lobbySmartBotActive = true
     if (mpWaitLayer) mpWaitLayer.hidden = true
+    if (mpCodeHud) mpCodeHud.hidden = true
     updateMicBlockedUi()
+    resetMatchStockState()
 
     if (botMode !== 'smart') recreateBot('smart')
     else applyRoundReset()
 
-    if (mpToast) {
+    if (mpToast && lobby.intent !== 'vsBot' && lobby.intent !== 'quickMatch') {
       mpToast.textContent = 'Solo vs smart bot — a real match still starts when someone joins.'
       mpToast.hidden = false
       mpToast.classList.remove('mp-toast--bad')
@@ -5650,11 +5720,22 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   if (isOnline && lobby.mode === 'online') {
     const onlineLobby = lobby
-    if (mpWaitLayer) mpWaitLayer.hidden = false
-    if (mpWaitText) mpWaitText.textContent = 'Waiting for opponent…'
-    if (onlineLobby.role === 'host') {
+    /* Practice / Vs Bot / Quick Match bot fallback auto-start against a bot — no waiting screen. */
+    const isBotOnlySession =
+      !!onlineLobby.startWithDummyPractice ||
+      !!onlineLobby.startWithSmartBot
+    const showWaitLayer = !isBotOnlySession
+    if (mpWaitLayer) mpWaitLayer.hidden = !showWaitLayer
+    if (mpWaitText) {
+      mpWaitText.textContent =
+        onlineLobby.intent === 'quickMatch' ? 'Connecting…' : 'Waiting for opponent…'
+    }
+    /* Only the private-host flow shares a code; quick-match pairs invisibly. */
+    if (onlineLobby.role === 'host' && onlineLobby.intent === 'private') {
       if (mpCodeHud) mpCodeHud.hidden = false
       if (mpCodeValue) mpCodeValue.textContent = onlineLobby.shortCode
+    } else {
+      if (mpCodeHud) mpCodeHud.hidden = true
     }
     if (opponentLabelEl) opponentLabelEl.textContent = opponentHudName()
 
@@ -5673,7 +5754,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
             mapId: map.id,
           }),
         )
-        queueMicrotask(() => maybeStartPublicHostAnnounce())
       }
       mpSocket.addEventListener('open', onMpSocketOpen)
       if (mpSocket.readyState === WebSocket.OPEN) {
@@ -5766,6 +5846,21 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   })
 
   matchEndLobbyBtnEl?.addEventListener('click', () => {
+    returnToLobbyReload(isOnline && lobby.mode === 'online')
+  })
+
+  matchEndSecondaryBtnEl?.addEventListener('click', () => {
+    const intent = currentMatchIntent()
+    if (!intent) {
+      returnToLobbyReload(isOnline && lobby.mode === 'online')
+      return
+    }
+    try {
+      const payload: StoredReplayIntent = { intent, mapId: lobby.mapId }
+      sessionStorage.setItem(REPLAY_INTENT_KEY, JSON.stringify(payload))
+    } catch {
+      /* If storage is blocked, fall through to a normal lobby return. */
+    }
     returnToLobbyReload(isOnline && lobby.mode === 'online')
   })
 
@@ -5982,16 +6077,65 @@ wireBackgroundMusicToFirstGesture()
   if (wrap) mountUserSettingsPanel({ root: wrap })
 }
 
-runUsernameGate()
-  .then(() => {
-    const rematch = takeOnlineRematchReloadLobby()
-    if (rematch) {
+async function resolveLobbyAfterReload(): Promise<LobbyResult> {
+  /* Drop any stale legacy rematch state from older builds. */
+  clearLegacyRematchKey()
+
+  const replay = takeReplayIntentOnLoad()
+  if (replay) {
+    const playerName = readStoredPlayerName()?.trim() || 'Angler'
+    if (replay.intent === 'quickMatch') {
       gameRoot.classList.add('game-root--hud-suspended')
       gameRoot.hidden = false
-      return rematch
+      try {
+        const handle = runQuickMatchQueue({
+          playerName,
+          timeoutMs: QUICK_MATCH_TIMEOUT_MS,
+        })
+        const result = await handle.promise
+        if (result.outcome === 'paired') {
+          return {
+            mode: 'online',
+            role: result.role,
+            roomId: result.roomId,
+            shortCode: result.shortCode,
+            mapId: replay.mapId,
+            intent: 'quickMatch',
+          }
+        }
+        if (result.outcome === 'botFallback') {
+          const roomId = randomRoomId()
+          const shortCode = roomId.replace(/^vj-/, '')
+          return {
+            mode: 'online',
+            role: 'host',
+            roomId,
+            shortCode,
+            mapId: replay.mapId,
+            intent: 'quickMatch',
+            startWithSmartBot: true,
+          }
+        }
+        /* cancelled — fall through to menu */
+      } catch (err) {
+        console.warn('[vibejam] requeue failed; returning to menu', err)
+      }
+      gameRoot.hidden = true
+      gameRoot.classList.remove('game-root--hud-suspended')
+      return runLobbyGate(playerName)
     }
-    return runLobbyGate(readStoredPlayerName()?.trim() || 'Angler')
-  })
+    const lobby = buildLobbyFromIntent(replay.intent, replay.mapId)
+    if (lobby) {
+      gameRoot.classList.add('game-root--hud-suspended')
+      gameRoot.hidden = false
+      return lobby
+    }
+  }
+  return runLobbyGate(readStoredPlayerName()?.trim() || 'Angler')
+}
+
+runUsernameGate()
+  .then(() => resolveLobbyAfterReload())
   .then((lobby) => initGame(lobby))
   .catch((err) => {
     console.error('[vibejam] init failed', err)
