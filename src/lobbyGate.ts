@@ -110,11 +110,23 @@ function selectedLobbyVisibility(ui: ReturnType<typeof wireLobbyDom>): 'public' 
  * Realtime connection is established in-game; no infra details here.
  */
 export async function runLobbyGate(initialDisplayName: string): Promise<LobbyResult> {
+  const curtain = document.getElementById('lobby-boot-curtain') as HTMLDivElement | null
+  curtain?.removeAttribute('hidden')
+  curtain?.setAttribute('aria-hidden', 'false')
+
   const gameRoot = document.getElementById('game-root') as HTMLDivElement
   gameRoot.hidden = false
   gameRoot.classList.add('game-root--lobby')
+  gameRoot.classList.add('game-root--hud-suspended')
 
-  const backdrop = await mountLobbyBackdrop(gameRoot)
+  let backdrop: Awaited<ReturnType<typeof mountLobbyBackdrop>>
+  try {
+    backdrop = await mountLobbyBackdrop(gameRoot)
+  } catch (err) {
+    curtain?.setAttribute('hidden', '')
+    curtain?.setAttribute('aria-hidden', 'true')
+    throw err
+  }
 
   const tweaksHost = document.getElementById('tweaks-panel-host')
   let disposeLobbyTweaks: (() => void) | null = null
@@ -191,6 +203,9 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
       tweaksHost?.replaceChildren()
       document.body.classList.remove('hide-lobby-html-ui')
       backdrop.dispose()
+      const c = document.getElementById('lobby-boot-curtain') as HTMLDivElement | null
+      c?.setAttribute('hidden', '')
+      c?.setAttribute('aria-hidden', 'true')
       ui.overlay.hidden = true
       resolve(result)
     }
@@ -251,6 +266,9 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
     }
 
     ui.overlay.hidden = false
+    /* Reveal menu before removing boot curtain so the canvas never flashes without the card. */
+    curtain?.setAttribute('hidden', '')
+    curtain?.setAttribute('aria-hidden', 'true')
     ui.intro.textContent = `Signed in as ${displayName}. Host a public match (listed for anyone), a private code lobby, join a friend’s code, or play offline.`
     ui.err.hidden = true
     ui.err.textContent = ''

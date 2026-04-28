@@ -229,7 +229,8 @@
       </div>
     </div>
 
-    <div id="game-root" class="game-root" hidden>
+    <!-- Default: hide gameplay HUD until initGame reveals after map load (avoids paint flash). -->
+    <div id="game-root" class="game-root game-root--hud-suspended" hidden>
       <div id="mp-wait-layer" class="mp-wait-layer" hidden>
         <p id="mp-wait-text" class="mp-wait-text shimmer">Waiting for opponent…</p>
       </div>
@@ -258,9 +259,8 @@
           <span id="win-game-splash-sub" class="win-game-splash__sub"></span>
         </div>
       </div>
-      <div id="win-return-lobby-overlay" class="win-return-lobby-overlay" hidden>
-        <div class="win-return-lobby-overlay__flash" aria-hidden="true"></div>
-        <p id="win-return-lobby-txt" class="win-return-lobby-overlay__txt">Returning to lobby</p>
+      <div id="win-return-lobby-overlay" class="win-return-lobby-overlay" hidden aria-hidden="true">
+        <p id="win-return-lobby-txt" class="win-return-lobby-overlay__txt">Returning to lobby…</p>
       </div>
       <div id="dash-scanlines" class="dash-scanlines" aria-hidden="true"></div>
       <div id="jump-vfx" class="jump-vfx" aria-hidden="true"></div>
@@ -305,6 +305,12 @@
       <div id="hud-viewport" class="hud-viewport">
         <div id="percent-hud" class="percent-hud" aria-label="Launch percent">
           <div class="percent-hud__main-row">
+            <div id="hud-stock-foe-shell" class="hud-stock-foe-shell" aria-label="Opponent stocks remaining">
+              <div id="hud-stock-foe-wrap" class="hud-stock-badge hud-stock-badge--foe">
+                <span class="hud-stock-x" aria-hidden="true">×</span>
+                <span id="hud-stock-foe-num" class="hud-stock-num">0</span>
+              </div>
+            </div>
             <div id="hud-left-stack" class="percent-hud__left-stack">
               <canvas id="hud-smoke-canvas" class="hud-smoke-canvas" aria-hidden="true"></canvas>
               <span id="hud-damage-pct-shell" class="hud-damage-pct-shell">
@@ -453,12 +459,11 @@
 
     <div id="tweaks-panel-host"></div>
 
-    <div id="lobby-wipe-overlay" class="lobby-wipe-overlay" hidden aria-hidden="true">
-      <div class="lobby-wipe-stripes">
-        <div class="lobby-wipe-bar"></div>
-        <div class="lobby-wipe-bar"></div>
-        <div class="lobby-wipe-bar"></div>
-      </div>
+    <!-- Covers game-root while lobby 3D loads so arena/HUD never flashes before menu chrome. -->
+    <div id="lobby-boot-curtain" class="lobby-boot-curtain" hidden aria-hidden="true"></div>
+
+    <div id="session-reload-overlay" class="session-reload-overlay" hidden aria-hidden="true">
+      <p class="session-reload-overlay__txt">Returning to lobby…</p>
     </div>
 
     <!-- Outside game-root so logs work on lobby + fixed overlay -->

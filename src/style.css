@@ -876,29 +876,6 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   display: none !important;
 }
 
-.win-return-lobby-overlay__flash {
-  position: absolute;
-  inset: 0;
-  background: #fff;
-  opacity: 0;
-}
-
-.win-return-lobby-overlay--flash .win-return-lobby-overlay__flash {
-  animation: win-return-white-flash 0.78s ease-out forwards;
-}
-
-@keyframes win-return-white-flash {
-  0% {
-    opacity: 0;
-  }
-  32% {
-    opacity: 0.88;
-  }
-  100% {
-    opacity: 0;
-  }
-}
-
 .win-return-lobby-overlay__txt {
   position: relative;
   z-index: 1;
@@ -907,68 +884,49 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   text-align: center;
   font-family: ui-sans-serif, system-ui, Segoe UI, sans-serif;
   font-size: clamp(0.98rem, 3vw, 1.35rem);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: rgba(226, 232, 240, 0.92);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: #a3a3a3;
 }
 
-/* Full-screen transition before reload when returning to main menu */
-.lobby-wipe-overlay {
+/* Black cover while main menu 3D is still loading (no HUD / arena flash). */
+.lobby-boot-curtain {
   position: fixed;
   inset: 0;
-  z-index: 320000;
+  z-index: 25;
+  background: #000;
   pointer-events: none;
-  overflow: hidden;
-  background: transparent;
 }
 
-.lobby-wipe-overlay[hidden] {
+.lobby-boot-curtain[hidden] {
   display: none !important;
 }
 
-.lobby-wipe-stripes {
-  position: absolute;
-  top: 0;
-  right: 0;
-  height: 100%;
-  /* Wide enough that three bars + gaps read as a “sheet”; translate uses vw so wide monitors still fully wipe. */
-  width: min(72vw, 720px);
+/* Full-screen black gate before `location.reload()` when returning to the menu (3s + text). */
+.session-reload-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 320000;
   display: flex;
-  align-items: stretch;
-  justify-content: flex-end;
-  gap: clamp(10px, 2.8vw, 36px);
-  padding-right: clamp(12px, 4vw, 52px);
-  box-sizing: border-box;
-  /* Opaque band behind the white lines — without this, flex gaps stay transparent and the game shows through. */
-  background: #1a1a1b;
-  transform: translateX(105%);
-  transform-origin: right center;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  pointer-events: auto;
 }
 
-.lobby-wipe-bar {
-  flex: 0 0 clamp(11px, 2.4vw, 28px);
-  height: 100%;
-  background: #ffffff;
-  box-shadow:
-    0 0 18px rgba(255, 255, 255, 0.75),
-    0 0 42px rgba(255, 255, 255, 0.35);
+.session-reload-overlay[hidden] {
+  display: none !important;
 }
 
-.lobby-wipe-overlay--animate .lobby-wipe-stripes {
-  animation: lobby-wipe-rtl 0.68s cubic-bezier(0.42, 0, 0.17, 1) forwards;
-}
-
-/*
- * End position must account for viewport width: % alone is only relative to the stripes element.
- * On 1920px+ displays min(52vw,520px) capped at 520px, so -240% never pulled the panel past the left edge.
- */
-@keyframes lobby-wipe-rtl {
-  from {
-    transform: translateX(105%);
-  }
-  to {
-    transform: translateX(calc(-100vw + 100% - 2px));
-  }
+.session-reload-overlay__txt {
+  margin: 0;
+  padding: 0 1.25rem;
+  text-align: center;
+  font-family: ui-sans-serif, system-ui, Segoe UI, sans-serif;
+  font-size: clamp(0.95rem, 2.8vmin, 1.2rem);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: rgba(245, 245, 245, 0.82);
 }
 
 .rematch-sequence {
@@ -1253,6 +1211,10 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   align-self: flex-start;
 }
 
+.percent-hud--anchor-left .hud-stock-foe-shell {
+  align-self: flex-start;
+}
+
 .game-root.game-root--hud-drag .percent-hud,
 .game-root.game-root--hud-drag #charge-bar-wrap {
   pointer-events: auto !important;
@@ -1324,7 +1286,21 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   margin-bottom: -0.15rem;
 }
 
-.hud-stock-you-shell .hud-stock-x {
+.hud-stock-foe-shell {
+  align-self: flex-end;
+  margin-bottom: -0.15rem;
+}
+
+/* Slight visual separation from your badge (portrait column). */
+.hud-stock-badge--foe {
+  border-color: rgba(235, 64, 44, 0.88);
+  box-shadow:
+    3px 4px 0 rgba(0, 0, 0, 0.65),
+    inset 0 1px 0 rgba(255, 120, 100, 0.1);
+}
+
+.hud-stock-you-shell .hud-stock-x,
+.hud-stock-foe-shell .hud-stock-x {
   font-family: system-ui, sans-serif;
   font-size: calc(
     clamp(1.05rem, min(2.8vw, 3.2vmin), 1.45rem) * var(--hud-stock-you-font-scale, 1)
@@ -1335,7 +1311,8 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   user-select: none;
 }
 
-.hud-stock-you-shell .hud-stock-num {
+.hud-stock-you-shell .hud-stock-num,
+.hud-stock-foe-shell .hud-stock-num {
   font-family: 'Tourney', system-ui, sans-serif;
   font-size: calc(
     clamp(1.25rem, min(3.2vw, 3.8vmin), 1.75rem) * var(--hud-stock-you-font-scale, 1)
@@ -2888,6 +2865,27 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
 .game-root.game-root--hide-hud #series-score-overlay,
 .game-root.game-root--hide-hud #mp-wait-layer,
 .game-root.game-root--hide-hud #win-game-splash {
+  visibility: hidden !important;
+  pointer-events: none;
+}
+
+/* Hide persistent gameplay chrome in the menu, and during the first seconds of boot until the map loads. */
+.game-root--lobby #hud-viewport,
+.game-root--lobby #crosshair,
+.game-root--lobby #mp-code-hud,
+.game-root--lobby #mp-toast,
+.game-root--lobby #text-chat-wrap,
+.game-root--lobby #series-score-overlay,
+.game-root--lobby #mp-wait-layer,
+.game-root--lobby #win-game-splash,
+.game-root--hud-suspended #hud-viewport,
+.game-root--hud-suspended #crosshair,
+.game-root--hud-suspended #mp-code-hud,
+.game-root--hud-suspended #mp-toast,
+.game-root--hud-suspended #text-chat-wrap,
+.game-root--hud-suspended #series-score-overlay,
+.game-root--hud-suspended #mp-wait-layer,
+.game-root--hud-suspended #win-game-splash {
   visibility: hidden !important;
   pointer-events: none;
 }

@@ -181,7 +181,7 @@ const winGameSplashSubEl = document.getElementById('win-game-splash-sub') as HTM
 const winReturnLobbyOverlayEl = document.getElementById(
   'win-return-lobby-overlay',
 ) as HTMLDivElement | null
-const lobbyWipeOverlayEl = document.getElementById('lobby-wipe-overlay') as HTMLDivElement | null
+const sessionReloadOverlayEl = document.getElementById('session-reload-overlay') as HTMLDivElement | null
 const countdownOverlay = document.getElementById('countdown-overlay') as HTMLDivElement | null
 const countdownNumEl = document.getElementById('countdown-num') as HTMLSpanElement | null
 const dashScanEl = document.getElementById('dash-scanlines') as HTMLDivElement | null
@@ -190,12 +190,15 @@ const hudViewportEl = document.getElementById('hud-viewport') as HTMLDivElement 
 const percentHudEl = document.getElementById('percent-hud') as HTMLDivElement | null
 const hudStockYouNumEl = document.getElementById('hud-stock-you-num') as HTMLSpanElement | null
 const hudStockYouWrapEl = document.getElementById('hud-stock-you-wrap') as HTMLDivElement | null
+const hudStockFoeNumEl = document.getElementById('hud-stock-foe-num') as HTMLSpanElement | null
+const hudStockFoeWrapEl = document.getElementById('hud-stock-foe-wrap') as HTMLDivElement | null
 const hudLeftStackEl = document.getElementById('hud-left-stack') as HTMLDivElement | null
 const hudDamagePctShellEl = document.getElementById('hud-damage-pct-shell') as HTMLSpanElement | null
 const hudPlayerCardEl = document.getElementById('hud-player-card') as HTMLDivElement | null
 const hudPortraitColumnEl = document.getElementById('hud-portrait-column') as HTMLDivElement | null
 const hudPortraitWrapShellEl = document.getElementById('hud-portrait-wrap-shell') as HTMLDivElement | null
 const hudStockYouShellEl = document.getElementById('hud-stock-you-shell') as HTMLDivElement | null
+const hudStockFoeShellEl = document.getElementById('hud-stock-foe-shell') as HTMLDivElement | null
 const koAnnounceOverlayEl = document.getElementById('ko-announce-overlay') as HTMLDivElement | null
 const koAnnounceNameEl = document.getElementById('ko-announce-name') as HTMLParagraphElement | null
 const koAnnounceStockRowEl = document.getElementById('ko-announce-stock-row') as HTMLDivElement | null
@@ -356,6 +359,14 @@ function syncUiHudChrome(): void {
     g.hudStockYouShellScale,
   )
   hudStockYouShellEl?.style.setProperty('--hud-stock-you-font-scale', String(g.hudStockYouFontScale))
+  setHudTransform(
+    hudStockFoeShellEl,
+    g.hudStockYouShellOffsetXRem,
+    g.hudStockYouShellOffsetYRem,
+    g.hudStockYouShellOffsetZPx,
+    g.hudStockYouShellScale,
+  )
+  hudStockFoeShellEl?.style.setProperty('--hud-stock-you-font-scale', String(g.hudStockYouFontScale))
 }
 
 function syncTweaksPanelChrome(): void {
@@ -534,31 +545,18 @@ function sleepMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-/** Full-screen transition before `location.reload` when returning to the main menu. */
-function runLobbyExitWipeThen(done: () => void): void {
-  const el = lobbyWipeOverlayEl
-  if (!el) {
-    done()
-    return
+/** Black full-screen gate before `location.reload` when returning to the main menu. */
+const SESSION_RELOAD_GATE_MS = 3000
+
+function runSessionReloadGateThen(reload: () => void): void {
+  const el = sessionReloadOverlayEl
+  if (el) {
+    el.hidden = false
+    el.setAttribute('aria-hidden', 'false')
+    el.setAttribute('role', 'status')
+    el.setAttribute('aria-live', 'polite')
   }
-  el.hidden = false
-  el.classList.remove('lobby-wipe-overlay--animate')
-  void el.offsetWidth
-  el.classList.add('lobby-wipe-overlay--animate')
-  const stripes = el.querySelector('.lobby-wipe-stripes')
-  const finish = () => {
-    el.classList.remove('lobby-wipe-overlay--animate')
-    el.hidden = true
-    done()
-  }
-  let finished = false
-  const once = () => {
-    if (finished) return
-    finished = true
-    finish()
-  }
-  stripes?.addEventListener('animationend', once, { once: true })
-  window.setTimeout(once, 950)
+  window.setTimeout(reload, SESSION_RELOAD_GATE_MS)
 }
 
 function runUsernameGate(): Promise<void> {
@@ -640,6 +638,7 @@ function takeOnlineRematchReloadLobby(): LobbyResult | null {
 
 async function initGame(lobby: LobbyResult): Promise<void> {
   gameRoot.classList.remove('game-root--lobby')
+  gameRoot.classList.add('game-root--hud-suspended')
 
   if (DEBUG_MP)
     debugMpLog(
@@ -1015,6 +1014,16 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   const terrainPhysics = await TerrainPhysics.create()
   let map: MapHandle = await loadMap(lobby.mapId, scene, hubRoot)
   terrainPhysics.setTerrainMeshes(map.collisionMeshes, map.rapierCuboids)
+
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        gameRoot.classList.remove('game-root--hud-suspended')
+        syncGameHudVisibility()
+        resolve()
+      })
+    })
+  })
 
   scene.add(camera)
 
@@ -2213,7 +2222,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       if (iWonRound) {
         await sleepMs(2000)
         if (!applyMatchEndCore('win')) return
-        await runWinReturnToLobbyTransition()
         returnToLobbyReload(isOnline && lobby.mode === 'online')
       } else {
         endMatch('lose')
@@ -2403,7 +2411,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (matchCancelledOverlay) matchCancelledOverlay.hidden = true
     if (winReturnLobbyOverlayEl) {
       winReturnLobbyOverlayEl.hidden = true
-      winReturnLobbyOverlayEl.classList.remove('win-return-lobby-overlay--flash')
     }
     hideWinGameSplash()
     hideKoAnnouncementImmediate()
@@ -2421,6 +2428,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   function returnToLobbyReload(notifyOpponent: boolean = false): void {
     leavingToLobby = true
+    squelchCompetingEndOfMatchUi()
+    gameRoot.classList.add('game-root--hud-suspended')
     if (notifyOpponent && isOnline && lobby.mode === 'online' && (mpSocket?.readyState === 1 || rtcGame)) {
       try {
         sendGameTraffic({ type: 'matchCancelled' })
@@ -2438,11 +2447,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     } catch {
       /* ignore */
     }
-    const delay = notifyOpponent ? 150 : 80
-    runLobbyExitWipeThen(() => {
-      window.setTimeout(() => {
-        window.location.reload()
-      }, delay)
+    runSessionReloadGateThen(() => {
+      window.location.reload()
     })
   }
 
@@ -3611,6 +3617,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   function syncStockBadgeNums(): void {
     if (hudStockYouNumEl) hudStockYouNumEl.textContent = String(Math.max(0, stocksYou))
+    if (hudStockFoeNumEl) hudStockFoeNumEl.textContent = String(Math.max(0, stocksFoe))
   }
 
   function syncStocksHud(): void {
@@ -3618,8 +3625,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   function flashVictimStockBadge(who: 'you' | 'foe'): void {
-    if (who !== 'you') return
-    const el = hudStockYouWrapEl
+    const el = who === 'you' ? hudStockYouWrapEl : hudStockFoeWrapEl
     if (!el) return
     el.classList.remove('hud-stock-badge--flash')
     void el.offsetWidth
@@ -3685,6 +3691,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
       const syncVictimBadge = (n: number): void => {
         if (victim === 'you' && hudStockYouNumEl) hudStockYouNumEl.textContent = String(n)
+        if (victim === 'foe' && hudStockFoeNumEl) hudStockFoeNumEl.textContent = String(n)
       }
 
       let n = stocksBefore
@@ -3697,7 +3704,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         koAnnounceStockNumEl.classList.remove('hud-stock-num--tick')
         void koAnnounceStockNumEl.offsetWidth
         koAnnounceStockNumEl.classList.add('hud-stock-num--tick')
-        const badgeNum = victim === 'you' ? hudStockYouNumEl : null
+        const badgeNum = victim === 'you' ? hudStockYouNumEl : hudStockFoeNumEl
         badgeNum?.classList.remove('hud-stock-num--tick')
         void badgeNum?.offsetWidth
         badgeNum?.classList.add('hud-stock-num--tick')
@@ -4202,38 +4209,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     hideWinGameSplash()
   }
 
-  async function runWinReturnToLobbyTransition(): Promise<void> {
-    const el = winReturnLobbyOverlayEl
-    if (!el) {
-      await sleepMs(780)
-      return
-    }
-    el.hidden = false
-    el.classList.remove('win-return-lobby-overlay--flash')
-    void el.offsetWidth
-    el.classList.add('win-return-lobby-overlay--flash')
-    const flash = el.querySelector('.win-return-lobby-overlay__flash')
-    await new Promise<void>((resolve) => {
-      let done = false
-      const finish = () => {
-        if (done) return
-        done = true
-        resolve()
-      }
-      const onEnd = () => {
-        flash?.removeEventListener('animationend', onEnd)
-        finish()
-      }
-      flash?.addEventListener('animationend', onEnd, { once: true })
-      window.setTimeout(() => {
-        flash?.removeEventListener('animationend', onEnd)
-        finish()
-      }, 1200)
-    })
-    el.classList.remove('win-return-lobby-overlay--flash')
-    el.hidden = true
-  }
-
   function updateWinFinisher(_delta: number): void {
     if (!winFinisher || winFinisher.phase !== 'launch') return
     if (map.isBlastZone(bot.root.position)) {
@@ -4620,7 +4595,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       bot.setPlayerCharging(chargingLmb)
       bot.setIntentInputs(playerPercent, enemyPercent)
       bot.setAiSuppressed(true)
-      bot.update(delta, camera.position, terrainPhysics, false)
+      bot.update(delta, camera.position, terrainPhysics, false, camera)
       updateWinFinisher(delta)
       advanceWinFlashTimer()
       return
@@ -4632,7 +4607,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     bot.setPlayerCharging(chargingLmb)
     bot.setIntentInputs(playerPercent, enemyPercent)
     bot.setAiSuppressed(false)
-    bot.update(delta, camera.position, terrainPhysics, playerProjActive)
+    bot.update(delta, camera.position, terrainPhysics, playerProjActive, camera)
 
     /* Player projectile vs bot — dedicated listen server validates shots when authPvp() */
     const localInvulnShoot = performance.now() >= respawnInvulnUntilYou
@@ -6019,6 +5994,7 @@ runUsernameGate()
   .then(() => {
     const rematch = takeOnlineRematchReloadLobby()
     if (rematch) {
+      gameRoot.classList.add('game-root--hud-suspended')
       gameRoot.hidden = false
       return rematch
     }
