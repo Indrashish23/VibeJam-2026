@@ -17,6 +17,7 @@ import {
   WebGLRenderer,
 } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { applyMonkeyFlatVertexPixelatedStyle } from './boxing/monkeyVisualStyle'
 import { gameConfig } from './gameConfig'
 import { createProceduralSky } from './skyDome'
 import { loadMap, type MapHandle } from './maps'
@@ -114,6 +115,7 @@ export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<LobbyBa
         m.receiveShadow = true
       }
     })
+    applyMonkeyFlatVertexPixelatedStyle(monkeyRoot)
   } catch (err) {
     console.warn('[lobbyBackdrop] Failed to load LobbyMonkeyModel.glb', err)
   }

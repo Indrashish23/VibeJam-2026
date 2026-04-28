@@ -667,14 +667,14 @@ export const defaultGameConfig = {
   hitMarkerSfxVolumeMul: 0.55,
 
   /** Menu-only: lobby 3D preview monkey position (world units). */
-  lobbyMonkeyPosX: 6,
-  lobbyMonkeyPosY: 0,
-  lobbyMonkeyPosZ: 4,
+  lobbyMonkeyPosX: 14.5,
+  lobbyMonkeyPosY: 4,
+  lobbyMonkeyPosZ: 8,
   /** Lobby monkey Euler degrees (applied YXZ). */
   lobbyMonkeyPitchDeg: 0,
-  lobbyMonkeyYawDeg: 32,
+  lobbyMonkeyYawDeg: -122,
   lobbyMonkeyRollDeg: 0,
-  lobbyMonkeyScale: 2.2,
+  lobbyMonkeyScale: 10.45,
 } as const
 
 export type GameConfigKey = keyof typeof defaultGameConfig
