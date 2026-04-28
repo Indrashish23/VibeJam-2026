@@ -18,11 +18,28 @@ import {
 } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { applyMonkeyFlatVertexPixelatedStyle } from './boxing/monkeyVisualStyle'
-import { gameConfig } from './gameConfig'
+import { defaultGameConfig, gameConfig, type GameConfigKey } from './gameConfig'
 import { createProceduralSky } from './skyDome'
 import { loadMap, type MapHandle } from './maps'
 
 const LOBBY_MONKEY_URL = new URL('../Assets/Props/LobbyMonkeyModel.glb', import.meta.url).href
+
+const LOBBY_MONKEY_KEYS: GameConfigKey[] = [
+  'lobbyMonkeyPosX',
+  'lobbyMonkeyPosY',
+  'lobbyMonkeyPosZ',
+  'lobbyMonkeyPitchDeg',
+  'lobbyMonkeyYawDeg',
+  'lobbyMonkeyRollDeg',
+  'lobbyMonkeyScale',
+]
+
+/** Ensures runtime `gameConfig` matches source defaults for the menu monkey (avoids stale Tweaks/HMR drift). */
+function applyLobbyMonkeyDefaultsFromSource(): void {
+  for (const key of LOBBY_MONKEY_KEYS) {
+    gameConfig[key] = defaultGameConfig[key]
+  }
+}
 
 function applySunShadowFrustum(sun: DirectionalLight): void {
   const ext = Math.max(gameConfig.groundWidth, gameConfig.groundDepth) * 0.5 + gameConfig.blastMargin + 10
@@ -49,6 +66,8 @@ export type LobbyBackdropHandle = {
 }
 
 export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<LobbyBackdropHandle> {
+  applyLobbyMonkeyDefaultsFromSource()
+
   const scene = new Scene()
   scene.background = new Color(
     gameConfig.skyboxColorR,
