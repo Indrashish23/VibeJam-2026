@@ -59,23 +59,77 @@ export const defaultGameConfig = {
   /** Uniform scale for `#hud-viewport` (launch % + charge wedge cluster); 1 = default. */
   uiHudMasterScale: 1,
   /** 1 = anchor launch-% cluster to screen right (opposite foe stocks on the left); 0 = anchor left. */
-  percentHudAnchorRight: 1,
+  percentHudAnchorRight: 0,
   /** Extra horizontal inset from the anchored edge (rem); + = farther from edge (toward center). */
   percentHudOffsetXRem: 0,
   /** Vertical offset from bottom for the launch-% cluster (rem); + = higher. */
-  percentHudOffsetYRem: 0,
+  percentHudOffsetYRem: 0.1,
   /** Subtle stacking / parallax offset (px); forwarded as translateZ on the cluster. */
-  percentHudOffsetZPx: 0,
+  percentHudOffsetZPx: 13,
   /** Scale only the launch-percent HUD block (inside master viewport scale). */
-  percentHudScale: 1.15,
+  percentHudScale: 0.75,
   /** Multiplier on the large damage % digits (inside block scale). */
-  percentHudTextScale: 1,
+  percentHudTextScale: 1.41,
   /** Nudge the damage % digits horizontally (rem). */
-  percentHudTextOffsetXRem: 0,
+  percentHudTextOffsetXRem: -0.1,
   /** Nudge the damage % digits vertically (rem). */
-  percentHudTextOffsetYRem: 0,
+  percentHudTextOffsetYRem: -0.45,
+  /** Multiplies the damage % clamp() font-size base (before percentHudTextScale). */
+  hudDamagePctFontClampMul: 1,
   /** Uniform scale on the portrait + your stock badge column. */
   percentHudPortraitScale: 1,
+  /** Smoke layer behind % / name (transform). */
+  hudSmokeOffsetXRem: 0,
+  hudSmokeOffsetYRem: 0,
+  hudSmokeOffsetZPx: 0,
+  hudSmokeScale: 1,
+  /** Column with smoke + damage % shell + player card (transform). */
+  hudLeftStackOffsetXRem: 0,
+  hudLeftStackOffsetYRem: 0,
+  hudLeftStackOffsetZPx: 0,
+  hudLeftStackScale: 1,
+  /** Wrapper around damage % span (transform; inner span keeps shake + text nudge). */
+  hudDamagePctShellOffsetXRem: 0,
+  hudDamagePctShellOffsetYRem: 0,
+  hudDamagePctShellOffsetZPx: 0,
+  hudDamagePctShellScale: 1,
+  /** Name card SVG container (transform). */
+  hudPlayerCardOffsetXRem: 0,
+  hudPlayerCardOffsetYRem: 0,
+  hudPlayerCardOffsetZPx: 0,
+  hudPlayerCardScale: 1,
+  /** Display name text (transform + font scale). */
+  hudDisplayNameOffsetXRem: 0,
+  hudDisplayNameOffsetYRem: 0,
+  hudDisplayNameOffsetZPx: 0,
+  hudDisplayNameScale: 1,
+  hudDisplayNameFontScale: 1,
+  /** Portrait column container (transform + portrait scale via percentHudPortraitScale). */
+  hudPortraitColumnOffsetXRem: 0,
+  hudPortraitColumnOffsetYRem: 0,
+  hudPortraitColumnOffsetZPx: 0,
+  /** Wrapper around portrait image (transform; inner keeps shake). */
+  hudPortraitWrapShellOffsetXRem: 0,
+  hudPortraitWrapShellOffsetYRem: 0,
+  hudPortraitWrapShellOffsetZPx: 0,
+  hudPortraitWrapShellScale: 1,
+  /** Your stock badge wrapper (transform + font scale on × / num). */
+  hudStockYouShellOffsetXRem: 0,
+  hudStockYouShellOffsetYRem: 0,
+  hudStockYouShellOffsetZPx: 0,
+  hudStockYouShellScale: 1,
+  hudStockYouFontScale: 1,
+  /** Foe stock anchor (screen-fixed corner). */
+  hudStockFoeAnchorLeftRem: 1,
+  hudStockFoeAnchorBottomRem: 2.2,
+  hudStockFoeAnchorOffsetZPx: 0,
+  hudStockFoeAnchorScale: 1,
+  /** Foe badge inner wrapper (transform). */
+  hudStockFoeShellOffsetXRem: 0,
+  hudStockFoeShellOffsetYRem: 0,
+  hudStockFoeShellOffsetZPx: 0,
+  hudStockFoeShellScale: 1,
+  hudStockFoeFontScale: 1,
   /** Tweaks panel window UI scale (slider rows stay usable when shrunk). */
   tweaksPanelUiScale: 0.81,
   /** When 1 and Tweaks (T) is open, drag launch % + charge wedge anywhere on screen (positions persist per browser tab). */

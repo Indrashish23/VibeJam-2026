@@ -36,7 +36,7 @@ import { RenderPixelatedPass } from 'three/addons/postprocessing/RenderPixelated
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js'
 import { gameConfig } from './gameConfig'
-import { applyPlayerRecordToHud, bumpPlayerRecord } from './playerRecord'
+import { bumpPlayerRecord } from './playerRecord'
 import { isMapId, loadMap, type MapHandle, type MapId, type SpawnSlot } from './maps'
 import { pickGroundedRespawnFoot } from './spawnRespawn'
 import { BotFighter, type BotMode } from './boxing/bot'
@@ -192,6 +192,14 @@ const hudStockYouNumEl = document.getElementById('hud-stock-you-num') as HTMLSpa
 const hudStockYouWrapEl = document.getElementById('hud-stock-you-wrap') as HTMLDivElement | null
 const hudStockFoeNumEl = document.getElementById('hud-stock-foe-num') as HTMLSpanElement | null
 const hudStockFoeWrapEl = document.getElementById('hud-stock-foe-wrap') as HTMLDivElement | null
+const hudLeftStackEl = document.getElementById('hud-left-stack') as HTMLDivElement | null
+const hudDamagePctShellEl = document.getElementById('hud-damage-pct-shell') as HTMLSpanElement | null
+const hudPlayerCardEl = document.getElementById('hud-player-card') as HTMLDivElement | null
+const hudPortraitColumnEl = document.getElementById('hud-portrait-column') as HTMLDivElement | null
+const hudPortraitWrapShellEl = document.getElementById('hud-portrait-wrap-shell') as HTMLDivElement | null
+const hudStockYouShellEl = document.getElementById('hud-stock-you-shell') as HTMLDivElement | null
+const hudStockFoeAnchorEl = document.getElementById('hud-stock-foe-anchor') as HTMLDivElement | null
+const hudStockFoeShellEl = document.getElementById('hud-stock-foe-shell') as HTMLDivElement | null
 const koAnnounceOverlayEl = document.getElementById('ko-announce-overlay') as HTMLDivElement | null
 const koAnnounceNameEl = document.getElementById('ko-announce-name') as HTMLParagraphElement | null
 const koAnnounceStockRowEl = document.getElementById('ko-announce-stock-row') as HTMLDivElement | null
@@ -224,7 +232,6 @@ if (chargeBarWrap) {
 }
 restoreHudElementPosition(percentHudEl, 'percentHud')
 restoreHudElementPosition(chargeBarWrap, 'chargeHud')
-applyPlayerRecordToHud()
 
 function setChargeBarDisplayPct(pct0to100: number): void {
   if (!chargeBarWrap) return
@@ -257,6 +264,17 @@ function syncChargeHudLayout(): void {
   }
 }
 
+function setHudTransform(
+  el: HTMLElement | null,
+  oxRem: number,
+  oyRem: number,
+  ozPx: number,
+  scale: number,
+): void {
+  if (!el) return
+  el.style.transform = `translate3d(${oxRem}rem, ${oyRem}rem, ${ozPx}px) scale(${scale})`
+}
+
 function syncUiHudChrome(): void {
   const g = gameConfig
   hudViewportEl?.style.setProperty('--ui-hud-master', String(g.uiHudMasterScale))
@@ -276,8 +294,86 @@ function syncUiHudChrome(): void {
     percentHudEl.style.setProperty('--hud-damage-pct-scale', String(g.percentHudTextScale))
     percentHudEl.style.setProperty('--hud-damage-pct-ox', `${g.percentHudTextOffsetXRem}rem`)
     percentHudEl.style.setProperty('--hud-damage-pct-oy', `${g.percentHudTextOffsetYRem}rem`)
-    percentHudEl.style.setProperty('--hud-portrait-scale', String(g.percentHudPortraitScale))
     percentHudEl.classList.toggle('percent-hud--anchor-left', !anchorRight)
+  }
+
+  hudDamagePctEl?.style.setProperty(
+    '--hud-damage-pct-font-clamp-mul',
+    String(g.hudDamagePctFontClampMul),
+  )
+  hudDisplayNameEl?.style.setProperty(
+    '--hud-display-name-font-scale',
+    String(g.hudDisplayNameFontScale),
+  )
+  setHudTransform(
+    hudDisplayNameEl,
+    g.hudDisplayNameOffsetXRem,
+    g.hudDisplayNameOffsetYRem,
+    g.hudDisplayNameOffsetZPx,
+    g.hudDisplayNameScale,
+  )
+
+  setHudTransform(
+    hudLeftStackEl,
+    g.hudLeftStackOffsetXRem,
+    g.hudLeftStackOffsetYRem,
+    g.hudLeftStackOffsetZPx,
+    g.hudLeftStackScale,
+  )
+  setHudTransform(
+    hudSmokeCanvasEl,
+    g.hudSmokeOffsetXRem,
+    g.hudSmokeOffsetYRem,
+    g.hudSmokeOffsetZPx,
+    g.hudSmokeScale,
+  )
+  setHudTransform(
+    hudDamagePctShellEl,
+    g.hudDamagePctShellOffsetXRem,
+    g.hudDamagePctShellOffsetYRem,
+    g.hudDamagePctShellOffsetZPx,
+    g.hudDamagePctShellScale,
+  )
+  setHudTransform(
+    hudPlayerCardEl,
+    g.hudPlayerCardOffsetXRem,
+    g.hudPlayerCardOffsetYRem,
+    g.hudPlayerCardOffsetZPx,
+    g.hudPlayerCardScale,
+  )
+
+  if (hudPortraitColumnEl) {
+    hudPortraitColumnEl.style.transform = `translate3d(${g.hudPortraitColumnOffsetXRem}rem, ${g.hudPortraitColumnOffsetYRem}rem, ${g.hudPortraitColumnOffsetZPx}px) scale(${g.percentHudPortraitScale})`
+  }
+  setHudTransform(
+    hudPortraitWrapShellEl,
+    g.hudPortraitWrapShellOffsetXRem,
+    g.hudPortraitWrapShellOffsetYRem,
+    g.hudPortraitWrapShellOffsetZPx,
+    g.hudPortraitWrapShellScale,
+  )
+  setHudTransform(
+    hudStockYouShellEl,
+    g.hudStockYouShellOffsetXRem,
+    g.hudStockYouShellOffsetYRem,
+    g.hudStockYouShellOffsetZPx,
+    g.hudStockYouShellScale,
+  )
+  hudStockYouShellEl?.style.setProperty('--hud-stock-you-font-scale', String(g.hudStockYouFontScale))
+
+  hudStockFoeShellEl?.style.setProperty('--hud-stock-foe-font-scale', String(g.hudStockFoeFontScale))
+  setHudTransform(
+    hudStockFoeShellEl,
+    g.hudStockFoeShellOffsetXRem,
+    g.hudStockFoeShellOffsetYRem,
+    g.hudStockFoeShellOffsetZPx,
+    g.hudStockFoeShellScale,
+  )
+
+  if (hudStockFoeAnchorEl) {
+    hudStockFoeAnchorEl.style.left = `${g.hudStockFoeAnchorLeftRem}rem`
+    hudStockFoeAnchorEl.style.bottom = `${g.hudStockFoeAnchorBottomRem}rem`
+    hudStockFoeAnchorEl.style.transform = `translate3d(0,0,${g.hudStockFoeAnchorOffsetZPx}px) scale(${g.hudStockFoeAnchorScale})`
   }
 }
 
@@ -4255,7 +4351,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     winFinisher = null
     matchOutcome = outcome
     bumpPlayerRecord(outcome)
-    applyPlayerRecordToHud()
     matchEndCardEl?.classList.remove('match-end-card--forfeit')
     triggerHitImpactFx()
     voice.resumeAudio()

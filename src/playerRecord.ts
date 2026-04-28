@@ -59,14 +59,3 @@ export function monkeyRankTitle(wins: number, _losses: number): string {
   if (w >= 1) return 'Curious Capuchin'
   return 'Fledgling Gibbon'
 }
-
-export function applyPlayerRecordToHud(): void {
-  const { wins, losses } = readPlayerRecord()
-  const rank = monkeyRankTitle(wins, losses)
-  const winsEl = document.getElementById('record-wins')
-  const lossesEl = document.getElementById('record-losses')
-  const rankEl = document.getElementById('record-rank')
-  if (winsEl) winsEl.textContent = String(wins)
-  if (lossesEl) lossesEl.textContent = String(losses)
-  if (rankEl) rankEl.textContent = rank
-}

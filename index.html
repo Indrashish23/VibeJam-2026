@@ -304,29 +304,21 @@
       </div>
       <div id="hud-viewport" class="hud-viewport">
         <div id="hud-stock-foe-anchor" class="hud-stock-foe-anchor">
-          <div id="hud-stock-foe-wrap" class="hud-stock-badge hud-stock-badge--foe">
-            <span class="hud-stock-x" aria-hidden="true">×</span>
-            <span id="hud-stock-foe-num" class="hud-stock-num">0</span>
+          <div id="hud-stock-foe-shell" class="hud-stock-foe-shell">
+            <div id="hud-stock-foe-wrap" class="hud-stock-badge hud-stock-badge--foe">
+              <span class="hud-stock-x" aria-hidden="true">×</span>
+              <span id="hud-stock-foe-num" class="hud-stock-num">0</span>
+            </div>
           </div>
         </div>
         <div id="percent-hud" class="percent-hud" aria-label="Launch percent">
-          <div id="player-record-hud" class="player-record-hud" aria-label="Career record">
-            <div class="player-record-hud__row">
-              <span class="player-record-hud__wl"
-                ><span id="record-wins" class="player-record-hud__n">0</span><span class="player-record-hud__s">W</span></span
-              >
-              <span class="player-record-hud__sep" aria-hidden="true">·</span>
-              <span class="player-record-hud__wl"
-                ><span id="record-losses" class="player-record-hud__n">0</span><span class="player-record-hud__s">L</span></span
-              >
-            </div>
-            <div id="record-rank" class="player-record-hud__rank">Fledgling Gibbon</div>
-          </div>
           <div class="percent-hud__main-row">
-            <div class="percent-hud__left-stack">
+            <div id="hud-left-stack" class="percent-hud__left-stack">
               <canvas id="hud-smoke-canvas" class="hud-smoke-canvas" aria-hidden="true"></canvas>
-              <span id="hud-damage-pct" class="hud-damage-pct">0%</span>
-              <div class="hud-player-card">
+              <span id="hud-damage-pct-shell" class="hud-damage-pct-shell">
+                <span id="hud-damage-pct" class="hud-damage-pct">0%</span>
+              </span>
+              <div id="hud-player-card" class="hud-player-card">
                 <svg
                   class="hud-player-card__svg"
                   width="656"
@@ -342,20 +334,24 @@
                 <span id="hud-display-name" class="hud-display-name">Player</span>
               </div>
             </div>
-            <div class="hud-portrait-column">
-              <div id="hud-stock-you-wrap" class="hud-stock-badge hud-stock-badge--you">
-                <span class="hud-stock-x" aria-hidden="true">×</span>
-                <span id="hud-stock-you-num" class="hud-stock-num">0</span>
+            <div id="hud-portrait-column" class="hud-portrait-column">
+              <div id="hud-stock-you-shell" class="hud-stock-you-shell">
+                <div id="hud-stock-you-wrap" class="hud-stock-badge hud-stock-badge--you">
+                  <span class="hud-stock-x" aria-hidden="true">×</span>
+                  <span id="hud-stock-you-num" class="hud-stock-num">0</span>
+                </div>
               </div>
-              <div id="hud-portrait-wrap" class="hud-portrait-wrap">
-                <img
-                  id="hud-portrait-img"
-                  class="hud-portrait-img"
-                  src=""
-                  width="220"
-                  height="220"
-                  alt=""
-                />
+              <div id="hud-portrait-wrap-shell" class="hud-portrait-wrap-shell">
+                <div id="hud-portrait-wrap" class="hud-portrait-wrap">
+                  <img
+                    id="hud-portrait-img"
+                    class="hud-portrait-img"
+                    src=""
+                    width="220"
+                    height="220"
+                    alt=""
+                  />
+                </div>
               </div>
             </div>
           </div>

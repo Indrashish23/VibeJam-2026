@@ -931,13 +931,18 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   top: 0;
   right: 0;
   height: 100%;
-  width: min(52vw, 520px);
+  /* Wide enough that three bars + gaps read as a “sheet”; translate uses vw so wide monitors still fully wipe. */
+  width: min(72vw, 720px);
   display: flex;
   align-items: stretch;
   justify-content: flex-end;
   gap: clamp(10px, 2.8vw, 36px);
   padding-right: clamp(12px, 4vw, 52px);
+  box-sizing: border-box;
+  /* Opaque band behind the white lines — without this, flex gaps stay transparent and the game shows through. */
+  background: #1a1a1b;
   transform: translateX(105%);
+  transform-origin: right center;
 }
 
 .lobby-wipe-bar {
@@ -953,12 +958,16 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   animation: lobby-wipe-rtl 0.68s cubic-bezier(0.42, 0, 0.17, 1) forwards;
 }
 
+/*
+ * End position must account for viewport width: % alone is only relative to the stripes element.
+ * On 1920px+ displays min(52vw,520px) capped at 520px, so -240% never pulled the panel past the left edge.
+ */
 @keyframes lobby-wipe-rtl {
   from {
     transform: translateX(105%);
   }
   to {
-    transform: translateX(-240%);
+    transform: translateX(calc(-100vw + 100% - 2px));
   }
 }
 
@@ -1240,65 +1249,8 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   align-items: flex-start;
 }
 
-.percent-hud--anchor-left .player-record-hud {
-  align-items: flex-start;
-  text-align: left;
-}
-
 .percent-hud--anchor-left .hud-portrait-column {
   align-self: flex-start;
-}
-
-.player-record-hud {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.2rem;
-  margin-bottom: 0.15rem;
-  padding: 0.35rem 0.5rem 0.3rem;
-  border-radius: 8px;
-  background: rgba(15, 23, 42, 0.45);
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
-}
-
-.player-record-hud__row {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.35rem;
-  font-size: 13pt;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.06em;
-  color: #cbd5e1;
-}
-
-.player-record-hud__n {
-  color: #f1f5f9;
-}
-
-.player-record-hud__s {
-  font-size: 0.78em;
-  font-weight: 800;
-  opacity: 0.75;
-}
-
-.player-record-hud__sep {
-  opacity: 0.45;
-  user-select: none;
-}
-
-.player-record-hud__rank {
-  font-size: 10.5pt;
-  line-height: 1.25;
-  text-align: right;
-  font-weight: 700;
-  font-style: italic;
-  letter-spacing: 0.03em;
-  color: #fde68a;
-  text-shadow: 0 0 10px rgba(251, 191, 36, 0.25);
-  max-width: 17rem;
 }
 
 .game-root.game-root--hud-drag .percent-hud,
@@ -1333,13 +1285,36 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   transform-origin: bottom left;
 }
 
+.hud-stock-foe-shell {
+  transform-origin: bottom left;
+}
+
+.hud-stock-x {
+  font-family: system-ui, sans-serif;
+  font-size: clamp(1.05rem, 2.8vw, 1.45rem);
+  font-weight: 800;
+  color: #f8fafc;
+  line-height: 1;
+  user-select: none;
+}
+
+.hud-stock-num {
+  font-family: 'Tourney', system-ui, sans-serif;
+  font-size: clamp(1.25rem, 3.2vw, 1.75rem);
+  font-weight: 700;
+  font-style: italic;
+  font-variant-numeric: tabular-nums;
+  color: #f8fafc;
+  line-height: 1;
+  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.75);
+}
+
 .hud-portrait-column {
   display: flex;
   flex-direction: column;
   align-items: center;
   align-self: flex-end;
   gap: 0.12rem;
-  transform: scale(var(--hud-portrait-scale, 1));
   transform-origin: bottom center;
 }
 
@@ -1371,18 +1346,46 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
     0 0 14px rgba(244, 63, 94, 0.22);
 }
 
-.hud-stock-x {
+.hud-stock-you-shell .hud-stock-x {
   font-family: system-ui, sans-serif;
-  font-size: clamp(1.05rem, 2.8vw, 1.45rem);
+  font-size: calc(
+    clamp(1.05rem, 2.8vw, 1.45rem) * var(--hud-stock-you-font-scale, 1)
+  );
   font-weight: 800;
   color: #f8fafc;
   line-height: 1;
   user-select: none;
 }
 
-.hud-stock-num {
+.hud-stock-you-shell .hud-stock-num {
   font-family: 'Tourney', system-ui, sans-serif;
-  font-size: clamp(1.25rem, 3.2vw, 1.75rem);
+  font-size: calc(
+    clamp(1.25rem, 3.2vw, 1.75rem) * var(--hud-stock-you-font-scale, 1)
+  );
+  font-weight: 700;
+  font-style: italic;
+  font-variant-numeric: tabular-nums;
+  color: #f8fafc;
+  line-height: 1;
+  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.75);
+}
+
+.hud-stock-foe-shell .hud-stock-x {
+  font-family: system-ui, sans-serif;
+  font-size: calc(
+    clamp(1.05rem, 2.8vw, 1.45rem) * var(--hud-stock-foe-font-scale, 1)
+  );
+  font-weight: 800;
+  color: #f8fafc;
+  line-height: 1;
+  user-select: none;
+}
+
+.hud-stock-foe-shell .hud-stock-num {
+  font-family: 'Tourney', system-ui, sans-serif;
+  font-size: calc(
+    clamp(1.25rem, 3.2vw, 1.75rem) * var(--hud-stock-foe-font-scale, 1)
+  );
   font-weight: 700;
   font-style: italic;
   font-variant-numeric: tabular-nums;
@@ -1460,6 +1463,14 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   z-index: 0;
   pointer-events: none;
   mask-image: linear-gradient(to top, black 0%, black 55%, transparent 100%);
+  transform-origin: center center;
+}
+
+.hud-damage-pct-shell {
+  display: block;
+  align-self: flex-end;
+  z-index: 1;
+  transform-origin: 100% 80%;
 }
 
 .hud-damage-pct {
@@ -1474,7 +1485,9 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   align-self: flex-end;
   margin-right: -0.04em;
   font-family: 'Tourney', Impact, sans-serif;
-  font-size: calc(clamp(96px, 17vw, 170px) * var(--hud-damage-pct-scale));
+  font-size: calc(
+    clamp(96px, 17vw, 170px) * var(--hud-damage-pct-scale) * var(--hud-damage-pct-font-clamp-mul, 1)
+  );
   font-style: italic;
   font-weight: 700;
   line-height: 0.88;
@@ -1501,12 +1514,13 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
 }
 
 .hud-display-name {
+  --hud-display-name-font-scale: 1;
   position: absolute;
   left: 12%;
   right: 8%;
   bottom: 14%;
   font-family: 'Krona One', sans-serif;
-  font-size: clamp(0.62rem, 1.65vw, 0.82rem);
+  font-size: calc(clamp(0.62rem, 1.65vw, 0.82rem) * var(--hud-display-name-font-scale));
   font-weight: 400;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1517,6 +1531,10 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   white-space: nowrap;
 }
 
+.hud-portrait-wrap-shell {
+  transform-origin: 65% 85%;
+}
+
 .hud-portrait-wrap {
   --hud-hit-shake: 12px;
   flex: 0 0 auto;
@@ -1524,6 +1542,10 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   margin-bottom: -0.35rem;
   margin-left: -0.35rem;
   transform-origin: 65% 85%;
+}
+
+.hud-stock-you-shell {
+  align-self: center;
 }
 
 .hud-portrait-img {
