@@ -1062,6 +1062,54 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   }
 }
 
+.countdown-num--go {
+  font-family: 'Tourney', Impact, sans-serif !important;
+  font-style: italic;
+  font-weight: 700;
+  font-size: clamp(4rem, 22vw, 14rem) !important;
+  letter-spacing: 0.02em;
+  color: #86efac;
+  text-shadow:
+    0 0 42px rgba(74, 222, 128, 0.95),
+    5px 7px 0 rgba(15, 23, 42, 0.94);
+}
+
+.countdown-overlay--go-phase {
+  background: radial-gradient(
+    ellipse 72% 58% at 50% 42%,
+    rgba(34, 197, 94, 0.22) 0%,
+    rgba(15, 23, 42, 0.88) 62%,
+    rgba(15, 23, 42, 0.96) 100%
+  );
+}
+
+.countdown-overlay--go-phase.countdown-overlay--pulse .countdown-num--go {
+  animation: countdown-go-flash 0.62s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes countdown-go-flash {
+  0% {
+    transform: scale(0.2) rotate(-6deg);
+    opacity: 0;
+    filter: brightness(2.2);
+  }
+  38% {
+    opacity: 1;
+    transform: scale(1.08) rotate(2deg);
+    filter: brightness(1.25);
+  }
+  72% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+    filter: brightness(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.25);
+    filter: brightness(1.4);
+  }
+}
+
 .dash-scanlines {
   position: absolute;
   inset: 0;
@@ -1229,6 +1277,7 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
 }
 
 .game-root.game-root--hud-drag .percent-hud,
+.game-root.game-root--hud-drag .hud-stock-foe-anchor,
 .game-root.game-root--hud-drag #charge-bar-wrap {
   pointer-events: auto !important;
   cursor: grab;
@@ -1237,6 +1286,7 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
 }
 
 .game-root.game-root--hud-drag .percent-hud:active,
+.game-root.game-root--hud-drag .hud-stock-foe-anchor:active,
 .game-root.game-root--hud-drag #charge-bar-wrap:active {
   cursor: grabbing;
 }
@@ -1246,7 +1296,121 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   flex-direction: row;
   align-items: flex-end;
   justify-content: flex-end;
-  gap: 0.1rem;
+  gap: 0.35rem;
+}
+
+.hud-stock-foe-anchor {
+  position: absolute;
+  left: 1rem;
+  bottom: 2.2rem;
+  z-index: 51;
+  pointer-events: none;
+  transform: scale(var(--percent-hud-scale, 1));
+  transform-origin: bottom left;
+}
+
+.hud-portrait-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  align-self: flex-end;
+  gap: 0.12rem;
+}
+
+.hud-stock-badge {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.06em;
+  padding: 0.18rem 0.55rem 0.22rem;
+  min-width: 2.75rem;
+  border-radius: 4px;
+  border: 2px solid rgba(248, 250, 252, 0.92);
+  background: rgba(0, 0, 0, 0.88);
+  box-shadow:
+    3px 4px 0 rgba(0, 0, 0, 0.65),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.hud-stock-badge--you {
+  align-self: center;
+  margin-bottom: -0.15rem;
+}
+
+.hud-stock-badge--foe {
+  border-color: rgba(251, 113, 133, 0.88);
+  box-shadow:
+    3px 4px 0 rgba(0, 0, 0, 0.65),
+    0 0 14px rgba(244, 63, 94, 0.22);
+}
+
+.hud-stock-x {
+  font-family: system-ui, sans-serif;
+  font-size: clamp(1.05rem, 2.8vw, 1.45rem);
+  font-weight: 800;
+  color: #f8fafc;
+  line-height: 1;
+  user-select: none;
+}
+
+.hud-stock-num {
+  font-family: 'Tourney', system-ui, sans-serif;
+  font-size: clamp(1.25rem, 3.2vw, 1.75rem);
+  font-weight: 700;
+  font-style: italic;
+  font-variant-numeric: tabular-nums;
+  color: #f8fafc;
+  line-height: 1;
+  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.75);
+}
+
+.hud-stock-num--large {
+  font-size: clamp(2rem, 6vw, 3.2rem);
+}
+
+.hud-stock-num--tick {
+  animation: hud-stock-padlock-tick 0.14s ease-out;
+}
+
+@keyframes hud-stock-padlock-tick {
+  0% {
+    transform: translateY(-18%);
+    filter: brightness(1.35);
+  }
+  55% {
+    transform: translateY(8%);
+    filter: brightness(0.82);
+  }
+  100% {
+    transform: translateY(0);
+    filter: brightness(1);
+  }
+}
+
+.hud-stock-badge--flash {
+  animation: hud-stock-badge-flash 0.55s ease-out;
+}
+
+@keyframes hud-stock-badge-flash {
+  0% {
+    transform: scale(1);
+    box-shadow:
+      3px 4px 0 rgba(0, 0, 0, 0.65),
+      0 0 0 rgba(251, 191, 36, 0);
+  }
+  22% {
+    transform: scale(1.08);
+    box-shadow:
+      3px 4px 0 rgba(0, 0, 0, 0.65),
+      0 0 22px rgba(251, 191, 36, 0.65);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow:
+      3px 4px 0 rgba(0, 0, 0, 0.65),
+      0 0 0 rgba(251, 191, 36, 0);
+  }
 }
 
 .percent-hud__left-stack {
@@ -1326,7 +1490,6 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   --hud-hit-shake: 12px;
   flex: 0 0 auto;
   width: clamp(7.5rem, 21vw, 13rem);
-  align-self: flex-end;
   margin-bottom: -0.35rem;
   margin-left: -0.35rem;
   transform-origin: 65% 85%;
@@ -1440,21 +1603,37 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.65rem;
   padding: 1rem 1.4rem;
 }
 
-.ko-announce-line {
+.ko-announce-name {
   margin: 0;
   padding: 0 1rem;
   text-align: center;
-  font-size: clamp(1.65rem, 5vw, 3rem);
-  font-weight: 900;
-  letter-spacing: 0.06em;
+  font-family: 'Krona One', sans-serif;
+  font-size: clamp(1.25rem, 4vw, 2.25rem);
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: #f8fafc;
   text-shadow:
     0 4px 36px rgba(0, 0, 0, 0.85),
-    0 0 28px rgba(56, 189, 248, 0.28);
+    0 2px 0 rgba(0, 0, 0, 0.55);
+}
+
+.ko-announce-stock-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.ko-announce-stock-row[hidden] {
+  display: none !important;
+}
+
+.ko-announce-stock-box {
+  transform-origin: center center;
 }
 
 .game-root.game-root--respawn-invuln::before {

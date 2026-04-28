@@ -188,9 +188,14 @@ const dashScanEl = document.getElementById('dash-scanlines') as HTMLDivElement |
 const jumpVfxEl = document.getElementById('jump-vfx') as HTMLDivElement | null
 const hudViewportEl = document.getElementById('hud-viewport') as HTMLDivElement | null
 const percentHudEl = document.getElementById('percent-hud') as HTMLDivElement | null
-const stockStripYouEl = document.getElementById('stock-strip-you') as HTMLDivElement | null
+const hudStockYouNumEl = document.getElementById('hud-stock-you-num') as HTMLSpanElement | null
+const hudStockYouWrapEl = document.getElementById('hud-stock-you-wrap') as HTMLDivElement | null
+const hudStockFoeNumEl = document.getElementById('hud-stock-foe-num') as HTMLSpanElement | null
+const hudStockFoeWrapEl = document.getElementById('hud-stock-foe-wrap') as HTMLDivElement | null
 const koAnnounceOverlayEl = document.getElementById('ko-announce-overlay') as HTMLDivElement | null
-const koAnnounceLineEl = document.getElementById('ko-announce-line') as HTMLParagraphElement | null
+const koAnnounceNameEl = document.getElementById('ko-announce-name') as HTMLParagraphElement | null
+const koAnnounceStockRowEl = document.getElementById('ko-announce-stock-row') as HTMLDivElement | null
+const koAnnounceStockNumEl = document.getElementById('ko-announce-stock-num') as HTMLSpanElement | null
 const chargeBarWrap = document.getElementById('charge-bar-wrap') as HTMLDivElement | null
 const chargeBarFill = document.getElementById('charge-bar-fill') as HTMLDivElement | null
 const chargeBarMinMark = document.getElementById('charge-bar-min') as HTMLDivElement | null
@@ -2128,6 +2133,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     hideKoAnnouncementImmediate()
     hideMatchEndOverlayFully()
     if (matchEndOverlay) matchEndOverlay.hidden = true
+    countdownNumEl.classList.remove('countdown-num--go')
+    countdownOverlay.classList.remove('countdown-overlay--go-phase')
     countdownOverlay.classList.add('countdown-overlay--opaque')
     if (countdownTitleEl) {
       countdownTitleEl.hidden = false
@@ -2145,9 +2152,21 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       await sleepMs(840)
     }
     if (countdownTitleEl) countdownTitleEl.hidden = true
-    countdownOverlay.hidden = true
+    countdownNumEl.textContent = 'GO'
+    countdownNumEl.classList.add('countdown-num--go')
+    countdownOverlay.classList.add('countdown-overlay--go-phase')
     countdownOverlay.classList.remove('countdown-overlay--pulse')
-    countdownOverlay.classList.remove('countdown-overlay--opaque')
+    void countdownOverlay.offsetWidth
+    countdownOverlay.classList.add('countdown-overlay--pulse')
+    await sleepMs(620)
+
+    countdownOverlay.hidden = true
+    countdownOverlay.classList.remove(
+      'countdown-overlay--pulse',
+      'countdown-overlay--opaque',
+      'countdown-overlay--go-phase',
+    )
+    countdownNumEl.classList.remove('countdown-num--go')
   }
 
   async function runMatchBeginCountdown(): Promise<void> {
@@ -2465,8 +2484,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           isYouVictim ? displayPlayerName() : opponentHudName(),
           before,
           after,
+          isYouVictim ? 'you' : 'foe',
         )
-        animateKoStockLoss(isYouVictim ? 'you' : 'foe')
         scheduleKoAnnouncementDismiss(gameConfig.koAnnounceHoldMs)
         if (lobby.role === 'host') {
           scheduleAuthRespawnHost(vr)
@@ -3438,15 +3457,16 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
 
     let nextPortrait = PORTRAIT_IDLE_URL
-    if (playerPercent >= 70) nextPortrait = PORTRAIT_HURT_URL
-    else if (stunnedFxActive) nextPortrait = PORTRAIT_STUNNED_URL
-    else {
+    if (stunnedFxActive) {
+      nextPortrait = PORTRAIT_STUNNED_URL
+    } else {
       const charging = chargingLmb || chargingRmb
       const micOn = chargeHudMicAmpSmoothed > 0.035
       const chargeRising = voiceChargeSmoothed > hudPrevVoiceCharge + 0.004
       const scream =
         charging && (micOn || chargeRising || voiceChargeSmoothed > 0.03)
       if (scream) nextPortrait = PORTRAIT_SCREAM_URL
+      else if (playerPercent >= 70) nextPortrait = PORTRAIT_HURT_URL
     }
     if (hudPortraitImgEl && nextPortrait !== hudPortraitResolvedUrl) {
       hudPortraitResolvedUrl = nextPortrait
@@ -3491,37 +3511,24 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       stocksYou = stocksGuest
       stocksFoe = stocksHost
     }
-    syncStocksHud()
+    /* Caller syncs HUD badges — may defer so KO padlock animation can show `before` → `after`. */
   }
 
-  function fillStockStrip(
-    el: HTMLDivElement | null,
-    filled: number,
-    cap: number,
-    playLastLost: boolean,
-  ): void {
-    if (!el) return
-    el.replaceChildren()
-    for (let i = 0; i < cap; i++) {
-      const pip = document.createElement('span')
-      pip.className = 'stock-pip'
-      const on = i < filled
-      if (on) pip.classList.add('stock-pip--on')
-      else if (playLastLost && i === filled) pip.classList.add('stock-pip--lost-pop')
-      el.appendChild(pip)
-    }
+  function syncStockBadgeNums(): void {
+    if (hudStockYouNumEl) hudStockYouNumEl.textContent = String(Math.max(0, stocksYou))
+    if (hudStockFoeNumEl) hudStockFoeNumEl.textContent = String(Math.max(0, stocksFoe))
   }
 
   function syncStocksHud(): void {
-    const cap = Math.max(1, Math.round(gameConfig.startStocks))
-    fillStockStrip(stockStripYouEl, stocksYou, cap, false)
-    fillStockStrip(null, stocksFoe, cap, false)
+    syncStockBadgeNums()
   }
 
-  function animateKoStockLoss(who: 'you' | 'foe'): void {
-    const cap = Math.max(1, Math.round(gameConfig.startStocks))
-    if (who === 'you') fillStockStrip(stockStripYouEl, stocksYou, cap, true)
-    else fillStockStrip(null, stocksFoe, cap, true)
+  function flashVictimStockBadge(who: 'you' | 'foe'): void {
+    const el = who === 'you' ? hudStockYouWrapEl : hudStockFoeWrapEl
+    if (!el) return
+    el.classList.remove('hud-stock-badge--flash')
+    void el.offsetWidth
+    el.classList.add('hud-stock-badge--flash')
   }
 
   function spawnSlotForRole(roleNet: 'host' | 'guest'): SpawnSlot {
@@ -3532,8 +3539,15 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   let koAnnounceHoldTimer: ReturnType<typeof window.setTimeout> | null = null
   let koAnnounceFadeTimer: ReturnType<typeof window.setTimeout> | null = null
+  let koPadlockTimer: ReturnType<typeof window.setTimeout> | null = null
+  let koPadlockAborted = false
 
   function clearKoAnnouncementTimers(): void {
+    koPadlockAborted = true
+    if (koPadlockTimer !== null) {
+      window.clearTimeout(koPadlockTimer)
+      koPadlockTimer = null
+    }
     if (koAnnounceHoldTimer !== null) {
       window.clearTimeout(koAnnounceHoldTimer)
       koAnnounceHoldTimer = null
@@ -3552,15 +3566,81 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     koAnnounceOverlayEl.hidden = true
   }
 
-  function showKoAnnouncement(displayName: string, stocksBefore: number, stocksAfter: number): void {
-    if (!koAnnounceOverlayEl || !koAnnounceLineEl) return
+  function showKoAnnouncement(
+    displayName: string,
+    stocksBefore: number,
+    stocksAfter: number,
+    victim?: 'you' | 'foe',
+  ): void {
+    if (!koAnnounceOverlayEl || !koAnnounceNameEl) return
     clearKoAnnouncementTimers()
-    const nm = displayName.trim()
-    if (stocksBefore > stocksAfter) {
-      koAnnounceLineEl.textContent = `${nm.toUpperCase()}  ×${stocksBefore} → ×${stocksAfter}`
+    koPadlockAborted = false
+
+    const nm = displayName.trim().toUpperCase()
+    koAnnounceNameEl.textContent = nm
+
+    const loss =
+      victim &&
+      koAnnounceStockRowEl &&
+      koAnnounceStockNumEl &&
+      stocksBefore > stocksAfter
+
+    if (loss) {
+      koAnnounceStockRowEl.hidden = false
+
+      const syncVictimBadge = (n: number): void => {
+        if (victim === 'you' && hudStockYouNumEl) hudStockYouNumEl.textContent = String(n)
+        else if (victim === 'foe' && hudStockFoeNumEl) hudStockFoeNumEl.textContent = String(n)
+      }
+
+      let n = stocksBefore
+      koAnnounceStockNumEl.textContent = String(n)
+      syncVictimBadge(n)
+
+      const tickMs = 92
+      const pulseTick = (): void => {
+        if (!koAnnounceStockNumEl) return
+        koAnnounceStockNumEl.classList.remove('hud-stock-num--tick')
+        void koAnnounceStockNumEl.offsetWidth
+        koAnnounceStockNumEl.classList.add('hud-stock-num--tick')
+        const badgeNum = victim === 'you' ? hudStockYouNumEl : hudStockFoeNumEl
+        badgeNum?.classList.remove('hud-stock-num--tick')
+        void badgeNum?.offsetWidth
+        badgeNum?.classList.add('hud-stock-num--tick')
+      }
+
+      const finishPadlock = (): void => {
+        syncStocksHud()
+        flashVictimStockBadge(victim!)
+      }
+
+      const step = (): void => {
+        if (koPadlockAborted || !koAnnounceStockNumEl) return
+        if (n <= stocksAfter) {
+          finishPadlock()
+          return
+        }
+        n -= 1
+        koAnnounceStockNumEl.textContent = String(n)
+        syncVictimBadge(n)
+        pulseTick()
+        if (n === stocksAfter) {
+          finishPadlock()
+          return
+        }
+        koPadlockTimer = window.setTimeout(step, tickMs)
+      }
+
+      if (n === stocksAfter) {
+        finishPadlock()
+      } else {
+        koPadlockTimer = window.setTimeout(step, tickMs)
+      }
     } else {
-      koAnnounceLineEl.textContent = nm.toUpperCase()
+      if (koAnnounceStockRowEl) koAnnounceStockRowEl.hidden = true
+      syncStocksHud()
     }
+
     koAnnounceOverlayEl.hidden = false
     koAnnounceOverlayEl.classList.remove('ko-announce-overlay--visible')
     void koAnnounceOverlayEl.offsetWidth
@@ -3572,7 +3652,15 @@ async function initGame(lobby: LobbyResult): Promise<void> {
    * Optional callback runs when the fade begins (offline respawn applies here).
    */
   function scheduleKoAnnouncementDismiss(delayMs: number, onFadeBegin?: () => void): void {
-    clearKoAnnouncementTimers()
+    /* Do not clear padlock timers here — padlock runs in parallel after `showKoAnnouncement`. */
+    if (koAnnounceHoldTimer !== null) {
+      window.clearTimeout(koAnnounceHoldTimer)
+      koAnnounceHoldTimer = null
+    }
+    if (koAnnounceFadeTimer !== null) {
+      window.clearTimeout(koAnnounceFadeTimer)
+      koAnnounceFadeTimer = null
+    }
     koAnnounceHoldTimer = window.setTimeout(() => {
       koAnnounceHoldTimer = null
       if (!koAnnounceOverlayEl) return
@@ -3703,9 +3791,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       startStocks: gameConfig.startStocks,
     })
 
-    syncStocksHud()
-
     if (after <= 0) {
+      syncStocksHud()
       console.info('[stockKO] last stock — match end', { victim })
       winFinisher = null
       hideWinGameSplash()
@@ -3718,8 +3805,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       victim === 'you' ? displayPlayerName() : opponentHudName(),
       before,
       after,
+      victim,
     )
-    animateKoStockLoss(victim)
 
     scheduleKoAnnouncementDismiss(gameConfig.koAnnounceHoldMs, () => {
       applyOfflineRespawnFeet(victim)
@@ -4077,14 +4164,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     winFinisher = null
     const before = stocksFoe
     stocksFoe = Math.max(0, stocksFoe - 1)
-    syncStocksHud()
     if (stocksFoe <= 0) {
+      syncStocksHud()
       void concludeRoundElimination(true)
       return
     }
     offlineBlastKoPending = 'foe'
-    showKoAnnouncement(opponentHudName(), before, stocksFoe)
-    animateKoStockLoss('foe')
+    showKoAnnouncement(opponentHudName(), before, stocksFoe, 'foe')
     scheduleKoAnnouncementDismiss(gameConfig.koAnnounceHoldMs, () => {
       applyOfflineRespawnFeet('foe')
       offlineBlastKoPending = null

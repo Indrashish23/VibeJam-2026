@@ -89,28 +89,28 @@ export const defaultGameConfig = {
   /** Launch % at which danger vignette and red tint begin on your screen; foot smoke uses same threshold but only renders on the opponent model (enemy sees yours; you see theirs). */
   dangerFxStartPercent: 50,
   /** Skybox base color channels (0–1) for the procedural sky dome. */
-  skyboxColorR: 0.14,
+  skyboxColorR: 0.66,
   skyboxColorG: 0.58,
   skyboxColorB: 0.43,
   /** Clouds: threshold where noise starts showing clouds (higher = fewer clouds). */
   skyCloudCoverage: 0.52,
   /** Clouds: softness of cloud edges in the procedural mask. */
-  skyCloudSoftness: 0.04,
+  skyCloudSoftness: 0.07,
   /** Clouds: noise frequency scale (higher = smaller/more clouds). */
-  skyCloudScale: 2.9,
+  skyCloudScale: 2.35,
   /** Clouds: advection speed across the dome. */
   skyCloudSpeed: 0.022,
   /** Clouds: blend strength over the base sky color. */
   skyCloudOpacity: 0.22,
 
   /** Fill light; keep low so the directional sun reads harsh against the skybox. */
-  ambientIntensity: 5,
+  ambientIntensity: 1,
   /** Key directional sun strength (shadow caster). */
-  sunIntensity: 13.7,
+  sunIntensity: 2,
   /** Directional sun position (world units); shared by match + lobby preview. */
-  sunPosX: 58,
+  sunPosX: 62,
   sunPosY: 34,
-  sunPosZ: 42,
+  sunPosZ: 36,
   /** 1 = force unlit materials (ignores scene lighting) for flat readability/debugging. */
   lightingUnlitMode: 0,
   /** 1 = force unlit materials on the local player avatar only. */
@@ -680,14 +680,14 @@ export const defaultGameConfig = {
   lobbyMonkeyTexDownscale: 1,
 
   /** Menu-only: lobby 3D preview monkey position (world units). */
-  lobbyMonkeyPosX: 14.5,
+  lobbyMonkeyPosX: 13.5,
   lobbyMonkeyPosY: 4,
   lobbyMonkeyPosZ: 8,
   /** Lobby monkey Euler degrees (applied YXZ). */
   lobbyMonkeyPitchDeg: 0,
   lobbyMonkeyYawDeg: -122,
   lobbyMonkeyRollDeg: 0,
-  lobbyMonkeyScale: 10.45,
+  lobbyMonkeyScale: 12.4,
 } as const
 
 export type GameConfigKey = keyof typeof defaultGameConfig

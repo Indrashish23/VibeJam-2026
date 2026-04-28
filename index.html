@@ -278,7 +278,7 @@
       </div>
       <div id="countdown-overlay" class="countdown-overlay" hidden>
         <p id="countdown-title" class="countdown-title" hidden>Match begins in</p>
-        <span id="countdown-num" class="countdown-num">3</span>
+        <span id="countdown-num" class="countdown-num" aria-live="polite">3</span>
       </div>
       <div
         id="ko-announce-overlay"
@@ -288,10 +288,27 @@
         aria-atomic="true"
       >
         <div class="ko-announce-card">
-          <p id="ko-announce-line" class="ko-announce-line" role="status"></p>
+          <p id="ko-announce-name" class="ko-announce-name" role="status"></p>
+          <div
+            id="ko-announce-stock-row"
+            class="ko-announce-stock-row"
+            hidden
+            aria-hidden="true"
+          >
+            <div class="ko-announce-stock-box hud-stock-badge">
+              <span class="hud-stock-x" aria-hidden="true">×</span>
+              <span id="ko-announce-stock-num" class="hud-stock-num hud-stock-num--large">0</span>
+            </div>
+          </div>
         </div>
       </div>
       <div id="hud-viewport" class="hud-viewport">
+        <div id="hud-stock-foe-anchor" class="hud-stock-foe-anchor">
+          <div id="hud-stock-foe-wrap" class="hud-stock-badge hud-stock-badge--foe">
+            <span class="hud-stock-x" aria-hidden="true">×</span>
+            <span id="hud-stock-foe-num" class="hud-stock-num">0</span>
+          </div>
+        </div>
         <div id="percent-hud" class="percent-hud" aria-label="Launch percent">
           <div id="player-record-hud" class="player-record-hud" aria-label="Career record">
             <div class="player-record-hud__row">
@@ -325,18 +342,23 @@
                 <span id="hud-display-name" class="hud-display-name">Player</span>
               </div>
             </div>
-            <div id="hud-portrait-wrap" class="hud-portrait-wrap">
-              <img
-                id="hud-portrait-img"
-                class="hud-portrait-img"
-                src=""
-                width="220"
-                height="220"
-                alt=""
-              />
+            <div class="hud-portrait-column">
+              <div id="hud-stock-you-wrap" class="hud-stock-badge hud-stock-badge--you">
+                <span class="hud-stock-x" aria-hidden="true">×</span>
+                <span id="hud-stock-you-num" class="hud-stock-num">0</span>
+              </div>
+              <div id="hud-portrait-wrap" class="hud-portrait-wrap">
+                <img
+                  id="hud-portrait-img"
+                  class="hud-portrait-img"
+                  src=""
+                  width="220"
+                  height="220"
+                  alt=""
+                />
+              </div>
             </div>
           </div>
-          <div id="stock-strip-you" class="stock-strip stock-strip--you" aria-hidden="true"></div>
         </div>
         <div id="charge-bar-wrap" class="charge-bar-wrap" style="--charge-pct: 0%">
         <div id="ammo-feedback" class="ammo-feedback" hidden aria-hidden="true">+1</div>
