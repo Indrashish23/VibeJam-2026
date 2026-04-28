@@ -683,6 +683,11 @@ function clearLegacyRematchKey(): void {
 async function initGame(lobby: LobbyResult): Promise<void> {
   gameRoot.classList.remove('game-root--lobby')
   gameRoot.classList.add('game-root--hud-suspended')
+  gameRoot.hidden = false
+  /* Defensive: if any lobby-backdrop canvas slipped past disposal, remove it before the
+   * gameplay renderer prepends its own canvas. A stale GL canvas pinned to z-index 0 was
+   * occasionally masking the new gameplay canvas on the second peer in quick match. */
+  gameRoot.querySelectorAll('canvas.lobby-backdrop-canvas').forEach((node) => node.remove())
 
   if (DEBUG_MP)
     debugMpLog(

@@ -65,6 +65,10 @@ export type LobbyBackdropHandle = {
   dispose: () => void
   /** Apply lighting, sky, sun, unlit swap, monkey style + pose (call from Tweaks sync). */
   syncLobbyBackdropFromConfig: () => void
+  /** Pause the RAF render loop (use while a fullscreen overlay covers the backdrop). */
+  pauseRendering: () => void
+  /** Resume the RAF render loop after a previous pause. */
+  resumeRendering: () => void
   camera: PerspectiveCamera
   ambient: AmbientLight
   sun: DirectionalLight
@@ -190,6 +194,8 @@ export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<LobbyBa
 
   const clock = new Clock()
   let rafId = 0
+  let paused = false
+  let disposed = false
 
   function resize(): void {
     const w = window.innerWidth
@@ -201,6 +207,7 @@ export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<LobbyBa
 
   function tick(): void {
     rafId = requestAnimationFrame(tick)
+    if (paused || disposed) return
     const rootHidden = (document.getElementById('game-root') as HTMLDivElement | null)?.hidden
     if (rootHidden) return
 
@@ -210,10 +217,23 @@ export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<LobbyBa
     renderer.render(scene, camera)
   }
 
+  function pauseRendering(): void {
+    paused = true
+  }
+
+  function resumeRendering(): void {
+    if (disposed) return
+    paused = false
+    /* Reset clock so the first resumed frame doesn't burn a long delta on skyDome / animations. */
+    clock.getDelta()
+  }
+
   window.addEventListener('resize', resize)
   tick()
 
   function dispose(): void {
+    if (disposed) return
+    disposed = true
     cancelAnimationFrame(rafId)
     window.removeEventListener('resize', resize)
     mapHandle.dispose()
@@ -237,12 +257,26 @@ export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<LobbyBa
     scene.remove(hubRoot)
     scene.remove(camera)
     renderer.dispose()
+    /*
+     * Explicitly drop the WebGL context. `renderer.dispose()` only frees
+     * three.js-side resources; the underlying GL context lingers on the
+     * detached canvas until GC, which on some browsers can collide with
+     * the new gameplay renderer (rapid create/destroy after a longer
+     * lobby/queue session was producing a black canvas for the second peer).
+     */
+    try {
+      renderer.forceContextLoss()
+    } catch {
+      /* ignore — older browsers may not expose WEBGL_lose_context */
+    }
     renderer.domElement.remove()
   }
 
   return {
     dispose,
     syncLobbyBackdropFromConfig,
+    pauseRendering,
+    resumeRendering,
     camera,
     ambient,
     sun,

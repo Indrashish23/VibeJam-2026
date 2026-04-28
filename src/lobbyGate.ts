@@ -320,6 +320,10 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
           queueUi.sub.textContent =
             'If no one shows up within 20 seconds you\u2019ll fight a smart bot.'
       }
+      /* Free the GPU while the queue overlay covers the backdrop; the new gameplay renderer
+       * created after pairing was occasionally landing on a black canvas for the second peer
+       * when the lobby renderer kept rendering for the full queue duration. */
+      backdrop.pauseRendering()
       const queueStartedAt = Date.now()
       if (queueUi.timer) queueUi.timer.textContent = formatTimerMs(0)
       queueTimerHandle = window.setInterval(() => {
@@ -332,6 +336,7 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
         stopQueue()
         if (queueUi.cancel) queueUi.cancel.removeEventListener('click', onCancel)
         ui.overlay.hidden = false
+        backdrop.resumeRendering()
         clearErr()
       }
       queueUi.cancel?.addEventListener('click', onCancel)
@@ -379,12 +384,14 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
           /* cancelled — return to menu without resolving */
           stopQueue()
           ui.overlay.hidden = false
+          backdrop.resumeRendering()
         })
         .catch((err: unknown) => {
           console.warn('[quickMatch] queue failed', err)
           stopQueue()
           if (settled) return
           ui.overlay.hidden = false
+          backdrop.resumeRendering()
           setErr('Quick match failed to start. Try again, or pick another option.')
         })
     }
