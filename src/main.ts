@@ -2222,6 +2222,14 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     const epochAtStart = pvpMatchEpoch
     try {
       if (iWonRound) tutorialBotRingouts += 1
+      /* Cinematic pause: hold on the ringout / ragdoll arc before flashing GAME so the
+       * player gets to watch the KO play out instead of being cut off by the splash. */
+      const preSplashMs = Math.max(0, gameConfig.winRingoutPreSplashDelayMs)
+      if (preSplashMs > 0) {
+        await sleepMs(preSplashMs)
+        if (epochAtStart !== pvpMatchEpoch) return
+        if (opponentForfeitHandled) return
+      }
       await playGameOutcomeSplashSequence(iWonRound ? 'win' : 'lose')
       if (epochAtStart !== pvpMatchEpoch) return
       if (opponentForfeitHandled) return

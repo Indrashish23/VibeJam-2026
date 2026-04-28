@@ -345,6 +345,12 @@ export const defaultGameConfig = {
   dashCooldownMs: 820,
   /** After opponent ring-out (win), wait this many ms before flashing GAME. */
   winRingoutPresentDelayMs: 2000,
+  /**
+   * After a final-stock KO is detected, wait this long before showing the GAME splash so
+   * the player can watch the ragdoll arc / blast spectacle play out. Applies to both win
+   * and lose paths (your own ringout also gets the cinematic moment).
+   */
+  winRingoutPreSplashDelayMs: 3000,
   /** Outside platform half-extent + this (XZ) or below yKill = blast. */
   blastMargin: 12,
   /** When 1, draw a green ring-out boundary loop on the deck (Tweaks → Arena). */

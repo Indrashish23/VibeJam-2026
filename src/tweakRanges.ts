@@ -103,6 +103,7 @@ export const TWEAK_RANGE = {
   voiceChargeDecayPerSec: { min: 0.05, max: 3, step: 0.02 },
   voiceChargeRisePerSec: { min: 0.08, max: 2.5, step: 0.02 },
   winRingoutPresentDelayMs: { min: 0, max: 8000, step: 100 },
+  winRingoutPreSplashDelayMs: { min: 0, max: 8000, step: 100 },
   voiceOverloadThreshold: { min: 0.8, max: 2.5, step: 0.02 },
   voiceShooterReplayFadeSec: { min: 0.2, max: 6, step: 0.05 },
   voiceDeliveryPlaybackRate: { min: 0.7, max: 2.4, step: 0.02 },
@@ -470,6 +471,7 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   voiceChargeDecayPerSec: 'Charge units lost per sec while decaying',
   voiceChargeRisePerSec: 'Max charge rise per sec at full loudness (LMB)',
   winRingoutPresentDelayMs: 'GAME splash min hold before match-end screen (ms)',
+  winRingoutPreSplashDelayMs: 'Cinematic delay after final KO before GAME splash (ms)',
   voiceOverloadThreshold: 'Overload UI shake',
   voiceShooterReplayFadeSec: 'Hit replay fade (s)',
   voiceDeliveryPlaybackRate: 'Hit voice delivery pitch (×)',
@@ -1233,6 +1235,8 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
 
   winRingoutPresentDelayMs:
     'Minimum time the GAME splash stays up before the match-end screen appears.',
+  winRingoutPreSplashDelayMs:
+    'After the final-stock KO, how long to let the ragdoll / blast moment play before the GAME splash appears.',
   botBodyRadius: 'Enemy capsule radius (bigger = easier to hit, harder to ring-out).',
   botPunchRange: 'Distance at which the smart bot tries to throw a fist.',
   botHitRadius: 'Hit detection radius on the bot’s projectile.',
@@ -1733,6 +1737,7 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
     id: 'uiVfx',
     title: 'Animation / UI VFX',
     keys: [
+      'winRingoutPreSplashDelayMs',
       'winRingoutPresentDelayMs',
       'stunnedStarSpreadMul',
       'stunnedStarSpinMul',
