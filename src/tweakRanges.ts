@@ -29,6 +29,8 @@ export const TWEAK_RANGE = {
   knockVictimBelowAimMul: { min: 0, max: 2, step: 0.02 },
   knockBotVertBoostMul: { min: 0, max: 1.4, step: 0.02 },
   knockBotBelowAimMul: { min: 0, max: 2, step: 0.02 },
+  knockTrailMinHorizontalSpeed: { min: 0, max: 40, step: 0.5 },
+  knockTrailMinArcHeight: { min: 0, max: 12, step: 0.25 },
   knockbackOnBot: { min: 0, max: CAP, step: 2 },
   knockVoiceMinMul: { min: 0.1, max: 1.2, step: 0.02 },
   knockVoiceMaxMul: { min: 0.2, max: 2, step: 0.02 },
@@ -460,6 +462,8 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   knockVictimBelowAimMul: 'Extra lift when shot from below (you)',
   knockBotVertBoostMul: 'Knock → upward pop (enemy)',
   knockBotBelowAimMul: 'Extra lift when shot from below (enemy)',
+  knockTrailMinHorizontalSpeed: 'Knock trail: min horizontal knock speed',
+  knockTrailMinArcHeight: 'Knock trail: min arc height from vy impulse (m, vy²/2g)',
   knockbackOnBot: 'Base knock on enemy (× voice lerp)',
   knockVoiceMinMul: 'Knock at quiet (t=0) ×',
   knockVoiceMaxMul: 'Knock at loud (t=1) ×',
@@ -1229,6 +1233,10 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
     'Scales knock strength into extra enemy vy so they arc instead of skidding horizontally.',
   knockBotBelowAimMul:
     'Extra enemy lift when your shot connects from below (fist→body direction has positive Y).',
+  knockTrailMinHorizontalSpeed:
+    'Minimum horizontal knock speed (after the hit) required to spawn the glowing knockback trail.',
+  knockTrailMinArcHeight:
+    'Minimum ballistic apex (m) implied by the hit’s upward vy impulse, approximated as vy²÷(2×jumpGravity). Use 2 for ~2 m “real” pop.',
   knockbackOnBot: 'Base horizontal push on the enemy; scaled by voice knock min/max and `t`.',
   knockVoiceMinMul: 'When your shot is quiet, knock multiplier (× knockbackOnBot).',
   knockVoiceMaxMul: 'When your shot is loud, knock multiplier.',
@@ -1445,6 +1453,8 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'knockVictimBelowAimMul',
       'knockBotVertBoostMul',
       'knockBotBelowAimMul',
+      'knockTrailMinHorizontalSpeed',
+      'knockTrailMinArcHeight',
       'botFistPercentGain',
       'botFistKnockT',
       'knockHurtAirDrag',

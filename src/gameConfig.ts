@@ -322,6 +322,13 @@ export const defaultGameConfig = {
   knockHighPctVictimThreshold: 0.8,
   /** Extra multiplier on knock speed when victim is above knockHighPctVictimThreshold (e.g. 0.6 = softer hits at high %). */
   knockHighPctSpeedMul: 0.6,
+  /** Minimum horizontal knock speed (after hit) to spawn a knockback trail. */
+  knockTrailMinHorizontalSpeed: 10,
+  /**
+   * Minimum approximate apex height (m) from the hit’s upward vy impulse alone,
+   * using vy²/(2×jumpGravity). Set 2 to match “launched ~2m up” style hits.
+   */
+  knockTrailMinArcHeight: 2,
   /** Air strafe strength on hurt knock (world velocity push per second at full input, scaled by air control). */
   knockAirStrafeAccel: 65,
   /** Full air control of knock drift at 0% victim launch; linearly fades to 0 by knockAirControlFadePct (percent). */

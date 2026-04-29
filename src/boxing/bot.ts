@@ -1283,6 +1283,11 @@ export class BotFighter {
     return this.hurtPhase !== 'none'
   }
 
+  /** Tumbling in the air from knockback (trail VFX, etc.). */
+  isInKnockbackAir(): boolean {
+    return this.hurtPhase === 'air'
+  }
+
   private abortSmartShotFsm(): void {
     this.shotState = 'idle'
     this.windupLeftMs = 0
