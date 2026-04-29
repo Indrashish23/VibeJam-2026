@@ -229,64 +229,42 @@ function logArenaCollisionMeshesDev(meshes: Mesh[]): void {
 }
 
 /**
- * Safety cuboids from the arena AABB (under-slab + thin floor deck). Still uses your GLB bounds;
- * fills trimesh gaps so the capsule doesn’t fall through.
+ * Thick static slab under the exported arena collision AABB. Catches trimesh holes,
+ * one-sided gaps, and any missed geometry without fighting the visible deck above.
  */
 function getArenaExportSafetyCuboids(collisionMeshes: Mesh[], sceneRoot: Group): {
   center: Vector3
   halfExtents: Vector3
 }[] {
-  const colBox = new Box3()
+  const box = new Box3()
   let expanded = false
   for (const m of collisionMeshes) {
-    colBox.expandByObject(m)
+    box.expandByObject(m)
     expanded = true
   }
-  if (!expanded || colBox.isEmpty()) {
+  if (!expanded || box.isEmpty()) {
     sceneRoot.updateMatrixWorld(true)
-    colBox.setFromObject(sceneRoot)
+    box.setFromObject(sceneRoot)
   }
-  if (colBox.isEmpty()) return []
+  if (box.isEmpty()) return []
 
-  sceneRoot.updateMatrixWorld(true)
-  const sceneBox = new Box3().setFromObject(sceneRoot)
-
-  const colCenter = new Vector3()
-  const colSize = new Vector3()
-  colBox.getCenter(colCenter)
-  colBox.getSize(colSize)
-
-  const sceneCenter = new Vector3()
-  const sceneSize = new Vector3()
-  sceneBox.getCenter(sceneCenter)
-  sceneBox.getSize(sceneSize)
+  const center = new Vector3()
+  const size = new Vector3()
+  box.getCenter(center)
+  box.getSize(size)
 
   const padXZ = 8
   const slabHalfY = 0.55
-  const topY = colBox.min.y - 0.02
-  const hx = Math.max(colSize.x * 0.5 + padXZ, 34)
-  const hz = Math.max(colSize.z * 0.5 + padXZ, 34)
+  const topY = box.min.y - 0.02
+  const hx = Math.max(size.x * 0.5 + padXZ, 34)
+  const hz = Math.max(size.z * 0.5 + padXZ, 34)
 
-  const out: { center: Vector3; halfExtents: Vector3 }[] = []
-
-  out.push({
-    center: new Vector3(colCenter.x, topY - slabHalfY, colCenter.z),
-    halfExtents: new Vector3(hx, slabHalfY, hz),
-  })
-
-  const deckPad = 14
-  const deckHalfY = 0.16
-  const deckBottomY = colBox.min.y - 0.02
-  const deckCenterY = deckBottomY + deckHalfY
-  const deckHx = Math.max(sceneSize.x * 0.5 + deckPad, hx + 4)
-  const deckHz = Math.max(sceneSize.z * 0.5 + deckPad, hz + 4)
-
-  out.push({
-    center: new Vector3(sceneCenter.x, deckCenterY, sceneCenter.z),
-    halfExtents: new Vector3(deckHx, deckHalfY, deckHz),
-  })
-
-  return out
+  return [
+    {
+      center: new Vector3(center.x, topY - slabHalfY, center.z),
+      halfExtents: new Vector3(hx, slabHalfY, hz),
+    },
+  ]
 }
 
 function collectBananaSpawnEmpties(root: Group): Vector3[] {
