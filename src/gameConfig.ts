@@ -784,15 +784,16 @@ export const defaultGameConfig = {
   /**
    * Vibe Jam 2026 webring exit portal — rendered in a dedicated overlay canvas above the
    * lobby vignette. Geometry comes from `Assets/Props/portall.gltf`; both submeshes are
-   * replaced with custom rainbow shaders at load time.
+   * replaced with custom rainbow shaders at load time. Defaults seed the portal at the
+   * lobby monkey's position so it's immediately visible; tune via Tweaks.
    */
-  lobbyPortalPosX: -7,
-  lobbyPortalPosY: 6,
-  lobbyPortalPosZ: 14,
+  lobbyPortalPosX: 5.5,
+  lobbyPortalPosY: 6.5,
+  lobbyPortalPosZ: 18,
   lobbyPortalPitchDeg: 0,
-  lobbyPortalYawDeg: -28,
+  lobbyPortalYawDeg: 16,
   lobbyPortalRollDeg: 0,
-  lobbyPortalScale: 5,
+  lobbyPortalScale: 6,
   /** Swirl angular speed of the inner rift (radians/sec base). */
   lobbyPortalRiftSpeed: 1.0,
   /** How fast the rainbow hue cycles (full cycles/sec at 1.0). */
@@ -800,7 +801,7 @@ export const defaultGameConfig = {
   /** Hue variation from rift center to edge (multiplied by radius). */
   lobbyPortalHueRadialBias: 0.6,
   /** Overall emissive brightness multiplier (rift + ring). */
-  lobbyPortalIntensity: 1.5,
+  lobbyPortalIntensity: 2.0,
   /** HSV saturation for the rainbow color. */
   lobbyPortalSaturation: 1.0,
 } as const

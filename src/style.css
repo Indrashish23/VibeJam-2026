@@ -245,13 +245,8 @@ body {
   justify-content: center;
   padding: 1rem;
   pointer-events: none;
-  /* Let the menu 3D backdrop show through; vignette stays subtle behind the card. */
-  background: radial-gradient(
-    ellipse at center,
-    rgba(11, 16, 32, 0.15) 0%,
-    rgba(11, 16, 32, 0.52) 65%,
-    rgba(8, 12, 22, 0.78) 100%
-  );
+  /* No vignette — full 3D backdrop shows through behind the menu card. */
+  background: transparent;
 }
 
 .lobby-overlay .lobby-card {
