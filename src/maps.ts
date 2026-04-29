@@ -228,67 +228,6 @@ function logArenaCollisionMeshesDev(meshes: Mesh[]): void {
   console.info(`[map:arena] Collision → Rapier (${meshes.length} mesh(es)):`, names.join(' | '))
 }
 
-/**
- * Fixed cuboids under / flush with the arena footprint: pit catch + thin floor deck.
- * Supplements GLTF trimesh so players/bots don’t fall through mesh gaps or seams.
- */
-function getArenaExportSafetyCuboids(collisionMeshes: Mesh[], sceneRoot: Group): {
-  center: Vector3
-  halfExtents: Vector3
-}[] {
-  const colBox = new Box3()
-  let expanded = false
-  for (const m of collisionMeshes) {
-    colBox.expandByObject(m)
-    expanded = true
-  }
-  if (!expanded || colBox.isEmpty()) {
-    sceneRoot.updateMatrixWorld(true)
-    colBox.setFromObject(sceneRoot)
-  }
-  if (colBox.isEmpty()) return []
-
-  sceneRoot.updateMatrixWorld(true)
-  const sceneBox = new Box3().setFromObject(sceneRoot)
-
-  const colCenter = new Vector3()
-  const colSize = new Vector3()
-  colBox.getCenter(colCenter)
-  colBox.getSize(colSize)
-
-  const sceneCenter = new Vector3()
-  const sceneSize = new Vector3()
-  sceneBox.getCenter(sceneCenter)
-  sceneBox.getSize(sceneSize)
-
-  const padXZ = 8
-  const slabHalfY = 0.55
-  const topY = colBox.min.y - 0.02
-  const hx = Math.max(colSize.x * 0.5 + padXZ, 34)
-  const hz = Math.max(colSize.z * 0.5 + padXZ, 34)
-
-  const out: { center: Vector3; halfExtents: Vector3 }[] = []
-
-  out.push({
-    center: new Vector3(colCenter.x, topY - slabHalfY, colCenter.z),
-    halfExtents: new Vector3(hx, slabHalfY, hz),
-  })
-
-  const deckPad = 14
-  const deckHalfY = 0.16
-  const deckBottomY = colBox.min.y - 0.02
-  const deckCenterY = deckBottomY + deckHalfY
-  const deckHx = Math.max(sceneSize.x * 0.5 + deckPad, hx + 4)
-  const deckHz = Math.max(sceneSize.z * 0.5 + deckPad, hz + 4)
-
-  out.push({
-    center: new Vector3(sceneCenter.x, deckCenterY, sceneCenter.z),
-    halfExtents: new Vector3(deckHx, deckHalfY, deckHz),
-  })
-
-  return out
-}
-
 function collectBananaSpawnEmpties(root: Group): Vector3[] {
   const pts: Vector3[] = []
   root.updateMatrixWorld(true)
@@ -500,7 +439,6 @@ async function loadArenaExportMap(_scene: Scene, hubRoot: Group): Promise<MapHan
   return {
     id: 'arena',
     collisionMeshes,
-    rapierCuboids: getArenaExportSafetyCuboids(collisionMeshes, gltf.scene),
     bananaSpawnPoints: bananaSpawnPoints.length > 0 ? bananaSpawnPoints : undefined,
     isBlastZone(pos: Vector3): boolean {
       return pos.y < gameConfig.blastY

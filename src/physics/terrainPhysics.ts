@@ -57,6 +57,7 @@ function capsuleHalfHeight(radius: number, totalHeight: number): number {
   return Math.max(0.01, totalHeight * 0.5 - radius)
 }
 
+/** World-space triangle soup from a Three `Mesh` (GLTF geometry; honors multi-material `groups`). */
 function meshToTrimesh(mesh: Mesh): { vertices: Float32Array; indices: Uint32Array } | null {
   const geometry = mesh.geometry
   const pos = attrAsPosition(geometry)
@@ -103,50 +104,6 @@ function meshToTrimesh(mesh: Mesh): { vertices: Float32Array; indices: Uint32Arr
   const indices = new Uint32Array(pos.count)
   for (let i = 0; i < pos.count; i++) indices[i] = i
   return { vertices, indices }
-}
-
-function mergeTrimeshParts(
-  parts: { vertices: Float32Array; indices: Uint32Array }[],
-): { vertices: Float32Array; indices: Uint32Array } | null {
-  if (parts.length === 0) return null
-  if (parts.length === 1) {
-    const p = parts[0]!
-    return { vertices: p.vertices, indices: p.indices }
-  }
-  let vertBase = 0
-  let floatOff = 0
-  let iWrite = 0
-  let totalVerts = 0
-  let totalIdx = 0
-  for (const p of parts) {
-    totalVerts += p.vertices.length / 3
-    totalIdx += p.indices.length
-  }
-  const vertices = new Float32Array(totalVerts * 3)
-  const indices = new Uint32Array(totalIdx)
-  for (const p of parts) {
-    const nv = p.vertices.length / 3
-    vertices.set(p.vertices, floatOff)
-    for (let i = 0; i < p.indices.length; i++) {
-      indices[iWrite++] = vertBase + p.indices[i]!
-    }
-    vertBase += nv
-    floatOff += p.vertices.length
-  }
-  return { vertices, indices }
-}
-
-/** Rapier trimesh is one-sided; duplicate winding so thin floors / seams still collide. */
-function duplicateTrianglesReversed(indices: Uint32Array): Uint32Array {
-  const n = indices.length
-  const out = new Uint32Array(n * 2)
-  out.set(indices, 0)
-  for (let i = 0; i < n; i += 3) {
-    out[n + i] = indices[i + 2]!
-    out[n + i + 1] = indices[i + 1]!
-    out[n + i + 2] = indices[i]!
-  }
-  return out
 }
 
 export class TerrainPhysics {
@@ -211,16 +168,11 @@ export class TerrainPhysics {
         this.terrainHandles.add(collider.handle)
       }
     }
-    const trimeshParts: { vertices: Float32Array; indices: Uint32Array }[] = []
     for (const mesh of meshes) {
       const tri = meshToTrimesh(mesh)
-      if (tri && tri.indices.length >= 3) trimeshParts.push(tri)
-    }
-    const merged = mergeTrimeshParts(trimeshParts)
-    if (merged) {
-      const bothSides = duplicateTrianglesReversed(merged.indices)
+      if (!tri || tri.indices.length < 3) continue
       const collider = this.world.createCollider(
-        RAPIER.ColliderDesc.trimesh(merged.vertices, bothSides).setFriction(1),
+        RAPIER.ColliderDesc.trimesh(tri.vertices, tri.indices).setFriction(1),
       )
       this.terrainColliders.push(collider)
       this.terrainHandles.add(collider.handle)
@@ -255,7 +207,7 @@ export class TerrainPhysics {
 
     const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased())
     const collider = this.world.createCollider(RAPIER.ColliderDesc.capsule(capsuleHalfHeight(r, h), r), body)
-    const controller = this.world.createCharacterController(0.065)
+    const controller = this.world.createCharacterController(0.04)
     controller.setUp({ x: 0, y: 1, z: 0 })
     controller.setSlideEnabled(true)
     controller.enableAutostep(0.45, 0.18, false)
