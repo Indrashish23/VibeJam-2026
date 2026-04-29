@@ -2535,11 +2535,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
             mapId: map.id,
           })
         }
-        /* Host is authoritative on map: guest swaps to match the host's choice. */
-        if (lobby.mode === 'online' && lobby.role === 'guest' && isMapId(data.mapId)) {
-          void swapMap(data.mapId)
-        }
-        scheduleMpBegin()
+        /* Host is authoritative on map: guest must finish loading terrain before match start,
+         * or the peer puppet spawns on the wrong deck and clips through the floor. */
+        const guestMapSwap =
+          lobby.mode === 'online' && lobby.role === 'guest' && isMapId(data.mapId)
+            ? swapMap(data.mapId)
+            : Promise.resolve()
+        void guestMapSwap.then(() => scheduleMpBegin())
       }
       return
     }

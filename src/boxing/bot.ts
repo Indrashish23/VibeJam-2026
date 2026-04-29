@@ -1345,6 +1345,23 @@ export class BotFighter {
     this.spawnProjectileAimed(_work, speedMul, voiceClip)
   }
 
+  /**
+   * PvP puppet: peer Y is replicated from their feet height. If our local map/terrain loaded
+   * late or differs slightly, feet can sit below the trimesh — raycast up and snap to the deck.
+   */
+  private snapNetworkFeetToTerrain(terrain: TerrainPhysics): void {
+    const fo = this.feetFromCenter
+    const feetY = this.root.position.y - fo
+    const hit = terrain.raycastDown(this.root.position.x, feetY + 3.5, this.root.position.z, 10)
+    if (!hit || hit.normal.y < 0.12) return
+    const groundY = hit.point.y
+    const err = groundY - feetY
+    if (err > 0.025) {
+      this.root.position.y = groundY + fo
+      this.networkTargetPos.y = this.root.position.y
+    }
+  }
+
   private integrateProjectile(delta: number, terrain: TerrainPhysics): void {
     if (!this.projFlying) return
     this.projIntegratePrev.copy(this.projPos)
@@ -1446,6 +1463,8 @@ export class BotFighter {
       while (dy > Math.PI) dy -= Math.PI * 2
       while (dy < -Math.PI) dy += Math.PI * 2
       this.root.rotation.y += dy * Math.min(1, delta * 14)
+
+      this.snapNetworkFeetToTerrain(terrain)
 
       this.bodyCenter.copy(this.root.position)
       this.bodyCenter.y += this.feetFromCenter * 0.52
