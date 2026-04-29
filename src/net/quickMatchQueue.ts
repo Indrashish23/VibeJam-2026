@@ -15,7 +15,7 @@ function qmLog(...args: unknown[]): void {
 export const QUICK_MATCH_ROOM_BASE = 'vj-quick-queue'
 
 /** Default time before quick match falls back to a smart-bot match. */
-export const QUICK_MATCH_TIMEOUT_MS = 20_000
+export const QUICK_MATCH_TIMEOUT_MS = 50_000
 
 /** Drop a presence entry that hasn't sent a heartbeat in this long. */
 const PRESENCE_STALE_MS = 12_000

@@ -337,7 +337,7 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
         if (queueUi.title) queueUi.title.textContent = 'Searching for opponent…'
         if (queueUi.sub)
           queueUi.sub.textContent =
-            'If no one shows up within 20 seconds you\u2019ll fight a smart bot.'
+            'If no one shows up within 50 seconds you\u2019ll fight a smart bot.'
       }
       /* Free the GPU while the queue overlay covers the backdrop; the new gameplay renderer
        * created after pairing was occasionally landing on a black canvas for the second peer

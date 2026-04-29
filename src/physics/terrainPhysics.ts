@@ -75,9 +75,30 @@ function meshToTrimesh(mesh: Mesh): { vertices: Float32Array; indices: Uint32Arr
 
   const srcIndex = geometry.getIndex()
   if (srcIndex) {
-    const indices = new Uint32Array(srcIndex.count)
-    for (let i = 0; i < srcIndex.count; i++) indices[i] = srcIndex.getX(i)
-    return { vertices, indices }
+    const groups = geometry.groups
+    const indexList: number[] = []
+    if (groups && groups.length > 0) {
+      /* Multi-material GLTF: only the first group was used before — missing tris = fall-through. */
+      for (const g of groups) {
+        const end = g.start + g.count
+        for (let i = g.start; i < end; i++) indexList.push(srcIndex.getX(i))
+      }
+    } else {
+      for (let i = 0; i < srcIndex.count; i++) indexList.push(srcIndex.getX(i))
+    }
+    if (indexList.length < 3) return null
+    return { vertices, indices: new Uint32Array(indexList) }
+  }
+
+  const groups = geometry.groups
+  if (groups && groups.length > 0) {
+    const indexList: number[] = []
+    for (const g of groups) {
+      const end = g.start + g.count
+      for (let i = g.start; i < end; i++) indexList.push(i)
+    }
+    if (indexList.length < 3) return null
+    return { vertices, indices: new Uint32Array(indexList) }
   }
 
   const indices = new Uint32Array(pos.count)
