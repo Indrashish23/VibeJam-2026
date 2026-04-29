@@ -58,6 +58,7 @@ const LOBBY_PORTAL_KEYS: GameConfigKey[] = [
   'lobbyPortalPulseSpeed',
   'lobbyPortalPulseStrength',
   'lobbyPortalIntensity',
+  'lobbyPortalUvScale',
   'lobbyPortalUvOffsetU',
   'lobbyPortalUvOffsetV',
   'lobbyPortalDiskUvRadius',
@@ -93,6 +94,7 @@ function makeFireSwirlMaterial(): ShaderMaterial {
       uPulseSpeed: { value: gameConfig.lobbyPortalPulseSpeed },
       uPulseStrength: { value: gameConfig.lobbyPortalPulseStrength },
       uIntensity: { value: gameConfig.lobbyPortalIntensity },
+      uUvScale: { value: gameConfig.lobbyPortalUvScale },
       uUvOffsetU: { value: gameConfig.lobbyPortalUvOffsetU },
       uUvOffsetV: { value: gameConfig.lobbyPortalUvOffsetV },
       uDiskUvRadius: { value: gameConfig.lobbyPortalDiskUvRadius },
@@ -118,6 +120,7 @@ function makeFireSwirlMaterial(): ShaderMaterial {
       uniform float uPulseSpeed;
       uniform float uPulseStrength;
       uniform float uIntensity;
+      uniform float uUvScale;
       uniform float uUvOffsetU;
       uniform float uUvOffsetV;
       uniform float uDiskUvRadius;
@@ -158,11 +161,11 @@ function makeFireSwirlMaterial(): ShaderMaterial {
 
       void main() {
         vec2 c = vec2(0.5 + uUvOffsetU, 0.5 + uUvOffsetV);
-        vec2 delta = vUv - c;
-        float rUV = length(delta);
+        vec2 rawDelta = vUv - c;
+        float rUV = length(rawDelta);
         if (rUV > uDiskUvRadius) discard;
 
-        vec2 uv = delta * uSwirlScale;
+        vec2 uv = rawDelta * uUvScale * uSwirlScale;
         float dist = length(uv);
         float angle = atan(uv.y, uv.x);
 
@@ -193,7 +196,11 @@ function makeFireSwirlMaterial(): ShaderMaterial {
           col = uColorRim;
         }
 
-        float edge_mask = smoothstep(uDiskUvRadius * uSwirlScale, uDiskUvRadius * uSwirlScale * 0.85, dist);
+        float edge_mask = smoothstep(
+          uDiskUvRadius * uUvScale * uSwirlScale,
+          uDiskUvRadius * uUvScale * uSwirlScale * 0.85,
+          dist
+        );
         col *= edge_mask;
 
         float streak = pow(max(0.0, sin(swirl_angle * 3.0 + t * 4.0)), 8.0);
@@ -379,6 +386,7 @@ export function mountLobbyPortal(_gameRoot: HTMLElement): LobbyPortalHandle {
     swirlMaterial.uniforms.uPulseSpeed.value = gameConfig.lobbyPortalPulseSpeed
     swirlMaterial.uniforms.uPulseStrength.value = gameConfig.lobbyPortalPulseStrength
     swirlMaterial.uniforms.uIntensity.value = gameConfig.lobbyPortalIntensity
+    swirlMaterial.uniforms.uUvScale.value = Math.max(0.01, gameConfig.lobbyPortalUvScale)
     swirlMaterial.uniforms.uUvOffsetU.value = gameConfig.lobbyPortalUvOffsetU
     swirlMaterial.uniforms.uUvOffsetV.value = gameConfig.lobbyPortalUvOffsetV
     swirlMaterial.uniforms.uDiskUvRadius.value = Math.max(0.05, gameConfig.lobbyPortalDiskUvRadius)

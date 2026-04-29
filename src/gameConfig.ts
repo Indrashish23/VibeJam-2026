@@ -805,22 +805,27 @@ export const defaultGameConfig = {
   lobbyPortalPitchDeg: 0,
   lobbyPortalYawDeg: -103,
   lobbyPortalRollDeg: 6,
-  lobbyPortalScale: 5.5,
+  lobbyPortalScale: 4.1,
   /** Swirl angular speed (Godot shader: `swirl_speed`, hint 0.1..5). */
   lobbyPortalSwirlSpeed: 1.8,
   /** How tightly the swirl wraps around the center (Godot: `swirl_tightness`, 1..20). */
   lobbyPortalSwirlTightness: 11.5,
   /** UV scale of the swirl pattern (Godot: `swirl_scale`, 0.5..5). */
-  lobbyPortalSwirlScale: 1.45,
+  lobbyPortalSwirlScale: 3.45,
   /** Pulse speed of the radial brightness (Godot: `pulse_speed`, 0..5). */
-  lobbyPortalPulseSpeed: 1.2,
+  lobbyPortalPulseSpeed: 0.3,
   /** Pulse strength on top of base radial (Godot: `pulse_strength`, 0..1). */
-  lobbyPortalPulseStrength: 0.11,
+  lobbyPortalPulseStrength: 0.04,
   /** Overall emissive brightness multiplier on the swirl shader. */
-  lobbyPortalIntensity: 0.4,
+  lobbyPortalIntensity: 0.5,
+  /**
+   * Multiplier on mesh UV delta from the swirl center (before `lobbyPortalSwirlScale`).
+   * Zooms the procedural pattern in UV space without moving GLB geometry; circular mask uses raw UV.
+   */
+  lobbyPortalUvScale: 1,
   /** Swirl UV center offset from mesh UV (0,0) — tweak to align pattern with the frame opening. */
-  lobbyPortalUvOffsetU: 0,
-  lobbyPortalUvOffsetV: 0,
+  lobbyPortalUvOffsetU: -0.335,
+  lobbyPortalUvOffsetV: 0.255,
   /** Circular mask radius in UV space around the center (cuts square inner quad corners). */
   lobbyPortalDiskUvRadius: 0.48,
 } as const

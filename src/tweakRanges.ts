@@ -302,6 +302,7 @@ export const TWEAK_RANGE = {
   lobbyPortalPulseSpeed: { min: 0, max: 5, step: 0.05 },
   lobbyPortalPulseStrength: { min: 0, max: 1, step: 0.01 },
   lobbyPortalIntensity: { min: 0, max: 4, step: 0.05 },
+  lobbyPortalUvScale: { min: 0.25, max: 4, step: 0.02 },
   lobbyPortalUvOffsetU: { min: -0.5, max: 0.5, step: 0.005 },
   lobbyPortalUvOffsetV: { min: -0.5, max: 0.5, step: 0.005 },
   lobbyPortalDiskUvRadius: { min: 0.2, max: 0.55, step: 0.005 },
@@ -798,6 +799,7 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   lobbyPortalPulseSpeed: 'Lobby portal: pulse speed',
   lobbyPortalPulseStrength: 'Lobby portal: pulse strength',
   lobbyPortalIntensity: 'Lobby portal: emissive intensity ×',
+  lobbyPortalUvScale: 'Lobby portal: UV scale (pattern zoom ×)',
   lobbyPortalUvOffsetU: 'Lobby portal: swirl UV offset U',
   lobbyPortalUvOffsetV: 'Lobby portal: swirl UV offset V',
   lobbyPortalDiskUvRadius: 'Lobby portal: circular mask radius (UV)',
@@ -905,7 +907,7 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   bananaItemHudMaxWidthRem:
     'Caps the strip width before viewport clamps; the SVG scales down to fit this `rem` width.',
   bananaItemHudPreview:
-    'When 1, the RMB banana strip stays visible so you can tune position in Tweaks without picking up a banana. Turn off for normal play.',
+    'When 1, the RMB banana strip stays visible so you can tune position in Tweaks without picking up a banana (works in offline, practice vs bot, and online dummy/smart-bot lobby). Turn off for normal play.',
   uiHudMasterScale:
     'Uniform zoom for the HUD viewport that wraps launch percentages and the charge wedge (crosshair separate).',
   percentHudAnchorRight:
@@ -1183,6 +1185,8 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
     'Vibe Jam portal: pulse strength on top of the base radial fade (Godot `pulse_strength`).',
   lobbyPortalIntensity:
     'Vibe Jam portal: overall emissive brightness multiplier on the fire shader.',
+  lobbyPortalUvScale:
+    'Vibe Jam portal: multiplies mesh UV offset from the swirl center before Godot swirl_scale — zoom the rift pattern without editing the GLB; circular mask stays in raw UV.',
   lobbyPortalUvOffsetU:
     'Vibe Jam portal: horizontal offset of the swirl center in UV space (0 = mesh center).',
   lobbyPortalUvOffsetV:
@@ -1913,6 +1917,7 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'lobbyPortalPulseSpeed',
       'lobbyPortalPulseStrength',
       'lobbyPortalIntensity',
+      'lobbyPortalUvScale',
       'lobbyPortalUvOffsetU',
       'lobbyPortalUvOffsetV',
       'lobbyPortalDiskUvRadius',

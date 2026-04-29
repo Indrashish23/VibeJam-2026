@@ -80,7 +80,7 @@ import {
 } from './net/webrtcGame'
 import { LowEndDitherShader } from './post/lowEndDitherShader'
 import { CelOutlineShader } from './post/celOutlineShader'
-import { openBugReportEmail } from './bugReportMail'
+import { openBugReport } from './bugReport'
 import { readStoredPlayerName, savePlayerName } from './playerName'
 import {
   loadUserSettings,
@@ -1352,12 +1352,15 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   function syncHudBananaItemHint(): void {
     if (!hudItemControlsWrapEl) return
     const preview = gameConfig.bananaItemHudPreview >= 0.5
+    /** Offline + online lobby dummy/smart-bot practice use `mpPhase === 'waiting'`; still show item HUD when holding a banana or previewing. */
+    const itemHudSessionActive =
+      mpPhase === 'live' || lobbyDummyPractice || lobbySmartBotActive || !isOnline
     const normalShow =
       getMyBananaHeld() &&
       !isPlayerBananaSlipNow() &&
       !matchOutcome &&
       !seriesTransitionActive &&
-      mpPhase === 'live'
+      itemHudSessionActive
     const show = preview || normalShow
     hudItemControlsWrapEl.hidden = !show
     hudItemControlsWrapEl.setAttribute('aria-hidden', show ? 'false' : 'true')
@@ -6088,7 +6091,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
     ctx['MP phase'] = mpPhase
     ctx['Bot mode'] = bot.mode
-    openBugReportEmail(ctx)
+    openBugReport(ctx)
   })
 
   /** Escape: always offer exit (capture + before tweaks so T panel still owns Escape when open). */
