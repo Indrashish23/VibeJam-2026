@@ -54,28 +54,45 @@ function syncKeyValue(key: SettingKey, value: string, skipEl?: HTMLInputElement)
   })
 }
 
+/** 0..1 sliders — must allow 0 (mute); `v || 1` wrongly turns 0 into 1. */
+function parseUnitInterval(raw: string, fallback: number): number {
+  const v = parseFloat(raw)
+  if (!Number.isFinite(v)) return fallback
+  return Math.max(0, Math.min(1, v))
+}
+
 function applyKey(key: SettingKey, raw: string): void {
   switch (key) {
-    case 'mouse':
-      gameConfig.mouseSensitivity = Math.max(0.01, Math.min(8, parseFloat(raw) || 1))
+    case 'mouse': {
+      const v = parseFloat(raw)
+      gameConfig.mouseSensitivity = Number.isFinite(v)
+        ? Math.max(0.01, Math.min(8, v))
+        : 1
       break
-    case 'fov':
-      gameConfig.cameraFov = Math.max(20, Math.min(120, parseFloat(raw) || gameConfig.cameraFov))
+    }
+    case 'fov': {
+      const v = parseFloat(raw)
+      gameConfig.cameraFov = Number.isFinite(v)
+        ? Math.max(20, Math.min(120, v))
+        : gameConfig.cameraFov
       break
-    case 'shake':
-      setCameraShakeMul(parseFloat(raw) || 1)
+    }
+    case 'shake': {
+      const v = parseFloat(raw)
+      setCameraShakeMul(Number.isFinite(v) ? v : 1)
       break
+    }
     case 'master':
-      setMasterVolumeMul(parseFloat(raw) || 1)
+      setMasterVolumeMul(parseUnitInterval(raw, 1))
       break
     case 'bgm':
-      setBgmMul(parseFloat(raw) || 1)
+      setBgmMul(parseUnitInterval(raw, 1))
       break
     case 'sfx':
-      setMasterSfxMul(parseFloat(raw) || 1)
+      setMasterSfxMul(parseUnitInterval(raw, 1))
       break
     case 'voice':
-      setVoicePlaybackMul(parseFloat(raw) || 1)
+      setVoicePlaybackMul(parseUnitInterval(raw, 1))
       break
     default:
       break
@@ -89,13 +106,14 @@ function bindSettingInputsOnce(): void {
   settingInputsBound = true
   SETTING_KEYS.forEach((key) => {
     qSetting(key).forEach((el) => {
-      el.addEventListener('input', (ev) => {
-        /* Ignore programmatic value sync between duplicate controls (lobby + FAB). */
-        if (!ev.isTrusted) return
+      const onAdjust = (): void => {
         applyKey(key, el.value)
         syncKeyValue(key, el.value, el)
         saveUserSettings()
-      })
+      }
+      el.addEventListener('input', onAdjust)
+      /* Range sliders: some environments only fire `change` on release. */
+      el.addEventListener('change', onAdjust)
     })
   })
 }
