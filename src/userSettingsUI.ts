@@ -89,7 +89,9 @@ function bindSettingInputsOnce(): void {
   settingInputsBound = true
   SETTING_KEYS.forEach((key) => {
     qSetting(key).forEach((el) => {
-      el.addEventListener('input', () => {
+      el.addEventListener('input', (ev) => {
+        /* Ignore programmatic value sync between duplicate controls (lobby + FAB). */
+        if (!ev.isTrusted) return
         applyKey(key, el.value)
         syncKeyValue(key, el.value, el)
         saveUserSettings()

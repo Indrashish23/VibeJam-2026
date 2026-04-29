@@ -156,6 +156,8 @@ body {
   padding: 0.15rem 0;
   cursor: pointer;
   accent-color: #38bdf8;
+  /* RTL / inherited direction flips native range (min on the right) — keep low=left, high=right. */
+  direction: ltr;
 }
 .user-settings-hint {
   margin: 0.6rem 0 0;

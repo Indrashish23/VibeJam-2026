@@ -76,6 +76,8 @@ export type MapHandle = {
 }
 
 const ARENA_EXPORT_GLB_URL = new URL('../Assets/Maps/arena_export.glb', import.meta.url).href
+/** Uniform scale for authored arena GLB (collision + spawns use world space after this). */
+const ARENA_EXPORT_SCALE = 1.2
 
 function normalizeSceneName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
@@ -362,6 +364,8 @@ async function loadArenaExportMap(_scene: Scene, hubRoot: Group): Promise<MapHan
   })
 
   container.add(gltf.scene)
+  gltf.scene.scale.setScalar(ARENA_EXPORT_SCALE)
+  gltf.scene.updateMatrixWorld(true)
   const { collisionMeshes: tagged, spawnA: sA, spawnB: sB, looseSpawns } = collectGltfArenaData(
     gltf.scene,
   )
