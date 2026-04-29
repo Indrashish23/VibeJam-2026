@@ -169,7 +169,7 @@ export const defaultGameConfig = {
   /** Directional sun position (world units); shared by match + lobby preview. */
   sunPosX: 62,
   sunPosY: 34,
-  sunPosZ: 36,
+  sunPosZ: 7,
   /** 1 = force unlit materials (ignores scene lighting) for flat readability/debugging. */
   lightingUnlitMode: 1,
   /** 1 = force unlit materials on the local player avatar only. */
@@ -761,14 +761,14 @@ export const defaultGameConfig = {
   lobbyMonkeyTexDownscale: 1,
 
   /** Menu-only: lobby 3D preview monkey position (world units). */
-  lobbyMonkeyPosX: 13.5,
-  lobbyMonkeyPosY: 4,
-  lobbyMonkeyPosZ: 8,
+  lobbyMonkeyPosX: 5.5,
+  lobbyMonkeyPosY: 6.5,
+  lobbyMonkeyPosZ: 18,
   /** Lobby monkey Euler degrees (applied YXZ). */
   lobbyMonkeyPitchDeg: 0,
-  lobbyMonkeyYawDeg: -122,
-  lobbyMonkeyRollDeg: 0,
-  lobbyMonkeyScale: 12.4,
+  lobbyMonkeyYawDeg: 16,
+  lobbyMonkeyRollDeg: 3,
+  lobbyMonkeyScale: 6.05,
 } as const
 
 export type GameConfigKey = keyof typeof defaultGameConfig
