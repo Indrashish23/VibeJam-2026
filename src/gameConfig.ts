@@ -57,13 +57,13 @@ export const defaultGameConfig = {
   chargeHudMicPulseScale: 0.38,
 
   /** Banana RMB throw prompt: horizontal offset from screen center (rem; + = right). */
-  bananaItemHudOffsetXRem: 0,
+  bananaItemHudOffsetXRem: -22.4,
   /** Banana RMB throw prompt: vertical offset from screen center (rem; + = down). */
-  bananaItemHudOffsetYRem: 0,
+  bananaItemHudOffsetYRem: 9.75,
   /** Banana RMB throw prompt: uniform scale (1 = default). */
   bananaItemHudScale: 1,
   /** Banana RMB throw prompt: max width of the SVG strip (rem). */
-  bananaItemHudMaxWidthRem: 27,
+  bananaItemHudMaxWidthRem: 23,
   /** 1 = always show the banana item prompt (for Tweaks layout); 0 = only when holding a banana in a live match. */
   bananaItemHudPreview: 0,
 

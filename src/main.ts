@@ -1157,6 +1157,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   const _bLand = new Vector3()
   const _bFeet = new Vector3()
   let localHasBanana = false
+  /** Blocks double RMB before offline throw async finishes (ms since epoch). */
+  let bananaLocalThrowCooldownUntil = 0
   let pvpBananaInventory: { host: 0 | 1; guest: 0 | 1 } = { host: 0, guest: 0 }
   let playerBananaSlipUntil = 0
   let nextBananaPeelId = 1
@@ -4970,14 +4972,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           _bFeet.set(camera.position.x, feetY(), camera.position.z)
           for (let j = bananaWorld.pickups.length - 1; j >= 0; j--) {
             const pick = bananaWorld.pickups[j]!
+            if (localHasBanana) continue
             if (isFeetInPickUpRange(_bFeet, pick, pr)) {
-              if (!localHasBanana) {
-                localHasBanana = true
-                bananaWorld.removePickupById(pick.id, {
-                  respawnAfterMs: BANANA_FLOOR_RESPAWN_SEC * 1000,
-                })
-                syncBananaHandVis()
-              }
+              localHasBanana = true
+              bananaWorld.removePickupById(pick.id, {
+                respawnAfterMs: BANANA_FLOOR_RESPAWN_SEC * 1000,
+              })
+              syncBananaHandVis()
               break
             }
           }
@@ -5180,11 +5181,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (multiplayerBlocksPlay()) return false
     if (tweaksPanelOpen || leaveMatchDialogOpen) return false
     if (Math.round(gameConfig.bananaPickupCount) <= 0) return false
+    if (!isPvp() && performance.now() < bananaLocalThrowCooldownUntil) return false
     camera.getWorldDirection(_aimDir)
     _muzzleWorld.copy(camera.position).addScaledVector(_aimDir, 0.52)
     if (!isPvp()) {
       localHasBanana = false
       syncBananaHandVis()
+      bananaLocalThrowCooldownUntil = performance.now() + 220
       bananaWorld.beginLocalThrow(_muzzleWorld, camera)
       return true
     }

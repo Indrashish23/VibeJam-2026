@@ -72,6 +72,20 @@ export function getBananaSpawnCandidates(map: MapHandle): Vector3[] {
   return defaultArenaSpawnPoints()
 }
 
+/** Keeps two floor crates from stacking at the same XZ (double pickup / double throw). */
+const BANANA_PICKUP_MIN_SPACING_XZ = 2.0
+
+function xzTooCloseToPlaced(
+  x: number,
+  z: number,
+  placed: readonly { x: number; z: number }[],
+): boolean {
+  for (const q of placed) {
+    if (Math.hypot(q.x - x, q.z - z) < BANANA_PICKUP_MIN_SPACING_XZ) return true
+  }
+  return false
+}
+
 function placeOnTerrain(
   pts: Vector3[],
   terrain: TerrainPhysics,
@@ -85,6 +99,7 @@ function placeOnTerrain(
     const hit = terrain.raycastDown(o.x, 22, o.z, 200)
     if (!hit) continue
     if (isBlast(hit.point)) continue
+    if (xzTooCloseToPlaced(o.x, o.z, out)) continue
     out.push({ x: o.x, y: hit.point.y, z: o.z })
   }
 }
@@ -98,6 +113,8 @@ export class BananaWorld {
   pickups: BananaPickupRecord[] = []
   peels: BananaPeelRecord[] = []
   private flying: { pos: Vector3; vel: Vector3; mesh: Object3D; start: Vector3 } | null = null
+  /** Invalidates in-flight `cloneFlyingVisual` if the player throws again before the prior await finishes. */
+  private localThrowSeq = 0
   private respawnTimeouts: ReturnType<typeof setTimeout>[] = []
   private floorPickupRespawnListener: ((p: FloorPickupRespawnPayload) => void) | null = null
 
@@ -359,7 +376,10 @@ export class BananaWorld {
     list: { id: string; x: number; y: number; z: number }[],
   ): Promise<void> {
     this.clear()
+    const seenIds = new Set<string>()
     for (const it of list) {
+      if (seenIds.has(it.id)) continue
+      seenIds.add(it.id)
       const m = await this.clonePickupVisual()
       const yVis = it.y + gameConfig.bananaPickupVisualYOffset
       m.position.set(it.x, yVis, it.z)
@@ -464,8 +484,14 @@ export class BananaWorld {
    * Local start throw: flying mesh + will land via tickFlying.
    */
   private async beginLocalThrowAsync(muzzle: Vector3, cam: PerspectiveCamera): Promise<void> {
+    const seq = ++this.localThrowSeq
     this.clearFlying()
     const mesh = await this.cloneFlyingVisual()
+    if (seq !== this.localThrowSeq) {
+      this.scene.remove(mesh)
+      disposeBananaVisual(mesh)
+      return
+    }
     this.scene.add(mesh)
     mesh.position.copy(muzzle)
     cam.getWorldDirection(_aim)
