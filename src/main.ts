@@ -43,8 +43,10 @@ import { BotFighter, type BotMode } from './boxing/bot'
 import { PlayerArms } from './boxing/playerArms'
 import { VoiceChargeManager, audioBufferSliceToWavBlob } from './audio/voiceCharge'
 import { playLocalVoiceRecordReleaseSfx, playLocalVoiceRecordStartSfx } from './audio/voiceRecordUiSfx'
-import { TWEAKS_PANEL_ENABLED } from './buildMode'
-/* Tweaks load when `TWEAKS_PANEL_ENABLED` (default: dev / non-public; prod + `VITE_ENABLE_TWEAKS=true` enables). */
+import { IS_PUBLIC_BUILD, TWEAKS_PANEL_ENABLED } from './buildMode'
+/* Tweaks load when `TWEAKS_PANEL_ENABLED` (default: dev / non-public; prod + `VITE_ENABLE_TWEAKS=true` enables).
+ * `IS_PUBLIC_BUILD` is the master public-bundle flag — used to strip diagnostic globals
+ * even when tweaks are intentionally re-enabled for production layout tuning. */
 import {
   startTutorial,
   isTutorialPending,
@@ -504,12 +506,16 @@ async function copyMpDiagnosticReport(): Promise<void> {
   }
 }
 
-const _w = window as unknown as {
-  __VIBEJAM_MP_REPORT__?: () => string
-  vibejamMpReport?: () => string
+/* Diagnostic globals are dev-only: tree-shaken from public builds (Vercel prod
+ * sets VITE_PUBLIC_BUILD=true) so players can't dump session state from DevTools. */
+if (!IS_PUBLIC_BUILD) {
+  const _w = window as unknown as {
+    __VIBEJAM_MP_REPORT__?: () => string
+    vibejamMpReport?: () => string
+  }
+  _w.__VIBEJAM_MP_REPORT__ = logMpDiagnosticToConsole
+  _w.vibejamMpReport = logMpDiagnosticToConsole
 }
-_w.__VIBEJAM_MP_REPORT__ = logMpDiagnosticToConsole
-_w.vibejamMpReport = logMpDiagnosticToConsole
 
 function mpDebugLogSend(obj: Record<string, unknown>): void {
   if (!DEBUG_MP) return
@@ -5124,37 +5130,43 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       if (textChatOpen) return
     }
 
-    /** 1 dummy · 2 smart · 3 toggle bot · R = lobby reload after match end, else round reset (offline). */
-    const shortcutBlock =
-      tweaksPanelOpen ||
-      leaveMatchDialogOpen ||
-      winFinisher ||
-      multiplayerBlocksPlay() ||
-      seriesTransitionActive
-    if (!shortcutBlock) {
-      switch (e.code) {
-        case 'Digit1':
-          e.preventDefault()
-          recreateBot('dummy')
-          return
-        case 'Digit2':
-          e.preventDefault()
-          recreateBot('smart')
-          return
-        case 'Digit3':
-          e.preventDefault()
-          recreateBot(botMode === 'dummy' ? 'smart' : 'dummy')
-          return
-        case 'KeyR':
-          e.preventDefault()
-          if (matchOutcome) {
-            returnToLobbyReload(isOnline && lobby.mode === 'online')
+    /** 1 dummy · 2 smart · 3 toggle bot · R = lobby reload after match end, else round reset (offline).
+     * Dev-only: gated behind TWEAKS_PANEL_ENABLED so production bundles tree-shake
+     * the entire shortcut switch — public players cannot bot-scan or rematch via keyboard.
+     * Stays enabled in dev/preview, and in public builds that opt-in to layout tuning via
+     * `VITE_ENABLE_TWEAKS=true` (matches the tweaks panel mount gate). */
+    if (TWEAKS_PANEL_ENABLED) {
+      const shortcutBlock =
+        tweaksPanelOpen ||
+        leaveMatchDialogOpen ||
+        winFinisher ||
+        multiplayerBlocksPlay() ||
+        seriesTransitionActive
+      if (!shortcutBlock) {
+        switch (e.code) {
+          case 'Digit1':
+            e.preventDefault()
+            recreateBot('dummy')
             return
-          }
-          instantHudRematch()
-          return
-        default:
-          break
+          case 'Digit2':
+            e.preventDefault()
+            recreateBot('smart')
+            return
+          case 'Digit3':
+            e.preventDefault()
+            recreateBot(botMode === 'dummy' ? 'smart' : 'dummy')
+            return
+          case 'KeyR':
+            e.preventDefault()
+            if (matchOutcome) {
+              returnToLobbyReload(isOnline && lobby.mode === 'online')
+              return
+            }
+            instantHudRematch()
+            return
+          default:
+            break
+        }
       }
     }
 
