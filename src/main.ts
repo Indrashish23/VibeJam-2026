@@ -1750,8 +1750,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     size: 0.58,
     transparent: true,
     opacity: 0,
+    /* Occlude behind world mesh; keep depthWrite off so soft particles blend cleanly. */
     depthWrite: false,
-    depthTest: false,
+    depthTest: true,
     sizeAttenuation: true,
   })
   const opponentDangerSmoke = new Points(opponentDangerSmokeGeom, opponentDangerSmokeMat)
@@ -3903,6 +3904,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       playerHurt = 'none'
       playerHurtRecoverLeft = 0
       hideStunnedFxOverlay()
+      bot.setIntentInputs(playerPercent, enemyPercent)
     } else {
       enemyPercent = 0
       respawnInvulnUntilFoe = until
@@ -3914,6 +3916,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       }
       bot.alignFacingToward(camera.position)
       bot.beginRespawnMeshFlash(invulnMs)
+      bot.setIntentInputs(playerPercent, enemyPercent)
     }
     /* Set invuln window BEFORE clearing the ring-out latch so a stale incoming
      * pose can't double-deduct stocks between these two state mutations. */
@@ -4002,6 +4005,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       playerHurt = 'none'
       playerHurtRecoverLeft = 0
       hideStunnedFxOverlay()
+      bot.setIntentInputs(playerPercent, enemyPercent)
     } else {
       enemyPercent = 0
       respawnInvulnUntilFoe = until
@@ -4013,6 +4017,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         bot.networkTargetPos.copy(bot.root.position)
       }
       bot.beginRespawnMeshFlash(invulnMs)
+      bot.setIntentInputs(playerPercent, enemyPercent)
     }
     syncHud()
     warpRapierCapsulesToCurrentActors()
@@ -4222,6 +4227,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     prevShake.set(0, 0, 0)
     if (hitFlashEl) hitFlashEl.style.opacity = '0'
     arms.resetAll()
+    bot.setIntentInputs(playerPercent, enemyPercent)
     chargingLmb = false
     clearPistolState()
     {
@@ -4784,14 +4790,15 @@ async function initGame(lobby: LobbyResult): Promise<void> {
             triggerLaunchPercent150Spectacle()
             bot.applyLaunchPercentCataclysm(_knDir)
           } else {
-            const launchMul = launchKnockMulFromPercent(enemyPercent)
+            /* Knock for this strike scales from launch % *before* this hit (fresh stock = true 0%). */
+            const launchMul = launchKnockMulFromPercent(prevEnemyPct)
             const chargeKnockT =
               gameConfig.knockVoiceMinMul +
               shotT * (gameConfig.knockVoiceMaxMul - gameConfig.knockVoiceMinMul)
             bot.applyKnockback(
               _knDir,
               gameConfig.knockbackOnBot * launchMul * pistolKnockMul * chargeKnockT,
-              enemyPercent,
+              prevEnemyPct,
               botAimY,
             )
           }
