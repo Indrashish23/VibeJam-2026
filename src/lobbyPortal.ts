@@ -21,6 +21,7 @@ import {
   Clock,
   DoubleSide,
   Group,
+  LoadingManager,
   MathUtils,
   Mesh,
   PerspectiveCamera,
@@ -33,7 +34,21 @@ import {
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { defaultGameConfig, gameConfig, type GameConfigKey } from './gameConfig'
 
-const LOBBY_PORTAL_URL = new URL('../Assets/Props/portall.gltf', import.meta.url).href
+const LOBBY_PORTAL_GLTF_URL = new URL('../Assets/Props/portall.gltf', import.meta.url).href
+/*
+ * Multi-file GLTF (gltf + bin + texture) — Vite hashes each filename independently, so the
+ * relative `"uri": "portall0.bin"` inside the gltf JSON points at a stale name in production.
+ * We import the companion `.bin` via `new URL` (Vite emits + hashes it) and remap inside a
+ * `LoadingManager` so GLTFLoader resolves the correct hashed URL at runtime.
+ *
+ * The albedo texture in the gltf is NOT imported: we replace both submesh materials with
+ * custom shaders, so loading the 1.4 MB albedo would be pure waste. The URL modifier
+ * substitutes a 1×1 transparent PNG instead, which the loader accepts without warnings.
+ */
+const LOBBY_PORTAL_BIN_URL = new URL('../Assets/Props/portall0.bin', import.meta.url).href
+/** 1×1 transparent PNG (data URL) — placeholder for the throwaway portal albedo texture. */
+const PORTAL_DUMMY_TEX_DATA_URL =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNgYAAAAAMAAWgmWQ0AAAAASUVORK5CYII='
 
 const PORTAL_INNER_NODE_NAME = 'portalMesh'
 /** Vibe Jam 2026 webring exit URL — receives forwarded query params. */
@@ -282,8 +297,22 @@ export function mountLobbyPortal(gameRoot: HTMLElement): LobbyPortalHandle {
 
   void (async () => {
     try {
-      const loader = new GLTFLoader()
-      const gltf = await loader.loadAsync(LOBBY_PORTAL_URL)
+      const manager = new LoadingManager()
+      manager.setURLModifier((rawUrl) => {
+        /*
+         * three.js resolves the gltf's relative URIs against its own URL, so requests look
+         * like `<...>/portall0.bin` or `<...>/textures/tripo_mat_..._albedo.png`. Map the
+         * `.bin` to the Vite-emitted hashed URL. The albedo is not used (materials are
+         * replaced with custom shaders) — point it at a 1×1 transparent placeholder so we
+         * skip the 1.4 MB download.
+         */
+        if (rawUrl.endsWith('portall0.bin')) return LOBBY_PORTAL_BIN_URL
+        if (rawUrl.includes('tripo_mat_') && rawUrl.endsWith('_albedo.png'))
+          return PORTAL_DUMMY_TEX_DATA_URL
+        return rawUrl
+      })
+      const loader = new GLTFLoader(manager)
+      const gltf = await loader.loadAsync(LOBBY_PORTAL_GLTF_URL)
       const root = gltf.scene
       portalRoot.add(root)
       root.traverse((obj) => {

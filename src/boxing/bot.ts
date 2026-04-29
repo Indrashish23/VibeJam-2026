@@ -25,12 +25,14 @@ import {
   applyMonkeyFlatVertexPixelatedStyle,
 } from './monkeyVisualStyle'
 import { VoiceProjectileVisual } from './voiceProjectileVisual'
+import { PROJECTILE_R } from './playerArms'
 import {
   pickClipForSlot,
   type AvatarBaseClip,
   type AvatarClipName,
   type AvatarOneShotClip,
 } from './localPlayerAvatar'
+import { applyProjectileArenaBounds } from '../physics/projectileArenaBounds'
 import { advanceProjectilePastTerrain } from '../physics/projectileTerrain'
 import type { TerrainPhysics } from '../physics/terrainPhysics'
 
@@ -1388,6 +1390,15 @@ export class BotFighter {
         this.clearProjectile()
       } else {
         this.projPos.copy(this.projTerrainResolve)
+        if (
+          applyProjectileArenaBounds(
+            this.projPos,
+            this.projVel,
+            PROJECTILE_R * this.projSizeMul,
+          )
+        ) {
+          this.clearProjectile()
+        }
       }
       return
     }
@@ -1421,6 +1432,15 @@ export class BotFighter {
       return
     }
     this.projPos.copy(this.projTerrainResolve)
+    if (
+      applyProjectileArenaBounds(
+        this.projPos,
+        this.projVel,
+        PROJECTILE_R * this.projSizeMul,
+      )
+    ) {
+      this.clearProjectile()
+    }
   }
 
   /** PvP only: hide incoming fist once it reaches local player torso (does not affect authority). */

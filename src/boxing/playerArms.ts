@@ -1,5 +1,6 @@
 import { PerspectiveCamera, Scene, Vector3 } from 'three'
 import { gameConfig } from '../gameConfig'
+import { applyProjectileArenaBounds } from '../physics/projectileArenaBounds'
 import { advanceProjectilePastTerrain } from '../physics/projectileTerrain'
 import type { TerrainPhysics } from '../physics/terrainPhysics'
 import { VoiceProjectileVisual } from './voiceProjectileVisual'
@@ -240,6 +241,27 @@ export class PlayerArms {
     return this.proj.hitAudio
   }
 
+  /** Headscan (modes 1–2): ray origin and unit direction for LOS checks. */
+  peekHeadscanRay(outOrigin: Vector3, outDirUnit: Vector3): boolean {
+    if (!this.hitscanMode || !this.proj.active) return false
+    outOrigin.copy(this.hitscanOrigin)
+    outDirUnit.copy(this.hitscanDir)
+    if (outDirUnit.lengthSq() > 1e-12) outDirUnit.normalize()
+    return true
+  }
+
+  /** Signed distance along the headscan ray to the perpendicular approach of `target` (clamped to max range). */
+  headscanDistanceParamAlongRay(target: Vector3): number {
+    this._tmp.subVectors(target, this.hitscanOrigin)
+    const len = this.hitscanDir.length()
+    if (len < 1e-8) return 0
+    const ux = this.hitscanDir.x / len
+    const uy = this.hitscanDir.y / len
+    const uz = this.hitscanDir.z / len
+    const t = this._tmp.x * ux + this._tmp.y * uy + this._tmp.z * uz
+    return Math.max(0, Math.min(gameConfig.punchMaxRange, t))
+  }
+
   /**
    * Late-bind audio to the currently-active projectile. Lets `releaseVoiceShot`
    * fire the visual immediately and then attach the decoded clip when ready
@@ -314,13 +336,25 @@ export class PlayerArms {
           this.resetProjectile()
         } else {
           this.proj.pos.copy(this._terrainResolve)
+          if (
+            applyProjectileArenaBounds(
+              this.proj.pos,
+              this.proj.vel,
+              PROJECTILE_R * this.proj.sizeMul,
+            )
+          ) {
+            this.resetProjectile()
+          }
         }
         return
       }
-      const rad = PROJECTILE_R * this.proj.sizeMul
-      const hw = gameConfig.groundWidth / 2 + rad
-      const hd = gameConfig.groundDepth / 2 + rad
-      if (Math.abs(this.proj.pos.x) > hw || Math.abs(this.proj.pos.z) > hd) {
+      if (
+        applyProjectileArenaBounds(
+          this.proj.pos,
+          this.proj.vel,
+          PROJECTILE_R * this.proj.sizeMul,
+        )
+      ) {
         this.resetProjectile()
       }
       return
@@ -355,46 +389,28 @@ export class PlayerArms {
         this.resetProjectile()
       } else {
         this.proj.pos.copy(this._terrainResolve)
+        if (
+          applyProjectileArenaBounds(
+            this.proj.pos,
+            this.proj.vel,
+            PROJECTILE_R * this.proj.sizeMul,
+          )
+        ) {
+          this.resetProjectile()
+        }
       }
       return
     }
 
-    if (this.resolveArenaImpact()) {
+    if (
+      applyProjectileArenaBounds(
+        this.proj.pos,
+        this.proj.vel,
+        PROJECTILE_R * this.proj.sizeMul,
+      )
+    ) {
       this.resetProjectile()
     }
-  }
-
-  private resolveArenaImpact(): boolean {
-    const rad = PROJECTILE_R * this.proj.sizeMul
-    const hw = gameConfig.groundWidth / 2 - rad * 0.5
-    const hd = gameConfig.groundDepth / 2 - rad * 0.5
-    const minY = rad
-
-    /* Rest on the deck: clamp Y / damp; do not destroy the shot (was reset before). */
-    if (
-      Math.abs(this.proj.pos.x) <= hw &&
-      Math.abs(this.proj.pos.z) <= hd &&
-      this.proj.pos.y <= minY + 0.1
-    ) {
-      this.proj.pos.y = minY
-      this.proj.vel.y = 0
-      this.proj.vel.x *= 0.8
-      this.proj.vel.z *= 0.8
-    }
-
-    let hit = false
-    if (Math.abs(this.proj.pos.x) > hw) {
-      this.proj.pos.x = Math.sign(this.proj.pos.x) * hw
-      this.proj.vel.x = 0
-      hit = true
-    }
-    if (Math.abs(this.proj.pos.z) > hd) {
-      this.proj.pos.z = Math.sign(this.proj.pos.z) * hd
-      this.proj.vel.z = 0
-      hit = true
-    }
-    if (hit) this.proj.vel.set(0, 0, 0)
-    return hit
   }
 
   private resetProjectile(): void {

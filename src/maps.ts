@@ -38,6 +38,9 @@ export function mapDefsForLobby(): MapDef[] {
 
 export type SpawnSlot = 'a' | 'b'
 
+/** World XZ rectangle for sampling random grounded feet on arena GLB maps. */
+export type RandomFootXZBounds = { minX: number; maxX: number; minZ: number; maxZ: number }
+
 export function isMapId(value: unknown): value is MapId {
   return value === 'arena' || value === 'default'
 }
@@ -71,6 +74,11 @@ export type MapHandle = {
    * Combined with {@link pickGroundedRespawnFoot} + TerrainPhysics for grounded picks.
    */
   getRespawnFootCandidates: (slot: SpawnSlot) => Vector3[]
+  /**
+   * Arena GLB only: world XZ rectangle (inset from exported mesh bounds) used to sample
+   * random grounded bot spawns via raycast.
+   */
+  arenaRandomFootBounds?: RandomFootXZBounds
   /** Remove the map's geometry from the scene and dispose its GPU resources. */
   dispose: () => void
 }
@@ -419,6 +427,27 @@ async function loadArenaExportMap(_scene: Scene, hubRoot: Group): Promise<MapHan
   }
 
   const bbox = new Box3().setFromObject(gltf.scene)
+  const margin = 2.0
+  let arMinX = bbox.min.x + margin
+  let arMaxX = bbox.max.x - margin
+  let arMinZ = bbox.min.z + margin
+  let arMaxZ = bbox.max.z - margin
+  if (arMaxX < arMinX) {
+    const c = (bbox.min.x + bbox.max.x) * 0.5
+    arMinX = c - 0.35
+    arMaxX = c + 0.35
+  }
+  if (arMaxZ < arMinZ) {
+    const c = (bbox.min.z + bbox.max.z) * 0.5
+    arMinZ = c - 0.35
+    arMaxZ = c + 0.35
+  }
+  const arenaRandomFootBounds: RandomFootXZBounds = {
+    minX: arMinX,
+    maxX: arMaxX,
+    minZ: arMinZ,
+    maxZ: arMaxZ,
+  }
   const topY = Number.isFinite(bbox.max.y) ? bbox.max.y : 0
   const dropTopY = topY + 6
   const fallbackA = new Vector3(0, dropTopY, 6.8)
@@ -450,6 +479,7 @@ async function loadArenaExportMap(_scene: Scene, hubRoot: Group): Promise<MapHan
     id: 'arena',
     collisionMeshes,
     bananaSpawnPoints: bananaSpawnPoints.length > 0 ? bananaSpawnPoints : undefined,
+    arenaRandomFootBounds,
     isBlastZone(pos: Vector3): boolean {
       return pos.y < gameConfig.blastY
     },

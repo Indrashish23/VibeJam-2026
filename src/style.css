@@ -1773,6 +1773,33 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
   margin-left: 0;
 }
 
+/**
+ * Banana RMB hint (`Assets/UI/HUD/ui_itemcontrols.svg`): left-aligned with the banana
+ * nameplate, directly above the player card (not centered on the fruit).
+ */
+.hud-item-controls-wrap {
+  position: relative;
+  z-index: 2;
+  flex-shrink: 0;
+  align-self: flex-start;
+  width: 100%;
+  max-width: min(28rem, min(72vw, 85vmin));
+  margin: 0 0 -0.15rem;
+  pointer-events: none;
+}
+
+.hud-item-controls-wrap[hidden] {
+  display: none !important;
+}
+
+.hud-item-controls-img {
+  display: block;
+  width: min(100%, 27rem);
+  height: auto;
+  margin: 0;
+  transform-origin: 0 100%;
+}
+
 .hud-player-card {
   position: relative;
   z-index: 1;

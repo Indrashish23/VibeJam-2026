@@ -38,7 +38,7 @@ import { PointerLockControls } from 'three/addons/controls/PointerLockControls.j
 import { gameConfig } from './gameConfig'
 import { bumpPlayerRecord } from './playerRecord'
 import { isMapId, loadMap, type MapHandle, type MapId, type SpawnSlot } from './maps'
-import { pickGroundedRespawnFoot } from './spawnRespawn'
+import { pickGroundedRespawnFoot, pickRandomGroundedFootInBounds } from './spawnRespawn'
 import { BotFighter, type BotMode } from './boxing/bot'
 import { PlayerArms } from './boxing/playerArms'
 import { VoiceChargeManager, audioBufferSliceToWavBlob } from './audio/voiceCharge'
@@ -107,6 +107,7 @@ import {
 import { setPartyKitHostSession, getPartyKitHost } from './net/partyKitHost'
 import { createProceduralSky } from './skyDome'
 import { TerrainPhysics } from './physics/terrainPhysics'
+import { advanceProjectilePastTerrain } from './physics/projectileTerrain'
 import {
   bootstrapMpDebugUrl,
   isMpDebugMode,
@@ -131,6 +132,10 @@ const chargeBarFillMaskUrl = `${import.meta.env.BASE_URL}ui/ChargeBarFillMask.sv
 /** Full chrome layer while voice charge is capped (swap back to {@link chargeBarTopUrl} on release). */
 const chargeBarMaxUrl = `${import.meta.env.BASE_URL}ui/ui_chargebar_max.svg`
 const chargeMicIconUrl = `${import.meta.env.BASE_URL}ui/mic_icon.svg`
+const hudItemControlsSvgUrl = new URL(
+  '../Assets/UI/HUD/ui_itemcontrols.svg',
+  import.meta.url,
+).href
 
 /** Production without baked host: open once with `?pk=your-deployment.partykit.dev` (stored in session). */
 try {
@@ -206,6 +211,12 @@ const hudPlayerCardEl = document.getElementById('hud-player-card') as HTMLDivEle
 const hudPortraitColumnEl = document.getElementById('hud-portrait-column') as HTMLDivElement | null
 const hudPortraitWrapShellEl = document.getElementById('hud-portrait-wrap-shell') as HTMLDivElement | null
 const hudStockYouShellEl = document.getElementById('hud-stock-you-shell') as HTMLDivElement | null
+const hudItemControlsWrapEl = document.getElementById(
+  'hud-item-controls-wrap',
+) as HTMLDivElement | null
+const hudItemControlsImgEl = document.getElementById(
+  'hud-item-controls-img',
+) as HTMLImageElement | null
 const legacyHudStockFoeShellEl = document.getElementById('hud-stock-foe-shell') as HTMLDivElement | null
 /* Safety net: remove any stale foe stock HUD shell from older local markup/builds. */
 legacyHudStockFoeShellEl?.remove()
@@ -234,6 +245,7 @@ let chargeChromeShowsMaxArt = false
 if (chargeWedgeEmptyImg) chargeWedgeEmptyImg.src = chargeBarEmptyUrl
 if (chargeWedgeTopImg) chargeWedgeTopImg.src = chargeBarTopUrl
 if (chargeHudMicImg) chargeHudMicImg.src = chargeMicIconUrl
+if (hudItemControlsImgEl) hudItemControlsImgEl.src = hudItemControlsSvgUrl
 if (chargeBarWrap) {
   chargeBarWrap.style.setProperty('--charge-fill-mask', `url('${chargeBarFillMaskUrl}')`)
   chargeBarWrap.style.setProperty('--charge-pct', '0%')
@@ -546,6 +558,8 @@ const _muzzleWorld = new Vector3()
 const _aimDir = new Vector3()
 const _moveStart = new Vector3()
 const _moveDesired = new Vector3()
+const _headscanRayEnd = new Vector3()
+const _headscanWallHit = new Vector3()
 
 function sleepMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -1307,8 +1321,20 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     return pvpBananaInventory[myPvpRole()] > 0
   }
 
+  function syncHudBananaItemHint(): void {
+    if (!hudItemControlsWrapEl) return
+    const show =
+      getMyBananaHeld() &&
+      !isPlayerBananaSlipNow() &&
+      !matchOutcome &&
+      !seriesTransitionActive &&
+      mpPhase === 'live'
+    hudItemControlsWrapEl.hidden = !show
+  }
+
   function syncBananaHandVis(): void {
     bananaWorld.handGroup.visible = getMyBananaHeld() && !isPlayerBananaSlipNow()
+    syncHudBananaItemHint()
   }
 
   /** Peer monkey holds the banana mesh when their inventory has one (hidden during banana slip). */
@@ -1328,27 +1354,31 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   async function initBananaRound(): Promise<void> {
     const n = Math.max(0, Math.round(gameConfig.bananaPickupCount))
-    playerBananaSlipUntil = 0
-    resetBananaSlipCamRoll()
-    fpPresentationState.storedPitchBob = 0
-    fpPresentationState.storedRollTotal = 0
-    fpPresentationState.walkPhase = 0
-    fpPresentationState.storedCamBobY = 0
-    resetCameraSpringArm()
-    localHasBanana = false
-    pvpBananaInventory = { host: 0, guest: 0 }
-    nextBananaPeelId = 1
-    bananaWorld.clear()
-    bananaWorld.handGroup.visible = false
-    bananaWorld.opponentBananaGroup.visible = false
-    if (n <= 0) return
-    if (!isPvp()) {
-      await bananaWorld.respawnLocal(map, terrainPhysics, n)
-      return
-    }
-    if (lobby.mode === 'online' && lobby.role === 'host') {
-      const list = await bananaWorld.respawnLocal(map, terrainPhysics, n)
-      pvpHostBroadcastOnly({ type: 'bananaInit', pickups: list })
+    try {
+      playerBananaSlipUntil = 0
+      resetBananaSlipCamRoll()
+      fpPresentationState.storedPitchBob = 0
+      fpPresentationState.storedRollTotal = 0
+      fpPresentationState.walkPhase = 0
+      fpPresentationState.storedCamBobY = 0
+      resetCameraSpringArm()
+      localHasBanana = false
+      pvpBananaInventory = { host: 0, guest: 0 }
+      nextBananaPeelId = 1
+      bananaWorld.clear()
+      bananaWorld.handGroup.visible = false
+      bananaWorld.opponentBananaGroup.visible = false
+      if (n <= 0) return
+      if (!isPvp()) {
+        await bananaWorld.respawnLocal(map, terrainPhysics, n)
+        return
+      }
+      if (lobby.mode === 'online' && lobby.role === 'host') {
+        const list = await bananaWorld.respawnLocal(map, terrainPhysics, n)
+        pvpHostBroadcastOnly({ type: 'bananaInit', pickups: list })
+      }
+    } finally {
+      syncBananaHandVis()
     }
   }
 
@@ -1670,6 +1700,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let stocksFoe = Math.max(1, Math.round(gameConfig.startStocks))
   let respawnInvulnUntilYou = 0
   let respawnInvulnUntilFoe = 0
+  /** Arena: last planned opponent root (random deck sample) for PvP spawn-settled checks. */
+  const arenaOpponentPlannedRoot = new Vector3()
   /** Offline: ring-out victim is mid-KO pipeline (prevents duplicate KOs while still in blast). */
   let offlineBlastKoPending: null | 'you' | 'foe' = null
   const hostKoRespawnTimers = new Map<'host' | 'guest', ReturnType<typeof setTimeout>>()
@@ -2156,7 +2188,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     const slots = spawnSlots()
     const cam = map.getPlayerSpawn(slots.player, eyeH())
     const fo = bot.getFootOffset()
-    const opp = resolveArenaBotRootOnDeck(map.getBotSpawn(slots.opponent, fo), fo)
+    const opp =
+      map.id === 'arena'
+        ? arenaOpponentPlannedRoot.clone()
+        : resolveArenaBotRootOnDeck(map.getBotSpawn(slots.opponent, fo), fo)
     return { cam, camFeetY: cam.y - eyeH(), opp }
   }
 
@@ -2319,9 +2354,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (isOnline && lobby.mode === 'online') {
       spawnActors()
       const { opponent } = spawnSlots()
-      const foNet = bot.getFootOffset()
-      const rawNet = map.getBotSpawn(opponent, foNet)
-      const placedNet = resolveArenaBotRootOnDeck(rawNet, foNet)
+      const placedNet = bot.root.position.clone()
       bot.dispose(scene)
       botMode = 'network'
       bot = new BotFighter(scene, 'network', map.getBotSpawn(opponent, 0), {
@@ -3941,10 +3974,15 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   function applyOfflineRespawnFeet(victim: 'you' | 'foe'): void {
     const slots = spawnSlots()
     const slot = victim === 'you' ? slots.player : slots.opponent
-    const candidates = map.getRespawnFootCandidates(slot)
-    let feet = pickGroundedRespawnFoot(terrainPhysics, map, candidates)
-    if (!feet) {
-      feet = new Vector3().copy(map.getPlayerSpawn(slot, 0))
+    let feet: Vector3
+    if (victim === 'foe' && map.id === 'arena' && map.arenaRandomFootBounds) {
+      feet =
+        pickRandomGroundedFootInBounds(terrainPhysics, map, map.arenaRandomFootBounds) ??
+        pickGroundedRespawnFoot(terrainPhysics, map, map.getRespawnFootCandidates(slot)) ??
+        new Vector3().copy(map.getPlayerSpawn(slot, 0))
+    } else {
+      const candidates = map.getRespawnFootCandidates(slot)
+      feet = pickGroundedRespawnFoot(terrainPhysics, map, candidates) ?? new Vector3().copy(map.getPlayerSpawn(slot, 0))
     }
 
     const invulnMs = gameConfig.respawnInvulnMs
@@ -3954,7 +3992,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       playerPercent = 0
       respawnInvulnUntilYou = until
       camera.position.set(feet.x, feet.y + eyeH(), feet.z)
-      const oppSpawn = map.getBotSpawn(slots.opponent, bot.getFootOffset())
+      const oppSpawn = bot.root.position.clone()
       const yaw = yawFacing(camera.position, oppSpawn)
       camera.rotation.reorder('YXZ')
       camera.rotation.set(0, yaw, 0)
@@ -3969,6 +4007,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       respawnInvulnUntilFoe = until
       bot.resetRoundState()
       bot.root.position.set(feet.x, feet.y + bot.getFootOffset(), feet.z)
+      if (map.id === 'arena') arenaOpponentPlannedRoot.copy(bot.root.position)
       bot.alignFacingToward(camera.position)
       if (bot.mode === 'network') {
         bot.networkTargetPos.copy(bot.root.position)
@@ -4103,6 +4142,17 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     return v
   }
 
+  /** Arena: random XZ on the deck (raycast + walkable normal), else authored spawn + snap. */
+  function pickArenaRandomBotRoot(footOffset: number): Vector3 {
+    if (map.id === 'arena' && map.arenaRandomFootBounds) {
+      const feet = pickRandomGroundedFootInBounds(terrainPhysics, map, map.arenaRandomFootBounds)
+      if (feet) {
+        return new Vector3(feet.x, feet.y + footOffset, feet.z)
+      }
+    }
+    return resolveArenaBotRootOnDeck(map.getBotSpawn(spawnSlots().opponent, footOffset), footOffset)
+  }
+
   /** Immediately sync PvP pose so the peer’s puppet snaps to spawn after a round reset. */
   function flushPvpSpawnPose(): void {
     if (!isPvp()) return
@@ -4134,7 +4184,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     const slots = spawnSlots()
     const playerSpawn = map.getPlayerSpawn(slots.player, eyeH())
     const fo = bot.getFootOffset()
-    const botSpawn = resolveArenaBotRootOnDeck(map.getBotSpawn(slots.opponent, fo), fo)
+    const botSpawn = pickArenaRandomBotRoot(fo)
+    if (map.id === 'arena') arenaOpponentPlannedRoot.copy(botSpawn)
     const yaw = yawFacing(playerSpawn, botSpawn)
 
     camera.position.copy(playerSpawn)
@@ -4385,9 +4436,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     botMode = mode
     bot = new BotFighter(scene, botMode, new Vector3(0, 40, 0))
     const foRb = bot.getFootOffset()
-    const slotsRb = spawnSlots()
-    const rawRb = map.getBotSpawn(slotsRb.opponent, foRb)
-    const placedRb = resolveArenaBotRootOnDeck(rawRb, foRb)
+    const placedRb = pickArenaRandomBotRoot(foRb)
+    if (map.id === 'arena') arenaOpponentPlannedRoot.copy(placedRb)
     bot.root.position.copy(placedRb)
     bot.networkTargetPos.copy(placedRb)
     bot.alignFacingToward(camera.position)
@@ -4681,7 +4731,27 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     /* Player projectile vs bot — dedicated listen server validates shots when authPvp() */
     const localInvulnShoot = performance.now() >= respawnInvulnUntilYou
     if (arms.canDealHit() && localInvulnShoot && !authPvp()) {
-      if (arms.isHeadscan()) {
+      let headscanWallFirst = false
+      if (arms.isHeadscan() && terrainPhysics) {
+        if (arms.peekHeadscanRay(_moveStart, _aimDir)) {
+          _headscanRayEnd.copy(_moveStart).addScaledVector(_aimDir, gameConfig.punchMaxRange)
+          if (
+            advanceProjectilePastTerrain(
+              terrainPhysics,
+              _moveStart,
+              _headscanRayEnd,
+              _headscanWallHit,
+            )
+          ) {
+            const tWall = _moveStart.distanceTo(_headscanWallHit)
+            const tBot = arms.headscanDistanceParamAlongRay(bot.bodyCenter)
+            if (tWall < tBot - 0.12) headscanWallFirst = true
+          }
+        }
+      }
+      if (headscanWallFirst) {
+        arms.markDealt()
+      } else if (arms.isHeadscan()) {
         arms.getHeadscanContactPoint(bot.bodyCenter, _fp)
       } else {
         arms.getProjectileContactPoint(bot.bodyCenter, _fp)
@@ -4690,7 +4760,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       const dxHit = _fp.x - bot.bodyCenter.x
       const dyHit = _fp.y - bot.bodyCenter.y
       const dzHit = _fp.z - bot.bodyCenter.z
-      if (Math.hypot(dxHit, dyHit * 0.75, dzHit) < reach) {
+      if (!headscanWallFirst && Math.hypot(dxHit, dyHit * 0.75, dzHit) < reach) {
         const shotT = arms.peekShotT()
         const isPistolShot = arms.peekIsPistolShot()
         const hitAudio = arms.takeHitAudio()
@@ -4728,7 +4798,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           triggerHitImpactFx()
           bot.flashVictimInvuln(gameConfig.hitVictimWhiteFlashMs)
         }
-      } else if (arms.isHeadscan()) {
+      } else if (!headscanWallFirst && arms.isHeadscan()) {
         arms.markDealt()
       }
     }
