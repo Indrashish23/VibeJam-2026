@@ -367,13 +367,13 @@ export const defaultGameConfig = {
   /** Ms cooldown before another Shift dash. */
   dashCooldownMs: 820,
   /** After opponent ring-out (win), wait this many ms before flashing GAME. */
-  winRingoutPresentDelayMs: 0,
+  winRingoutPresentDelayMs: 2000,
   /**
    * After a final-stock KO is detected, wait this long before showing the GAME splash so
    * the player can watch the ragdoll arc / blast spectacle play out. Applies to both win
    * and lose paths (your own ringout also gets the cinematic moment).
    */
-  winRingoutPreSplashDelayMs: 0,
+  winRingoutPreSplashDelayMs: 3000,
   /**
    * After the GAME splash + match-end overlay paints, automatically dissolve
    * back to the main menu. The "Return to Lobby" button is just a skip; this
@@ -396,7 +396,7 @@ export const defaultGameConfig = {
   /** Stocks per fighter at match start / round reset (Smash-style ring-outs). */
   startStocks: 2,
   /** Hold KO name + stock HUD punch animation before teleport respawn (ms). */
-  koAnnounceHoldMs: 200,
+  koAnnounceHoldMs: 1000,
   /** Invulnerability after respawn — no incoming/outgoing combat (ms). */
   respawnInvulnMs: 2000,
   /** Enemy mesh flash cadence during respawn invuln (blinks per second). */
