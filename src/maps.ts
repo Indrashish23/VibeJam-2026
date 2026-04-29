@@ -84,10 +84,10 @@ function normalizeSceneName(name: string): string {
 }
 
 /**
- * GLB / Blender object naming for static Rapier trimesh: include `col_` (preferred),
- * `coll_…`, or `collision…` in the name. Parents count — meshes can be children of a
- * `col_…` group. Avoid naming visuals `color…` / `colum…` (those are ignored by the
- * `col` prefix path below).
+ * GLB / Blender object naming for static Rapier trimesh (rebuilt from `arena_export.glb` each load):
+ * `col_*` (e.g. `col_arena`, `col_mesh`, `col_block`), `coll_…`, or `collision…`.
+ * Parents count — a `Mesh` under an empty named `col_mesh` / `col_…` is included.
+ * Avoid naming visuals `color…` / `colum…` (those are ignored by the `col` prefix path below).
  */
 function isCollisionNodeName(name: string): boolean {
   const n = normalizeSceneName(name)
@@ -220,6 +220,12 @@ function collectGltfArenaData(root: Group): {
     }
   })
   return { collisionMeshes, spawnA, spawnB, looseSpawns }
+}
+
+function logArenaCollisionMeshesDev(meshes: Mesh[]): void {
+  if (!import.meta.env.DEV) return
+  const names = meshes.map((m) => m.name || '(unnamed mesh)')
+  console.info(`[map:arena] Collision → Rapier (${meshes.length} mesh(es)):`, names.join(' | '))
 }
 
 function collectBananaSpawnEmpties(root: Group): Vector3[] {
@@ -372,7 +378,7 @@ async function loadArenaExportMap(_scene: Scene, hubRoot: Group): Promise<MapHan
   let collisionMeshes = tagged
   if (collisionMeshes.length === 0) {
     console.warn(
-      '[map:arena] No collision meshes with col_* naming. Add a single mesh named e.g. col_arena.',
+      '[map:arena] No collision meshes found (need names like col_arena, col_mesh, or parent col_*). Re-export arena_export.glb with Mesh collision objects.',
     )
     const fallback: Mesh[] = []
     gltf.scene.updateMatrixWorld(true)
@@ -392,6 +398,7 @@ async function loadArenaExportMap(_scene: Scene, hubRoot: Group): Promise<MapHan
   } else {
     console.info('[map:arena] 1 collision mesh → Rapier trimesh.')
   }
+  logArenaCollisionMeshesDev(collisionMeshes)
 
   applyTriplanarToArenaVisuals(gltf.scene)
 
