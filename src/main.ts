@@ -70,7 +70,7 @@ import {
 import { createBrowserHostAuthority } from './net/browserHostAuthority'
 import { isAuthoritativeListenServer } from './net/transportConfig'
 import { simBananaThrowToLanding, feetOnPeel, isFeetInPickUpRange } from './net/bananaSim'
-import { BananaWorld } from './powerups/bananaWorld'
+import { BananaWorld, BANANA_FLOOR_RESPAWN_SEC } from './powerups/bananaWorld'
 import { MegaphoneFpProp } from './weapons/megaphoneProp'
 import {
   createWebRtcGameChannel,
@@ -1266,6 +1266,18 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     else sendMp(msg)
   }
 
+  bananaWorld.setFloorPickupRespawnListener((payload) => {
+    if (lobby.mode === 'online' && lobby.role === 'host' && isPvp()) {
+      pvpHostBroadcastOnly({
+        type: 'bananaPickupRespawn',
+        id: payload.id,
+        x: payload.x,
+        y: payload.y,
+        z: payload.z,
+      })
+    }
+  })
+
   function myPvpRole(): 'host' | 'guest' {
     if (lobby.mode === 'online') return lobby.role
     return 'host'
@@ -1366,6 +1378,21 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         typeof data.peelId === 'string'
       ) {
         applyBananaAuthSlip(data.victimRole, data.ms, data.peelId)
+      } else if (
+        ty === 'bananaPickupRespawn' &&
+        typeof data.id === 'string' &&
+        typeof data.x === 'number' &&
+        typeof data.y === 'number' &&
+        typeof data.z === 'number'
+      ) {
+        if (lobby.mode === 'online' && lobby.role === 'guest') {
+          void bananaWorld.addNetworkFloorPickup({
+            id: data.id,
+            x: data.x,
+            y: data.y,
+            z: data.z,
+          })
+        }
       }
     }
   }
@@ -1374,8 +1401,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     who: 'host' | 'guest',
     pickupId: string,
   ): void {
+    const scheduleRespawn =
+      !isPvp() || (lobby.mode === 'online' && lobby.role === 'host')
     pvpBananaInventory[who] = 1
-    bananaWorld.removePickupById(pickupId)
+    bananaWorld.removePickupById(
+      pickupId,
+      scheduleRespawn ? { respawnAfterMs: BANANA_FLOOR_RESPAWN_SEC * 1000 } : undefined,
+    )
     syncBananaHandVis()
     syncOpponentBananaHandVis()
   }
@@ -2731,6 +2763,27 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     ) {
       if (isPvp() && mpPhase === 'live') {
         applyBananaAuthSlip(data.victimRole, data.ms, data.peelId)
+      } else {
+        pendingBananaMsgs.push(data)
+      }
+      return
+    }
+    if (
+      ty === 'bananaPickupRespawn' &&
+      typeof data.id === 'string' &&
+      typeof data.x === 'number' &&
+      typeof data.y === 'number' &&
+      typeof data.z === 'number'
+    ) {
+      if (isPvp() && mpPhase === 'live') {
+        if (lobby.mode === 'online' && lobby.role === 'guest') {
+          void bananaWorld.addNetworkFloorPickup({
+            id: data.id,
+            x: data.x,
+            y: data.y,
+            z: data.z,
+          })
+        }
       } else {
         pendingBananaMsgs.push(data)
       }
@@ -4696,7 +4749,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
             if (isFeetInPickUpRange(_bFeet, pick, pr)) {
               if (!localHasBanana) {
                 localHasBanana = true
-                bananaWorld.removePickupById(pick.id)
+                bananaWorld.removePickupById(pick.id, {
+                  respawnAfterMs: BANANA_FLOOR_RESPAWN_SEC * 1000,
+                })
                 syncBananaHandVis()
               }
               break

@@ -267,6 +267,8 @@ export const TWEAK_RANGE = {
   lightingUnlitEnemyModel: { min: 0, max: 1, step: 1 },
 
   hideLobbyUi: { min: 0, max: 1, step: 1 },
+  lobbyMenuModalOffsetXRem: { min: -12, max: 12, step: 0.05 },
+  lobbyMenuModalOffsetYRem: { min: -12, max: 12, step: 0.05 },
   lobbyMonkeyFlatShading: { min: 0, max: 1, step: 1 },
   lobbyMonkeyTexPixelated: { min: 0, max: 1, step: 1 },
   lobbyMonkeyTexDownscale: { min: 0, max: 1, step: 1 },
@@ -627,6 +629,8 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   sunPosY: 'Sun Y (world m)',
   sunPosZ: 'Sun Z (world m)',
   hideLobbyUi: 'Hide lobby HTML (menu card) for screenshots',
+  lobbyMenuModalOffsetXRem: 'Main menu: Play card translate X (rem)',
+  lobbyMenuModalOffsetYRem: 'Main menu: Play card translate Y (rem)',
   lobbyMonkeyFlatShading: 'Lobby monkey flat faceted shading',
   lobbyMonkeyTexPixelated: 'Lobby monkey nearest-neighbor textures',
   lobbyMonkeyTexDownscale: 'Lobby monkey 4× texture downscale (reload menu)',
@@ -1082,6 +1086,10 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
 
   hideLobbyUi:
     '1 = hides the main-menu card (buttons, browser) so only the 3D canvas shows; Tweaks stays open for capture. 0 = normal.',
+  lobbyMenuModalOffsetXRem:
+    'Nudges only the Play modal card horizontally (rem). The logo above stays fixed. Positive = right.',
+  lobbyMenuModalOffsetYRem:
+    'Nudges only the Play modal card vertically (rem). Positive = down.',
   lobbyMonkeyFlatShading:
     '1 = faceted normals on the lobby GLB. 0 = smooth shading (PBR). Updates live.',
   lobbyMonkeyTexPixelated:
@@ -1754,6 +1762,8 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
     title: 'Lobby (menu preview)',
     keys: [
       'hideLobbyUi',
+      'lobbyMenuModalOffsetXRem',
+      'lobbyMenuModalOffsetYRem',
       'lobbyMonkeyFlatShading',
       'lobbyMonkeyTexPixelated',
       'lobbyMonkeyTexDownscale',

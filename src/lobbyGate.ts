@@ -14,6 +14,15 @@ import {
 } from './net/quickMatchQueue'
 import { getCoarseRegion } from './net/regionTag'
 
+const RAGE_BAIT_LOGO_URL = new URL('../Assets/UI/RageBaitLogo.svg', import.meta.url).href
+
+function syncLobbyMenuModalOffsetsFromConfig(): void {
+  const ov = document.getElementById('lobby-overlay')
+  if (!ov) return
+  ov.style.setProperty('--lobby-modal-offset-x', `${gameConfig.lobbyMenuModalOffsetXRem}rem`)
+  ov.style.setProperty('--lobby-modal-offset-y', `${gameConfig.lobbyMenuModalOffsetYRem}rem`)
+}
+
 export function randomRoomId(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
   let s = ''
@@ -157,6 +166,8 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
       sun: backdrop.sun,
       keysThatSkipRoundReset: [
         'hideLobbyUi',
+        'lobbyMenuModalOffsetXRem',
+        'lobbyMenuModalOffsetYRem',
         'lobbyMonkeyFlatShading',
         'lobbyMonkeyTexPixelated',
         'lobbyMonkeyTexDownscale',
@@ -185,11 +196,16 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
       syncVisualsFromConfig: () => {
         backdrop.syncLobbyBackdropFromConfig()
         document.body.classList.toggle('hide-lobby-html-ui', gameConfig.hideLobbyUi >= 0.5)
+        syncLobbyMenuModalOffsetsFromConfig()
       },
       onToggle: () => {},
     })
     disposeLobbyTweaks = () => mounted.dispose()
   }
+
+  const brandImg = document.getElementById('lobby-brand-logo') as HTMLImageElement | null
+  if (brandImg) brandImg.src = RAGE_BAIT_LOGO_URL
+  syncLobbyMenuModalOffsetsFromConfig()
 
   const ui = wireLobbyDom()
   const queueUi = wireQueueDom()

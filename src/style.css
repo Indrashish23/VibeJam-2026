@@ -235,6 +235,8 @@ body {
 }
 
 .lobby-overlay {
+  --lobby-modal-offset-x: 0rem;
+  --lobby-modal-offset-y: 0rem;
   position: fixed;
   inset: 0;
   z-index: 18;
@@ -286,6 +288,7 @@ body.hide-lobby-html-ui #lobby-overlay {
 .lobby-card--menu {
   width: min(100%, 26rem);
   max-width: 100%;
+  transform: translate(var(--lobby-modal-offset-x, 0rem), var(--lobby-modal-offset-y, 0rem));
 }
 
 .lobby-shell {
@@ -300,9 +303,31 @@ body.hide-lobby-html-ui #lobby-overlay {
 }
 
 .lobby-main-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.85rem;
   flex: 0 1 auto;
   min-width: 0;
   transition: transform 0.28s ease;
+}
+
+.lobby-brand {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  max-width: min(28rem, 100%);
+  pointer-events: none;
+}
+
+.lobby-brand-logo {
+  width: 100%;
+  max-width: min(22rem, 92vw);
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.45));
 }
 
 .lobby-overlay--settings-open .lobby-main-column {

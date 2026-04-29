@@ -77,7 +77,7 @@ export type MapHandle = {
 
 const ARENA_EXPORT_GLB_URL = new URL('../Assets/Maps/arena_export.glb', import.meta.url).href
 /** Uniform scale for authored arena GLB (collision + spawns use world space after this). */
-const ARENA_EXPORT_SCALE = 1.2
+const ARENA_EXPORT_SCALE = 1.4
 
 function normalizeSceneName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')

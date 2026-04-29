@@ -749,6 +749,10 @@ export const defaultGameConfig = {
 
   /** 1 = hide main-menu HTML card (buttons) for screenshots; Tweaks panel still works. */
   hideLobbyUi: 0,
+  /** Main-menu Play card: horizontal nudge (rem); translateX on the modal only (logo stays put). */
+  lobbyMenuModalOffsetXRem: 0,
+  /** Main-menu Play card: vertical nudge (rem); translateY on the modal only. */
+  lobbyMenuModalOffsetYRem: 0,
   /** Lobby monkey: faceted per-face shading. */
   lobbyMonkeyFlatShading: 1,
   /** Lobby monkey: nearest-neighbor maps (chunky texels). */

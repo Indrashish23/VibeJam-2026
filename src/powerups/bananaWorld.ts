@@ -46,6 +46,9 @@ export type BananaPickupRecord = {
   mesh: Object3D
 }
 
+/** Seconds before a collected floor pickup reappears at the same spot. */
+export const BANANA_FLOOR_RESPAWN_SEC = 10
+
 /**
  * Procedural XZ points inside the default arena, away from spawns.
  */
@@ -86,6 +89,8 @@ function placeOnTerrain(
   }
 }
 
+export type FloorPickupRespawnPayload = { id: string; x: number; y: number; z: number }
+
 export class BananaWorld {
   readonly handGroup: Group
   private readonly scene: Scene
@@ -93,6 +98,8 @@ export class BananaWorld {
   pickups: BananaPickupRecord[] = []
   peels: BananaPeelRecord[] = []
   private flying: { pos: Vector3; vel: Vector3; mesh: Object3D; start: Vector3 } | null = null
+  private respawnTimeouts: ReturnType<typeof setTimeout>[] = []
+  private floorPickupRespawnListener: ((p: FloorPickupRespawnPayload) => void) | null = null
 
   /** Normalized banana (bottom on y=0, ~0.55 units tall); clones only, never added to scene. */
   private bananaPivot: Group | null = null
@@ -183,7 +190,8 @@ export class BananaWorld {
     const pivot = await this.loadBananaTemplate()
     const node = pivot.clone(true)
     node.name = 'bananaPickupCrate'
-    const glow = new PointLight(0xffe588, 0.85, 5.2, 1.35)
+    /* Red glow for floor pickups (distinct from yellow peel / hand). */
+    const glow = new PointLight(0xff3344, 1.15, 7, 1.15)
     glow.name = 'bananaPickupGlow'
     node.add(glow)
     return node
@@ -283,7 +291,14 @@ export class BananaWorld {
     this.handGroup.rotation.z = Math.sin(tt * 1.65) * 0.017 * sway
   }
 
+  /** Host notifies peer when a floor pickup respawns (PvP). Offline: optional no-op. */
+  setFloorPickupRespawnListener(cb: ((p: FloorPickupRespawnPayload) => void) | null): void {
+    this.floorPickupRespawnListener = cb
+  }
+
   clear(): void {
+    for (const t of this.respawnTimeouts) clearTimeout(t)
+    this.respawnTimeouts = []
     for (const p of this.pickups) {
       this.scene.remove(p.mesh)
       disposeBananaVisual(p.mesh)
@@ -368,13 +383,50 @@ export class BananaWorld {
     }
   }
 
-  removePickupById(id: string): void {
+  removePickupById(id: string, opts?: { respawnAfterMs?: number | null }): void {
     const i = this.pickups.findIndex((p) => p.id === id)
     if (i < 0) return
     const p = this.pickups[i]!
+    const { x, y, z } = p
     this.scene.remove(p.mesh)
     disposeBananaVisual(p.mesh)
     this.pickups.splice(i, 1)
+    const ms = opts?.respawnAfterMs
+    if (typeof ms === 'number' && ms > 0) {
+      const handle = window.setTimeout(() => {
+        const idx = this.respawnTimeouts.indexOf(handle)
+        if (idx >= 0) this.respawnTimeouts.splice(idx, 1)
+        void this.respawnFloorPickupAt(x, y, z)
+      }, ms)
+      this.respawnTimeouts.push(handle)
+    }
+  }
+
+  /** Guest: add pickup spawned by host after respawn timer (same id as host). */
+  async addNetworkFloorPickup(p: FloorPickupRespawnPayload): Promise<void> {
+    if (this.pickups.some((q) => q.id === p.id)) return
+    const m = await this.clonePickupVisual()
+    const yVis = p.y + gameConfig.bananaPickupVisualYOffset
+    m.position.set(p.x, yVis, p.z)
+    this.scene.add(m)
+    this.pickups.push({
+      id: p.id,
+      x: p.x,
+      y: p.y,
+      z: p.z,
+      baseY: yVis,
+      mesh: m,
+    })
+  }
+
+  private async respawnFloorPickupAt(x: number, y: number, z: number): Promise<void> {
+    const id = `p${this.nextId++}`
+    const m = await this.clonePickupVisual()
+    const yVis = y + gameConfig.bananaPickupVisualYOffset
+    m.position.set(x, yVis, z)
+    this.scene.add(m)
+    this.pickups.push({ id, x, y, z, baseY: yVis, mesh: m })
+    this.floorPickupRespawnListener?.({ id, x, y, z })
   }
 
   private async addPeelAsync(
