@@ -2,7 +2,6 @@
  * Single entry, static imports only — keeps the production bundle one chunk and fast to parse (Vibe Jam instant-play goal).
  */
 import './style.css'
-import { inject } from '@vercel/analytics'
 import {
   AmbientLight,
   BasicShadowMap,
@@ -125,8 +124,6 @@ import {
   smokeIntensity01,
   triggerHudDamageShake,
 } from './hud/localPlayerHud'
-
-if (import.meta.env.PROD) inject()
 
 /** Stunned FX SVGs live in `public/ui/` so Vercel/production resolves them without bundling `../Assets/`. */
 const stunnedEffectBgUrl = `${import.meta.env.BASE_URL}ui/StunnedEffectBg.svg`
@@ -2493,7 +2490,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     tryPointerLock()
     window.setTimeout(() => {
       if (mpToast) mpToast.hidden = true
-    }, 4200)
+    }, 1200)
   }
 
   function scheduleMpBegin(): void {
@@ -2522,7 +2519,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         mpOpponentName = 'Player'
       }
       void runMpBeginNow()
-    }, 550)
+    }, 50)
   }
 
   function hideMatchEndOverlayFully(): void {

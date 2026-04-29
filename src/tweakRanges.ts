@@ -78,6 +78,7 @@ export const TWEAK_RANGE = {
   botPunchRange: { min: 2, max: 20, step: 0.2 },
   botHitRadius: { min: 0.5, max: 6, step: 0.05 },
   botSmartPreferredRange: { min: 2, max: 24, step: 0.1 },
+  botSmartProjectileHomingAccel: { min: 0, max: 48, step: 0.5 },
   botSmartRangeBand: { min: 0.4, max: 6, step: 0.05 },
   botSmartRetreatRange: { min: 1, max: 16, step: 0.1 },
   botSmartMoveSpeedMul: { min: 0.1, max: 1.4, step: 0.02 },
@@ -551,6 +552,7 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   botPunchRange: 'Bot engage range',
   botHitRadius: 'Bot fist hit radius',
   botSmartPreferredRange: 'Smart bot preferred range',
+  botSmartProjectileHomingAccel: 'Smart bot fist homing (XZ accel)',
   botSmartRangeBand: 'Smart bot ring band',
   botSmartRetreatRange: 'Smart bot retreat range',
   botSmartMoveSpeedMul: 'Smart bot move speed ×',
@@ -1358,6 +1360,8 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   botHitRadius: 'Hit detection radius on the bot’s projectile.',
   botSmartPreferredRange:
     'Smart bot target spacing from you before it prefers orbiting instead of charging straight in.',
+  botSmartProjectileHomingAccel:
+    'Extra horizontal acceleration (world u/s²) bending smart/dummy voice fists toward you. 0 = straight flight. Does not affect PvP human shots.',
   botSmartRangeBand:
     'Half-width of the preferred range band used to decide chase vs flank.',
   botSmartRetreatRange:
@@ -1581,6 +1585,7 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'botPunchRange',
       'botHitRadius',
       'botSmartPreferredRange',
+      'botSmartProjectileHomingAccel',
       'botSmartRangeBand',
       'botSmartRetreatRange',
       'botSmartMoveSpeedMul',

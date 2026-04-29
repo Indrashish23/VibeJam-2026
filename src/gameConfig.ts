@@ -367,13 +367,13 @@ export const defaultGameConfig = {
   /** Ms cooldown before another Shift dash. */
   dashCooldownMs: 820,
   /** After opponent ring-out (win), wait this many ms before flashing GAME. */
-  winRingoutPresentDelayMs: 2000,
+  winRingoutPresentDelayMs: 0,
   /**
    * After a final-stock KO is detected, wait this long before showing the GAME splash so
    * the player can watch the ragdoll arc / blast spectacle play out. Applies to both win
    * and lose paths (your own ringout also gets the cinematic moment).
    */
-  winRingoutPreSplashDelayMs: 3000,
+  winRingoutPreSplashDelayMs: 0,
   /**
    * After the GAME splash + match-end overlay paints, automatically dissolve
    * back to the main menu. The "Return to Lobby" button is just a skip; this
@@ -396,7 +396,7 @@ export const defaultGameConfig = {
   /** Stocks per fighter at match start / round reset (Smash-style ring-outs). */
   startStocks: 2,
   /** Hold KO name + stock HUD punch animation before teleport respawn (ms). */
-  koAnnounceHoldMs: 1000,
+  koAnnounceHoldMs: 200,
   /** Invulnerability after respawn — no incoming/outgoing combat (ms). */
   respawnInvulnMs: 2000,
   /** Enemy mesh flash cadence during respawn invuln (blinks per second). */
@@ -417,15 +417,20 @@ export const defaultGameConfig = {
   /** Smart bot: attack window as multiplier of botPunchRange (kept high so smart bot still pressures from range). */
   botSmartAttackRangeMul: 4,
   /** Smart bot: telegraph/aim wind-up before firing (ms). */
-  botSmartAimMs: 340,
+  botSmartAimMs: 272,
   /** Smart bot: cooldown after firing (ms). */
-  botSmartRecoverMs: 420,
+  botSmartRecoverMs: 336,
   /** Smart bot: minimum time between shots (ms). */
-  botSmartShotCooldownMs: 1550,
+  botSmartShotCooldownMs: 1240,
+  /**
+   * Smart/dummy bot only: horizontal homing acceleration (world units/s²) on voice fists;
+   * bends trajectory toward the player. 0 = off. Tuned ~20% stronger than a mild baseline.
+   */
+  botSmartProjectileHomingAccel: 12,
   /** Smart bot: default turn speed (rad/s). */
   botSmartTurnRate: 9.8,
-  /** Smart bot: faster turn speed while aiming (rad/s). */
-  botSmartAimTurnRate: 14,
+  /** Smart bot: faster turn speed while aiming (rad/s). ~20% above prior default for tracking. */
+  botSmartAimTurnRate: 16.8,
   /** Smart bot: shot speed range independent of player voice ranges. */
   botSmartShotSpeedMinMul: 0.34,
   botSmartShotSpeedMaxMul: 1.12,

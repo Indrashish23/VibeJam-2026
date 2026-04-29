@@ -1378,42 +1378,69 @@ export class BotFighter {
     }
   }
 
-  private integrateProjectile(delta: number, terrain: TerrainPhysics): void {
+  /** Mild horizontal homing for smart/dummy bot fists only (PvP network shots unchanged). */
+  private applyBotProjectileHoming(delta: number, playerForHoming: Vector3 | null): void {
+    if (!playerForHoming) return
+    if (this.mode !== 'smart' && this.mode !== 'dummy') return
+    const h = gameConfig.botSmartProjectileHomingAccel
+    if (h < 1e-6) return
+    _projHomingTmp.set(
+      playerForHoming.x - this.projPos.x,
+      0,
+      playerForHoming.z - this.projPos.z,
+    )
+    const len = Math.hypot(_projHomingTmp.x, _projHomingTmp.z)
+    if (len < 0.08) return
+    _projHomingTmp.multiplyScalar(1 / len)
+    this.projVel.x += _projHomingTmp.x * h * delta
+    this.projVel.z += _projHomingTmp.z * h * delta
+  }
+
+  private integrateProjectile(
+    delta: number,
+    terrain: TerrainPhysics,
+    playerForHoming: Vector3 | null,
+  ): void {
     if (!this.projFlying) return
+    /** Local AI fists pass through Rapier terrain walls (still respect max range + synthetic rim). */
+    const passThroughTerrainWalls = this.mode === 'smart' || this.mode === 'dummy'
     this.projIntegratePrev.copy(this.projPos)
     const maxR = gameConfig.punchMaxRange
     const g = gameConfig.fistGravity
     const drag = gameConfig.fistAirDrag
 
     if (g < 1e-6 && drag < 1e-6) {
+      this.applyBotProjectileHoming(delta, playerForHoming)
       this.projPos.addScaledVector(this.projVel, delta)
       _work.subVectors(this.projPos, this.projSpawn)
       if (_work.length() > maxR + 1e-3) {
         this.clearProjectile()
         return
       }
-      if (
-        advanceProjectilePastTerrain(
-          terrain,
-          this.projIntegratePrev,
-          this.projPos,
-          this.projTerrainResolve,
-        )
-      ) {
-        this.projPos.copy(this.projTerrainResolve)
-        this.clearProjectile()
-      } else {
-        this.projPos.copy(this.projTerrainResolve)
+      if (!passThroughTerrainWalls) {
         if (
-          this.useSyntheticProjectileBounds &&
-          applyProjectileArenaBounds(
+          advanceProjectilePastTerrain(
+            terrain,
+            this.projIntegratePrev,
             this.projPos,
-            this.projVel,
-            PROJECTILE_R * this.projSizeMul,
+            this.projTerrainResolve,
           )
         ) {
+          this.projPos.copy(this.projTerrainResolve)
           this.clearProjectile()
+          return
         }
+        this.projPos.copy(this.projTerrainResolve)
+      }
+      if (
+        this.useSyntheticProjectileBounds &&
+        applyProjectileArenaBounds(
+          this.projPos,
+          this.projVel,
+          PROJECTILE_R * this.projSizeMul,
+        )
+      ) {
+        this.clearProjectile()
       }
       return
     }
@@ -1426,6 +1453,7 @@ export class BotFighter {
     const ascentScale =
       this.projVel.y > 0 ? Math.max(0.05, gameConfig.fistAscentGravityScale) : 1
     this.projVel.y -= g * ascentScale * delta
+    this.applyBotProjectileHoming(delta, playerForHoming)
     this.projPos.addScaledVector(this.projVel, delta)
 
     _work.subVectors(this.projPos, this.projSpawn)
@@ -1434,19 +1462,21 @@ export class BotFighter {
       return
     }
 
-    if (
-      advanceProjectilePastTerrain(
-        terrain,
-        this.projIntegratePrev,
-        this.projPos,
-        this.projTerrainResolve,
-      )
-    ) {
+    if (!passThroughTerrainWalls) {
+      if (
+        advanceProjectilePastTerrain(
+          terrain,
+          this.projIntegratePrev,
+          this.projPos,
+          this.projTerrainResolve,
+        )
+      ) {
+        this.projPos.copy(this.projTerrainResolve)
+        this.clearProjectile()
+        return
+      }
       this.projPos.copy(this.projTerrainResolve)
-      this.clearProjectile()
-      return
     }
-    this.projPos.copy(this.projTerrainResolve)
     if (
       this.useSyntheticProjectileBounds &&
       applyProjectileArenaBounds(
@@ -1505,7 +1535,7 @@ export class BotFighter {
       this.bodyCenter.copy(this.root.position)
       this.bodyCenter.y += this.feetFromCenter * 0.52
 
-      this.integrateProjectile(delta, terrain)
+      this.integrateProjectile(delta, terrain, null)
       this.clearProjectileNearLocalPlayer(playerPos)
       this.projVfx.update({
         active: this.projActive && this.projFlying,
@@ -1619,7 +1649,7 @@ export class BotFighter {
       }
     }
 
-    this.integrateProjectile(delta, terrain)
+    this.integrateProjectile(delta, terrain, playerPos)
     this.projVfx.update({
       active: this.projActive && this.projFlying,
       position: this.projPos,
@@ -1668,6 +1698,7 @@ const _muzzleForSolve = new Vector3()
 const _moveStart = new Vector3()
 const _moveDesired = new Vector3()
 const _steerTmp = new Vector3()
+const _projHomingTmp = new Vector3()
 
 function gaussianRand(): number {
   const u1 = Math.random() || 1e-9
