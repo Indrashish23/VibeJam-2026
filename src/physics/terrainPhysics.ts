@@ -108,6 +108,13 @@ function meshToTrimesh(mesh: Mesh): { vertices: Float32Array; indices: Uint32Arr
 
 export class TerrainPhysics {
   private readonly world: RAPIER.World
+  /** Ray hit scratch — returned from {@link raycastDown}; do not retain references across calls. */
+  private readonly _rayHitPoint = new Vector3()
+  private readonly _rayHitNormal = new Vector3()
+  private readonly _capsuleDm = new Vector3()
+  private readonly _capsuleTotal = new Vector3()
+  private readonly _capsuleWorkFeet = new Vector3()
+  private readonly _capsuleStep = new Vector3()
   /** Trimesh colliders created without an explicit rigid body (e.g. GLTF terrain). */
   private readonly terrainColliders: Collider[] = []
   /** Fixed rigid bodies for explicit cuboid terrain (default arena). Removed via `removeRigidBody`. */
@@ -246,7 +253,7 @@ export class TerrainPhysics {
     const dt = Math.min(1 / 30, Math.max(1 / 360, deltaSeconds))
     this.world.timestep = dt
 
-    const dm = desiredMovement.clone()
+    const dm = this._capsuleDm.copy(desiredMovement)
     const dmLen = dm.length()
     if (dmLen > MAX_DESIRED_MOVEMENT_PER_FRAME) dm.multiplyScalar(MAX_DESIRED_MOVEMENT_PER_FRAME / dmLen)
 
@@ -254,8 +261,8 @@ export class TerrainPhysics {
     const n = Math.max(1, Math.ceil(mag / MAX_CHARACTER_TRANSLATION_PER_SOLVE))
     const slice = dm.multiplyScalar(1 / n)
 
-    const totalMovement = new Vector3(0, 0, 0)
-    const workFeet = feet.clone()
+    const totalMovement = this._capsuleTotal.set(0, 0, 0)
+    const workFeet = this._capsuleWorkFeet.copy(feet)
     let grounded = false
     let floorY: number | null = null
 
@@ -274,7 +281,7 @@ export class TerrainPhysics {
       )
 
       const rawMove = actor.controller.computedMovement()
-      const stepMove = new Vector3(rawMove.x, rawMove.y, rawMove.z)
+      const stepMove = this._capsuleStep.set(rawMove.x, rawMove.y, rawMove.z)
       totalMovement.add(stepMove)
       workFeet.add(stepMove)
 
@@ -326,8 +333,8 @@ export class TerrainPhysics {
     if (!hit) return null
     const toi = rayColliderIntersectionToi(hit)
     return {
-      point: new Vector3(x, y - toi, z),
-      normal: new Vector3(hit.normal.x, hit.normal.y, hit.normal.z),
+      point: this._rayHitPoint.set(x, y - toi, z),
+      normal: this._rayHitNormal.set(hit.normal.x, hit.normal.y, hit.normal.z),
     }
   }
 

@@ -4,7 +4,6 @@
 import './style.css'
 import {
   AmbientLight,
-  BasicShadowMap,
   CapsuleGeometry,
   Clock,
   Color,
@@ -25,6 +24,7 @@ import {
   Points,
   PointsMaterial,
   PerspectiveCamera,
+  PCFSoftShadowMap,
   Quaternion,
   Scene,
   Vector3,
@@ -791,6 +791,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let mpSeqStarted = false
   let mpBeginTimer: ReturnType<typeof setTimeout> | null = null
   let poseSendAcc = 0
+  let poseSendAccBot = 0
   const seenVoiceShotIds = new Set<string>()
   /** Peer voice clips keyed by shotId — play when authoritative authDamage confirms a hit. */
   const pendingPeerShotAudioById = new Map<string, AudioBuffer>()
@@ -816,16 +817,18 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   )
 
   const renderer = new WebGLRenderer({ antialias: true })
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+  /** HiDPI cap — composer fragment cost scales ~pixelRatio²; 1.25 keeps clarity without 2× shading load. */
+  const effectiveRenderPixelRatio = () => Math.min(window.devicePixelRatio, 1.25)
+  renderer.setPixelRatio(effectiveRenderPixelRatio())
   renderer.setSize(window.innerWidth, window.innerHeight)
   renderer.shadowMap.enabled = true
-  /* Hard-edged shadows (harsher than PCF soft). */
-  renderer.shadowMap.type = BasicShadowMap
+  /* Softer edges at reduced shadow map resolution (was BasicShadowMap @ 4K). */
+  renderer.shadowMap.type = PCFSoftShadowMap
   /** Canvas first in DOM so HUD / hit-flash overlays stack above it. */
   gameRoot.prepend(renderer.domElement)
 
   const composer = new EffectComposer(renderer)
-  composer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+  composer.setPixelRatio(effectiveRenderPixelRatio())
   const pixelPass = new RenderPixelatedPass(Math.max(1, gameConfig.retroPixelScale), scene, camera, {
     normalEdgeStrength: Math.max(0, gameConfig.retroEdgeStrength * 0.65),
     depthEdgeStrength: Math.max(0, gameConfig.retroEdgeStrength),
@@ -850,6 +853,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   const ditherUniforms = ditherPass.uniforms as Record<string, { value: unknown }>
   composer.addPass(ditherPass)
   composer.setSize(window.innerWidth, Math.max(window.innerHeight, 1))
+
+  let lastRetroPixelScale = Number.NaN
+  let lastRetroEdgeStrength = Number.NaN
 
   const controls = new PointerLockControls(camera, renderer.domElement)
   setUserSettingsPointerControls(controls)
@@ -903,7 +909,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   /* Low sun angle → longer, harsher shadows on the deck. */
   sun.position.set(gameConfig.sunPosX, gameConfig.sunPosY, gameConfig.sunPosZ)
   sun.castShadow = true
-  sun.shadow.mapSize.set(4096, 4096)
+  sun.shadow.mapSize.set(2048, 2048)
   sun.shadow.camera.near = 0.5
   sun.shadow.camera.far = 220
   sun.shadow.bias = -0.0004
@@ -3288,6 +3294,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       ),
     })
     poseSendAcc = 0
+    poseSendAccBot = 0
   }
 
   function tryPlayVictimPendingShot(shotId: string, buf: AudioBuffer | null): void {
@@ -4308,6 +4315,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       speedN: 0,
     })
     poseSendAcc = 0
+    poseSendAccBot = 0
   }
 
   function spawnActors(): void {
@@ -5356,6 +5364,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   function onResize() {
     const w = window.innerWidth
     const h = Math.max(window.innerHeight, 1)
+    const dpr = effectiveRenderPixelRatio()
+    renderer.setPixelRatio(dpr)
+    composer.setPixelRatio(dpr)
     camera.aspect = w / h
     camera.updateProjectionMatrix()
     renderer.setSize(w, h)
@@ -5594,6 +5605,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   let debugMpHb = 0
+  /** When true, gameRoot dash-tilt transform is already cleared (skip redundant style writes). */
+  let dashTiltHudCleared = true
   function animate() {
     const delta = Math.min(clock.getDelta(), gameConfig.movementMaxDelta)
     const wantFov = Math.max(20, Math.min(120, gameConfig.cameraFov))
@@ -5693,10 +5706,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       lobbySmartBotActive &&
       rtcGame?.channel?.readyState === 'open'
     if (hostSideAi) {
-      poseSendAcc += delta
+      poseSendAccBot += delta
       const poseIvBot = 0.05
-      if (poseSendAcc >= poseIvBot) {
-        poseSendAcc -= poseIvBot
+      if (poseSendAccBot >= poseIvBot) {
+        poseSendAccBot -= poseIvBot
         const fy = bot.root.position.y - bot.getFootOffset()
         const oneShot = bot.peekNetAnimOneShotForPose()
         sendGameTraffic({
@@ -5818,9 +5831,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     dashTiltDeg *= Math.exp(-13.5 * delta)
     if (Math.abs(dashTiltDeg) < 0.08) {
       dashTiltDeg = 0
-      gameRoot.classList.remove('game-root--dash-tilt')
-      gameRoot.style.transform = ''
+      if (!dashTiltHudCleared) {
+        dashTiltHudCleared = true
+        gameRoot.classList.remove('game-root--dash-tilt')
+        gameRoot.style.transform = ''
+      }
     } else {
+      dashTiltHudCleared = false
       gameRoot.style.transform = `rotateZ(${dashTiltDeg.toFixed(3)}deg)`
     }
     if (dashScanEl) {
@@ -5858,12 +5875,18 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
     applyHitPresentation(delta)
 
-    // Retro post-process can be tuned live from Tweaks.
-    ;(pixelPass as unknown as { setPixelSize?: (v: number) => void }).setPixelSize?.(
-      Math.max(1, gameConfig.retroPixelScale),
-    )
-    pixelPass.depthEdgeStrength = Math.max(0, gameConfig.retroEdgeStrength)
-    pixelPass.normalEdgeStrength = Math.max(0, gameConfig.retroEdgeStrength * 0.65)
+    // Retro post-process — only touch GPU paths when Tweaks actually change values.
+    const retroPx = Math.max(1, gameConfig.retroPixelScale)
+    const retroEdge = Math.max(0, gameConfig.retroEdgeStrength)
+    if (retroPx !== lastRetroPixelScale) {
+      lastRetroPixelScale = retroPx
+      ;(pixelPass as unknown as { setPixelSize?: (v: number) => void }).setPixelSize?.(retroPx)
+    }
+    if (retroEdge !== lastRetroEdgeStrength) {
+      lastRetroEdgeStrength = retroEdge
+      pixelPass.depthEdgeStrength = retroEdge
+      pixelPass.normalEdgeStrength = retroEdge * 0.65
+    }
     syncCelOutlineConfig()
     ditherPass.enabled = gameConfig.postDitherEnabled >= 0.5 && gameConfig.postDitherStrength > 1e-4
     if (ditherPass.enabled) {

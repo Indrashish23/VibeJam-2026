@@ -4,7 +4,6 @@
  */
 import {
   AmbientLight,
-  BasicShadowMap,
   Clock,
   Color,
   DirectionalLight,
@@ -12,6 +11,7 @@ import {
   MathUtils,
   Mesh,
   PerspectiveCamera,
+  PCFSoftShadowMap,
   Scene,
   Vector3,
   WebGLRenderer,
@@ -99,10 +99,11 @@ export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<LobbyBa
   aimPreviewCamera(camera)
 
   const renderer = new WebGLRenderer({ antialias: true })
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+  const lobbyEffectiveDpr = () => Math.min(window.devicePixelRatio, 1.25)
+  renderer.setPixelRatio(lobbyEffectiveDpr())
   renderer.setSize(window.innerWidth, window.innerHeight)
   renderer.shadowMap.enabled = true
-  renderer.shadowMap.type = BasicShadowMap
+  renderer.shadowMap.type = PCFSoftShadowMap
   renderer.domElement.classList.add('lobby-backdrop-canvas')
   gameRoot.prepend(renderer.domElement)
 
@@ -112,7 +113,7 @@ export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<LobbyBa
   const sun = new DirectionalLight(0xffffff, gameConfig.sunIntensity)
   sun.position.set(gameConfig.sunPosX, gameConfig.sunPosY, gameConfig.sunPosZ)
   sun.castShadow = true
-  sun.shadow.mapSize.set(4096, 4096)
+  sun.shadow.mapSize.set(2048, 2048)
   sun.shadow.camera.near = 0.5
   sun.shadow.camera.far = 220
   sun.shadow.bias = -0.0004
@@ -206,6 +207,7 @@ export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<LobbyBa
   function resize(): void {
     const w = window.innerWidth
     const h = Math.max(window.innerHeight, 1)
+    renderer.setPixelRatio(lobbyEffectiveDpr())
     camera.aspect = w / h
     camera.updateProjectionMatrix()
     renderer.setSize(w, h)
