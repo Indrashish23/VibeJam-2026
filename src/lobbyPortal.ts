@@ -271,7 +271,10 @@ export function mountLobbyPortal(_gameRoot: HTMLElement): LobbyPortalHandle {
   camera.lookAt(new Vector3(0, 1.25, 0))
 
   const renderer = new WebGLRenderer({ alpha: true, antialias: true, premultipliedAlpha: false })
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+  /* Match the rest of the renderers (game + lobby backdrop) at 1.25 — composer-free
+   * but still cheaper on HiDPI than 2x. */
+  const portalEffectiveDpr = () => Math.min(window.devicePixelRatio, 1.25)
+  renderer.setPixelRatio(portalEffectiveDpr())
   renderer.setSize(window.innerWidth, window.innerHeight)
   renderer.setClearColor(0x000000, 0)
   renderer.domElement.classList.add('lobby-portal-canvas')
@@ -494,6 +497,7 @@ export function mountLobbyPortal(_gameRoot: HTMLElement): LobbyPortalHandle {
   function resize(): void {
     const w = window.innerWidth
     const h = Math.max(window.innerHeight, 1)
+    renderer.setPixelRatio(portalEffectiveDpr())
     camera.aspect = w / h
     camera.updateProjectionMatrix()
     renderer.setSize(w, h)

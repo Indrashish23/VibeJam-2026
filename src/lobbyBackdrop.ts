@@ -23,7 +23,7 @@ import {
 } from './boxing/monkeyVisualStyle'
 import { defaultGameConfig, gameConfig, type GameConfigKey } from './gameConfig'
 import { createLobbyHubUnlitSwapper } from './lobbyUnlitMaterials'
-import { mountLobbyPortal, type LobbyPortalHandle } from './lobbyPortal'
+import type { LobbyPortalHandle } from './lobbyPortal'
 import { createProceduralSky } from './skyDome'
 import { loadMap, type MapHandle } from './maps'
 
@@ -175,9 +175,21 @@ export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<LobbyBa
     monkeyRoot.scale.setScalar(Math.max(0.05, gameConfig.lobbyMonkeyScale))
   }
 
-  /* Vibe Jam webring exit portal — separate WebGL overlay above the vignette. Mounted
-   * alongside the backdrop so it shares the lobby lifecycle (pause / resume / dispose). */
-  const portal: LobbyPortalHandle = mountLobbyPortal(gameRoot)
+  /* Vibe Jam webring exit portal — separate WebGL overlay above the vignette.
+   * Lazy-imported so the portal module + portal.glb don't sit in the main bundle's
+   * critical path (the lobby still renders fine while the chunk streams in). */
+  let portal: LobbyPortalHandle | null = null
+  let portalPaused = false
+  let portalDisposed = false
+  void import('./lobbyPortal').then(({ mountLobbyPortal }) => {
+    if (portalDisposed) return
+    const handle = mountLobbyPortal(gameRoot)
+    portal = handle
+    handle.syncFromConfig()
+    if (portalPaused) handle.pauseRendering()
+  }).catch((err) => {
+    console.warn('[lobbyBackdrop] failed to load lobby portal chunk', err)
+  })
 
   function syncLobbyBackdropFromConfig(): void {
     setSceneBackgroundAndClearColor()
@@ -192,7 +204,7 @@ export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<LobbyBa
       texNearest: gameConfig.lobbyMonkeyTexPixelated >= 0.5,
     })
     syncLobbyMonkeyPoseFromConfig()
-    portal.syncFromConfig()
+    portal?.syncFromConfig()
   }
 
   syncLobbyBackdropFromConfig()
@@ -232,15 +244,17 @@ export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<LobbyBa
 
   function pauseRendering(): void {
     paused = true
-    portal.pauseRendering()
+    portalPaused = true
+    portal?.pauseRendering()
   }
 
   function resumeRendering(): void {
     if (disposed) return
     paused = false
+    portalPaused = false
     /* Reset clock so the first resumed frame doesn't burn a long delta on skyDome / animations. */
     clock.getDelta()
-    portal.resumeRendering()
+    portal?.resumeRendering()
   }
 
   window.addEventListener('resize', resize)
@@ -251,7 +265,8 @@ export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<LobbyBa
     disposed = true
     cancelAnimationFrame(rafId)
     window.removeEventListener('resize', resize)
-    portal.dispose()
+    portalDisposed = true
+    portal?.dispose()
     mapHandle.dispose()
     skyDome.dispose()
     scene.remove(ambient)
