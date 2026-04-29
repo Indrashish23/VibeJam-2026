@@ -665,6 +665,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   /* Portal mounts on `document.body` (see lobbyPortal.ts) so it layers above the backdrop. */
   document.querySelectorAll('canvas.lobby-portal-canvas').forEach((node) => node.remove())
   document.querySelectorAll('.lobby-portal-hover').forEach((node) => node.remove())
+  document.querySelectorAll('.lobby-portal-dialog').forEach((node) => node.remove())
 
   if (DEBUG_MP)
     debugMpLog(

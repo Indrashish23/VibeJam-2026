@@ -811,7 +811,7 @@ export const defaultGameConfig = {
   /** How tightly the swirl wraps around the center (Godot: `swirl_tightness`, 1..20). */
   lobbyPortalSwirlTightness: 11.5,
   /** UV scale of the swirl pattern (Godot: `swirl_scale`, 0.5..5). */
-  lobbyPortalSwirlScale: 3.45,
+  lobbyPortalSwirlScale: 4.2,
   /** Pulse speed of the radial brightness (Godot: `pulse_speed`, 0..5). */
   lobbyPortalPulseSpeed: 0.3,
   /** Pulse strength on top of base radial (Godot: `pulse_strength`, 0..1). */
@@ -827,7 +827,7 @@ export const defaultGameConfig = {
   lobbyPortalUvOffsetU: -0.335,
   lobbyPortalUvOffsetV: 0.255,
   /** Circular mask radius in UV space around the center (cuts square inner quad corners). */
-  lobbyPortalDiskUvRadius: 0.48,
+  lobbyPortalDiskUvRadius: 0.245,
 } as const
 
 export type GameConfigKey = keyof typeof defaultGameConfig

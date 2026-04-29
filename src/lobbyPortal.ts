@@ -10,9 +10,8 @@
  *     so the embedded GLB texture renders unlit (this scene has no lights).
  *
  * A DOM hit-area is sized each frame to the projected screen-space circle of the
- * inner swirl mesh so hover/click hit-testing is precise. Hover reveals a
- * `Leaving so soon?` pill plus an `Enter portal` confirm button; only the button
- * actually triggers the redirect (avoids accidental misclicks per design).
+ * inner swirl mesh. Click opens a small confirm dialog; **Yes** navigates to the
+ * webring hub URL from `buildVibeJamExitUrl()`.
  *
  * Camera matches the lobby backdrop's viewpoint so positioning Tweaks behave the
  * same as the lobby monkey relative to the arena.
@@ -285,49 +284,100 @@ export function mountLobbyPortal(_gameRoot: HTMLElement): LobbyPortalHandle {
   const swappedRingMaterials: MeshBasicMaterial[] = []
   let innerMesh: Mesh | null = null
 
-  /* Hit-area + tooltip + confirm button: created up-front so we can show/hide via class toggles. */
+  /* Hit-area on the projected portal disc; click opens the webring confirm dialog. */
   const hitWrap = document.createElement('div')
   hitWrap.className = 'lobby-portal-hover'
   hitWrap.hidden = true
 
+  const hoverTitle = document.createElement('div')
+  hoverTitle.className = 'lobby-portal-hover-title'
+  hoverTitle.textContent = 'Vibe Game Portal'
+
   const hitDot = document.createElement('div')
   hitDot.className = 'lobby-portal-hit'
+  hitDot.title = 'Vibe Game Portal'
+  hitWrap.appendChild(hoverTitle)
   hitWrap.appendChild(hitDot)
 
-  const tooltip = document.createElement('div')
-  tooltip.className = 'lobby-portal-tooltip'
-  tooltip.textContent = 'Leaving so soon?'
-  hitWrap.appendChild(tooltip)
+  const dialogRoot = document.createElement('div')
+  dialogRoot.className = 'lobby-portal-dialog'
+  dialogRoot.hidden = true
+  dialogRoot.setAttribute('role', 'presentation')
 
-  const confirmBtn = document.createElement('button')
-  confirmBtn.type = 'button'
-  confirmBtn.className = 'lobby-portal-confirm'
-  confirmBtn.textContent = 'Enter portal'
-  hitWrap.appendChild(confirmBtn)
+  const dialogBackdrop = document.createElement('div')
+  dialogBackdrop.className = 'lobby-portal-dialog__backdrop'
+  dialogRoot.appendChild(dialogBackdrop)
+
+  const dialogPanel = document.createElement('div')
+  dialogPanel.className = 'lobby-portal-dialog__panel'
+  dialogPanel.setAttribute('role', 'dialog')
+  dialogPanel.setAttribute('aria-modal', 'true')
+  dialogPanel.setAttribute('aria-labelledby', 'lobby-portal-dialog-title')
+
+  const dialogTitle = document.createElement('h2')
+  dialogTitle.id = 'lobby-portal-dialog-title'
+  dialogTitle.className = 'lobby-portal-dialog__title'
+  dialogTitle.textContent = 'The Monkeys Will Miss You'
+
+  const dialogBody = document.createElement('p')
+  dialogBody.className = 'lobby-portal-dialog__body'
+  dialogBody.textContent = 'Go to the Next Game?'
+
+  const dialogActions = document.createElement('div')
+  dialogActions.className = 'lobby-portal-dialog__actions'
+
+  const yesBtn = document.createElement('button')
+  yesBtn.type = 'button'
+  yesBtn.className = 'lobby-btn lobby-btn--primary'
+  yesBtn.textContent = 'Yes'
+
+  const noBtn = document.createElement('button')
+  noBtn.type = 'button'
+  noBtn.className = 'lobby-btn lobby-btn--ghost'
+  noBtn.textContent = 'No'
+
+  dialogActions.appendChild(yesBtn)
+  dialogActions.appendChild(noBtn)
+  dialogPanel.appendChild(dialogTitle)
+  dialogPanel.appendChild(dialogBody)
+  dialogPanel.appendChild(dialogActions)
+  dialogRoot.appendChild(dialogPanel)
 
   portalHost.appendChild(hitWrap)
+  portalHost.appendChild(dialogRoot)
 
-  let hovered = false
-  function setHovered(next: boolean): void {
-    if (hovered === next) return
-    hovered = next
-    hitWrap.classList.toggle('is-hovered', next)
+  function closePortalDialog(): void {
+    dialogRoot.hidden = true
+    window.removeEventListener('keydown', onPortalDialogKeydown)
   }
-  hitDot.addEventListener('mouseenter', () => setHovered(true))
-  hitDot.addEventListener('mouseleave', (e) => {
-    /* Stay hovered while moving onto the confirm button. */
-    const to = e.relatedTarget as Node | null
-    if (to && hitWrap.contains(to)) return
-    setHovered(false)
+
+  function onPortalDialogKeydown(e: KeyboardEvent): void {
+    if (e.code === 'Escape') {
+      e.preventDefault()
+      closePortalDialog()
+    }
+  }
+
+  function openPortalDialog(): void {
+    if (!dialogRoot.hidden) return
+    dialogRoot.hidden = false
+    window.removeEventListener('keydown', onPortalDialogKeydown)
+    window.addEventListener('keydown', onPortalDialogKeydown)
+    queueMicrotask(() => noBtn.focus())
+  }
+
+  hitDot.addEventListener('click', (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    openPortalDialog()
   })
-  confirmBtn.addEventListener('mouseleave', (e) => {
-    const to = e.relatedTarget as Node | null
-    if (to && hitWrap.contains(to)) return
-    setHovered(false)
-  })
-  confirmBtn.addEventListener('click', () => {
+
+  dialogBackdrop.addEventListener('click', () => closePortalDialog())
+  yesBtn.addEventListener('click', () => {
     window.location.href = buildVibeJamExitUrl()
   })
+  noBtn.addEventListener('click', () => closePortalDialog())
+  dialogPanel.addEventListener('click', (e) => e.stopPropagation())
 
   let portalLoaded = false
   /** World-space sphere of the inner mesh (recomputed on each pose change). */
@@ -429,7 +479,8 @@ export function mountLobbyPortal(_gameRoot: HTMLElement): LobbyPortalHandle {
       return
     }
     hitWrap.hidden = false
-    const r = Math.max(28, proj.r)
+    /* Slightly generous radius so the portal stays easy to tap/click. */
+    const r = Math.max(40, proj.r)
     hitWrap.style.setProperty('--portal-x', `${proj.x}px`)
     hitWrap.style.setProperty('--portal-y', `${proj.y}px`)
     hitWrap.style.setProperty('--portal-r', `${r}px`)
@@ -474,6 +525,7 @@ export function mountLobbyPortal(_gameRoot: HTMLElement): LobbyPortalHandle {
   function pauseRendering(): void {
     paused = true
     hitWrap.hidden = true
+    closePortalDialog()
   }
 
   function resumeRendering(): void {
@@ -487,7 +539,9 @@ export function mountLobbyPortal(_gameRoot: HTMLElement): LobbyPortalHandle {
     disposed = true
     cancelAnimationFrame(rafId)
     window.removeEventListener('resize', resize)
+    closePortalDialog()
     hitWrap.remove()
+    dialogRoot.remove()
     portalRoot.traverse((o) => {
       const mo = o as Mesh
       if (mo.isMesh) {

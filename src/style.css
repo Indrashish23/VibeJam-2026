@@ -279,11 +279,7 @@ body.hide-lobby-html-ui #lobby-overlay {
 }
 
 /*
- * Vibe Jam 2026 webring portal — transparent overlay canvas + DOM hover wrapper.
- * Stacking: `#game-root` is z-index 0, `#lobby-overlay` is 18. The portal canvas is
- * on `document.body` at 17 so it paints *above* the 3D backdrop but *under* the lobby
- * chrome — transparent areas of the overlay still show the rift.
- * Only the small `.lobby-portal-hit` dot accepts pointer events (z 19, above lobby).
+ * Vibe Jam 2026 webring portal: canvas (17), hit (19), dialog on click (100; below Tweaks 200).
  */
 .lobby-portal-canvas {
   position: fixed;
@@ -308,6 +304,35 @@ body.hide-lobby-html-ui #lobby-overlay {
   display: none;
 }
 
+.lobby-portal-hover-title {
+  position: absolute;
+  left: var(--portal-x);
+  top: calc(var(--portal-y) - var(--portal-r) - 0.5rem);
+  transform: translate(-50%, -100%);
+  margin: 0;
+  padding: 0.35rem 0.75rem;
+  border-radius: 0;
+  background: rgba(21, 36, 4, 0.92);
+  border: 1px solid var(--vj-border-strong);
+  color: var(--vj-text);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.lobby-portal-hover:has(.lobby-portal-hit:hover) .lobby-portal-hover-title {
+  opacity: 1;
+}
+
 .lobby-portal-hit {
   position: absolute;
   left: var(--portal-x);
@@ -318,66 +343,77 @@ body.hide-lobby-html-ui #lobby-overlay {
   border-radius: 50%;
   pointer-events: auto;
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.lobby-portal-tooltip,
-.lobby-portal-confirm {
-  position: absolute;
-  left: var(--portal-x);
-  transform: translate(-50%, 0);
-  opacity: 0;
-  transition:
-    opacity 0.15s ease,
-    transform 0.18s ease;
-  pointer-events: none;
-  white-space: nowrap;
-}
-
-.lobby-portal-tooltip {
-  top: calc(var(--portal-y) - var(--portal-r) - 2.6rem);
-  padding: 0.4rem 0.75rem;
-  border-radius: 0;
-  background: rgba(21, 36, 4, 0.94);
-  border: 1px solid var(--vj-border-strong);
-  color: var(--vj-text);
-  font-size: 0.9rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
-}
-
-.lobby-portal-confirm {
-  top: calc(var(--portal-y) + var(--portal-r) + 0.6rem);
-  padding: 0.45rem 0.95rem;
-  border-radius: 0;
-  background: var(--vj-crimson);
-  color: #fffaf8;
-  border: 2px solid transparent;
-  font-weight: 700;
-  font-size: 0.92rem;
-  cursor: pointer;
-  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45);
-}
-
-.lobby-portal-confirm:hover {
-  border-color: #fff;
-  filter: brightness(1.08);
-}
-
-.lobby-portal-hover.is-hovered .lobby-portal-tooltip,
-.lobby-portal-hover.is-hovered .lobby-portal-confirm {
-  opacity: 1;
+.lobby-portal-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
   pointer-events: auto;
 }
 
-.lobby-portal-hover.is-hovered .lobby-portal-tooltip {
-  transform: translate(-50%, -4px);
+.lobby-portal-dialog[hidden] {
+  display: none !important;
+}
+
+.lobby-portal-dialog__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(5, 8, 2, 0.72);
+  pointer-events: auto;
+}
+
+.lobby-portal-dialog__panel {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 22rem);
+  padding: 1.25rem 1.35rem;
+  border-radius: 0;
+  background: rgba(21, 36, 4, 0.97);
+  border: 1px solid var(--vj-border);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+  pointer-events: auto;
+}
+
+.lobby-portal-dialog__title {
+  margin: 0 0 0.5rem;
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--vj-text);
+  text-align: center;
+}
+
+.lobby-portal-dialog__body {
+  margin: 0 0 1.1rem;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: var(--vj-text-muted);
+  text-align: center;
+}
+
+.lobby-portal-dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  justify-content: center;
+}
+
+.lobby-portal-dialog__actions .lobby-btn {
+  min-width: 5.5rem;
 }
 
 /* Hide portal overlay alongside the lobby card during screenshot mode. */
 body.hide-lobby-html-ui .lobby-portal-canvas,
-body.hide-lobby-html-ui .lobby-portal-hover {
-  display: none;
+body.hide-lobby-html-ui .lobby-portal-hover,
+body.hide-lobby-html-ui .lobby-portal-dialog {
+  display: none !important;
 }
 
 .lobby-card {
