@@ -1,4 +1,10 @@
-# Bug report Google Form (2 questions)
+# Bug report Google Form
+
+The game ships with a default **RAGEBAIT FEEDBACK FORM** URL. To use a different form, set `VITE_BUG_REPORT_FORM_URL` in `.env`.
+
+---
+
+## Optional: custom 2-question template
 
 Create a form at [Google Forms](https://forms.google.com) with **exactly these two questions** (order matters if you use prefill):
 
