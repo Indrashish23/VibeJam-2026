@@ -178,15 +178,19 @@ function looksLikeSpawnMarker(normalized: string): boolean {
   )
 }
 
-/** Empties for banana pickup placement (name must suggest banana + spawn/pickup). */
+/** Empties for banana pickup placement (name must suggest banana + spawn/pickup/numbered slot). */
 function isBananaSpawnEmptyName(normalized: string): boolean {
   if (!normalized.includes('banana')) return false
-  return (
+  if (
     normalized.includes('spawn') ||
     normalized.includes('pickup') ||
     normalized.includes('spot') ||
-    normalized.includes('marker')
-  )
+    normalized.includes('marker') ||
+    normalized.includes('point')
+  ) {
+    return true
+  }
+  return /^banana_\d+$/.test(normalized)
 }
 
 function collectGltfArenaData(root: Group): {
@@ -378,7 +382,7 @@ async function loadArenaExportMap(_scene: Scene, hubRoot: Group): Promise<MapHan
   let collisionMeshes = tagged
   if (collisionMeshes.length === 0) {
     console.warn(
-      '[map:arena] No collision meshes found (need names like col_arena, col_mesh, or parent col_*). Re-export arena_export.glb with Mesh collision objects.',
+      '[map:arena] No col_* collision meshes — building Rapier trimesh from every mesh in the GLB.',
     )
     const fallback: Mesh[] = []
     gltf.scene.updateMatrixWorld(true)
@@ -388,8 +392,8 @@ async function loadArenaExportMap(_scene: Scene, hubRoot: Group): Promise<MapHan
       fallback.push(mesh)
     })
     if (fallback.length >= 1) {
-      collisionMeshes = [fallback[0]!]
-      console.info('[map:arena] Using first mesh as collision only.')
+      collisionMeshes = fallback
+      console.info(`[map:arena] Rapier terrain: ${fallback.length} mesh(es) → trimesh colliders.`)
     }
   } else if (collisionMeshes.length > 1) {
     console.info(
