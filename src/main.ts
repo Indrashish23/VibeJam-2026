@@ -226,6 +226,8 @@ const koAnnounceOverlayEl = document.getElementById('ko-announce-overlay') as HT
 const koAnnounceNameEl = document.getElementById('ko-announce-name') as HTMLParagraphElement | null
 const koAnnounceStockRowEl = document.getElementById('ko-announce-stock-row') as HTMLDivElement | null
 const koAnnounceStockNumEl = document.getElementById('ko-announce-stock-num') as HTMLSpanElement | null
+/** Must match `.ko-announce-overlay { transition: opacity … }` in style.css. Added to hold timers so `koAnnounceHoldMs` is full-opacity duration, not eaten by fade-in. */
+const KO_ANNOUNCE_OVERLAY_FADE_IN_MS = 380
 const chargeBarWrap = document.getElementById('charge-bar-wrap') as HTMLDivElement | null
 const chargeBarFill = document.getElementById('charge-bar-fill') as HTMLDivElement | null
 const chargeBarMinMark = document.getElementById('charge-bar-min') as HTMLDivElement | null
@@ -3920,8 +3922,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   /**
-   * Fade and remove the stock-loss overlay after `delayMs` (aligns with `koAnnounceHoldMs`).
-   * Optional callback runs when the fade begins (offline respawn applies here).
+   * Fade and remove the stock-loss overlay after `delayMs` at **full opacity** (aligns with
+   * `koAnnounceHoldMs`). Fade-in time is added so the configured ms is not shortened by CSS.
+   * Optional callback runs when the fade-out begins (offline respawn applies here).
    */
   function scheduleKoAnnouncementDismiss(delayMs: number, onFadeBegin?: () => void): void {
     /* Do not clear padlock timers here — padlock runs in parallel after `showKoAnnouncement`. */
@@ -3942,7 +3945,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         koAnnounceFadeTimer = null
         if (koAnnounceOverlayEl) koAnnounceOverlayEl.hidden = true
       }, 400)
-    }, delayMs)
+    }, delayMs + KO_ANNOUNCE_OVERLAY_FADE_IN_MS)
   }
 
   function scheduleAuthRespawnHost(victimRole: 'host' | 'guest'): void {
@@ -3951,7 +3954,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     const tid = window.setTimeout(() => {
       hostKoRespawnTimers.delete(victimRole)
       computeAndEmitAuthRespawn(victimRole)
-    }, gameConfig.koAnnounceHoldMs)
+    }, gameConfig.koAnnounceHoldMs + KO_ANNOUNCE_OVERLAY_FADE_IN_MS)
     hostKoRespawnTimers.set(victimRole, tid)
   }
 

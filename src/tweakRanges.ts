@@ -867,7 +867,8 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
     'When 1, draws a bright green rectangle on the deck at the ring-out line (half arena + blast margin in XZ).',
   blastY: 'World Y below which you are eliminated (falling off the stage).',
   startStocks: 'Stock count each player starts with in stock mode.',
-  koAnnounceHoldMs: 'Time the large KO name is on screen before the respawn teleport.',
+  koAnnounceHoldMs:
+    'How long the KO overlay stays at full opacity before fade-out (ms). Fade-in is added automatically so this value matches what you see.',
   respawnInvulnMs: 'Invulnerability window after respawn — blocks damage, knockback, and your own hitboxes.',
   respawnFlashHz: 'How often the viewmodel and enemy body flash during that invuln window.',
 

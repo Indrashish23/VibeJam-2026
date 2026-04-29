@@ -395,7 +395,7 @@ export const defaultGameConfig = {
 
   /** Stocks per fighter at match start / round reset (Smash-style ring-outs). */
   startStocks: 2,
-  /** Hold KO name + stock HUD punch animation before teleport respawn (ms). */
+  /** Full-opacity hold for KO name + stock overlay before fade-out / respawn (fade-in is added in code). */
   koAnnounceHoldMs: 1000,
   /** Invulnerability after respawn — no incoming/outgoing combat (ms). */
   respawnInvulnMs: 2000,
