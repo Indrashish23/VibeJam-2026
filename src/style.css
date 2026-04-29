@@ -431,20 +431,20 @@ body.hide-lobby-html-ui .lobby-portal-hover {
   align-items: center;
   width: 100%;
   max-width: 100%;
-  margin-top: 1.75rem;
+  margin: 0;
   pointer-events: none;
 }
 
 .lobby-brand-logo {
   width: 100%;
-  max-width: min(96vw, 72rem);
+  max-width: min(48vw, 36rem);
   height: auto;
   display: block;
   filter: drop-shadow(0 8px 28px rgba(0, 0, 0, 0.5));
 }
 
 .lobby-footer-copy {
-  margin-top: 1rem;
+  margin: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -455,7 +455,8 @@ body.hide-lobby-html-ui .lobby-portal-hover {
 
 .lobby-credit {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 24px;
+  line-height: 1.25;
   letter-spacing: 0.04em;
   color: var(--vj-text-muted);
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);

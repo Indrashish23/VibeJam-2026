@@ -199,6 +199,7 @@ export const TWEAK_RANGE = {
   bananaItemHudOffsetYRem: { min: -40, max: 40, step: 0.05 },
   bananaItemHudScale: { min: 0.2, max: 3, step: 0.02 },
   bananaItemHudMaxWidthRem: { min: 8, max: 48, step: 0.25 },
+  bananaItemHudPreview: { min: 0, max: 1, step: 1 },
   uiHudMasterScale: { min: 0.25, max: 2.5, step: 0.02 },
   percentHudAnchorRight: { min: 0, max: 1, step: 1 },
   percentHudOffsetXRem: { min: -8, max: 12, step: 0.05 },
@@ -591,6 +592,7 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   bananaItemHudOffsetYRem: 'Banana prompt: Y offset from center (rem, + = down)',
   bananaItemHudScale: 'Banana prompt: scale (1 = default)',
   bananaItemHudMaxWidthRem: 'Banana prompt: max width (rem)',
+  bananaItemHudPreview: 'Item prompt: force on-screen (1) for layout; 0 = only when holding banana',
   uiHudMasterScale: 'HUD viewport master scale',
   percentHudAnchorRight: 'Launch % UI: anchor right (1) vs left (0)',
   percentHudOffsetXRem: 'Launch % UI: inset along anchor edge (rem)',
@@ -902,6 +904,8 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   bananaItemHudScale: 'Uniform scale on the centered banana item prompt (1 = authored size in layout).',
   bananaItemHudMaxWidthRem:
     'Caps the strip width before viewport clamps; the SVG scales down to fit this `rem` width.',
+  bananaItemHudPreview:
+    'When 1, the RMB banana strip stays visible so you can tune position in Tweaks without picking up a banana. Turn off for normal play.',
   uiHudMasterScale:
     'Uniform zoom for the HUD viewport that wraps launch percentages and the charge wedge (crosshair separate).',
   percentHudAnchorRight:
@@ -1786,6 +1790,13 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'chargeHudMicRmsSpan',
       'chargeHudMicSmoothing',
       'chargeHudMicPulseScale',
+    ],
+  },
+  {
+    id: 'itemInfoUi',
+    title: 'ItemInfo UI',
+    keys: [
+      'bananaItemHudPreview',
       'bananaItemHudOffsetXRem',
       'bananaItemHudOffsetYRem',
       'bananaItemHudScale',

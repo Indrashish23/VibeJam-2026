@@ -64,6 +64,8 @@ export const defaultGameConfig = {
   bananaItemHudScale: 1,
   /** Banana RMB throw prompt: max width of the SVG strip (rem). */
   bananaItemHudMaxWidthRem: 27,
+  /** 1 = always show the banana item prompt (for Tweaks layout); 0 = only when holding a banana in a live match. */
+  bananaItemHudPreview: 0,
 
   /** Uniform scale for `#hud-viewport` (launch % + charge wedge cluster); 1 = default. */
   uiHudMasterScale: 1,

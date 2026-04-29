@@ -491,7 +491,7 @@ export function mountTweaksPanel(host: HTMLElement, hooks: TweaksPanelHooks): {
   const sub = document.createElement('span')
   sub.className = 'tweaks-panel-sub'
   sub.textContent =
-    'T or − opens · drag ⠿ to move · Category: Gameplay, Voice, UI, … · hover for tips · Esc closes'
+    'T or − opens · drag ⠿ to move · Category: Gameplay, ItemInfo UI, UI, … · hover for tips · Esc closes'
   header.appendChild(dragRow)
   header.appendChild(sub)
   panel.appendChild(header)

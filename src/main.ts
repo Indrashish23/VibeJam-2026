@@ -43,9 +43,8 @@ import { BotFighter, type BotMode } from './boxing/bot'
 import { PlayerArms } from './boxing/playerArms'
 import { VoiceChargeManager, audioBufferSliceToWavBlob } from './audio/voiceCharge'
 import { playLocalVoiceRecordReleaseSfx, playLocalVoiceRecordStartSfx } from './audio/voiceRecordUiSfx'
-import { IS_PUBLIC_BUILD } from './buildMode'
-/* Tweaks panel + HUD-drag helpers are dev-only; in public builds we never load them
- * (dynamic import below tree-shakes the module and its `tweakRanges` table out). */
+import { TWEAKS_PANEL_ENABLED } from './buildMode'
+/* Tweaks load when `TWEAKS_PANEL_ENABLED` (default: dev / non-public; prod + `VITE_ENABLE_TWEAKS=true` enables). */
 import {
   startTutorial,
   isTutorialPending,
@@ -253,7 +252,7 @@ if (chargeBarWrap) {
 }
 syncChargeHudLayout()
 syncBananaItemHudLayout()
-if (!IS_PUBLIC_BUILD) {
+if (TWEAKS_PANEL_ENABLED) {
   void import('./tweaksPanel').then(({ restoreHudElementPosition }) => {
     restoreHudElementPosition(percentHudEl, 'percentHud')
     restoreHudElementPosition(chargeBarWrap, 'chargeHud')
@@ -1352,12 +1351,14 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   function syncHudBananaItemHint(): void {
     if (!hudItemControlsWrapEl) return
-    const show =
+    const preview = gameConfig.bananaItemHudPreview >= 0.5
+    const normalShow =
       getMyBananaHeld() &&
       !isPlayerBananaSlipNow() &&
       !matchOutcome &&
       !seriesTransitionActive &&
       mpPhase === 'live'
+    const show = preview || normalShow
     hudItemControlsWrapEl.hidden = !show
     hudItemControlsWrapEl.setAttribute('aria-hidden', show ? 'false' : 'true')
   }
@@ -6118,7 +6119,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   const tweaksHost = document.getElementById('tweaks-panel-host')
-  if (!IS_PUBLIC_BUILD && tweaksHost) {
+  if (TWEAKS_PANEL_ENABLED && tweaksHost) {
     tweaksHost.replaceChildren()
     const { mountTweaksPanel, attachHudOverlayDrag, resetGameplayHudLayout } =
       await import('./tweaksPanel')
@@ -6166,6 +6167,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         'bananaItemHudOffsetYRem',
         'bananaItemHudScale',
         'bananaItemHudMaxWidthRem',
+        'bananaItemHudPreview',
         'lobbyMonkeyPosX',
         'lobbyMonkeyPosY',
         'lobbyMonkeyPosZ',
@@ -6193,6 +6195,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         syncTweaksPanelChrome()
         syncChargeHudLayout()
         syncBananaItemHudLayout()
+        syncHudBananaItemHint()
         syncHudDragChrome()
       },
       onToggle(open) {
