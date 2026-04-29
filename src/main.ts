@@ -86,6 +86,7 @@ import {
   wireBackgroundMusicToFirstGesture,
 } from './audio/backgroundMusic'
 import { playFootstepOneShot } from './audio/footstepsSfx'
+import { playMatchEndStinger } from './audio/matchEndSfx'
 import { playTieredHitImpactOneShot } from './audio/combatSfx'
 import { playBananaSlipOneShot, playJumpOneShot, playLandOneShot } from './audio/playerMoveSfx'
 import { playEnemySfxSpatialAt, resumeEnemySfxAudio, type SfxKind } from './audio/enemySfx'
@@ -4315,7 +4316,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     matchEndCardEl?.classList.remove('match-end-card--forfeit')
     triggerHitImpactFx()
     voice.resumeAudio()
-    voice.playFallbackHitSound()
+    if (gameConfig.matchEndAnnouncerEnabled >= 0.5) {
+      playMatchEndStinger(outcome)
+    } else {
+      voice.playFallbackHitSound()
+    }
     controls.unlock()
     return true
   }

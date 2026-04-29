@@ -362,6 +362,10 @@ export const defaultGameConfig = {
    * timer fires the same path even if the user does nothing.
    */
   matchEndAutoReturnMs: 2400,
+  /** When 1, play `match_victory.mp3` / `match_defeat.mp3` at match end (last stock). */
+  matchEndAnnouncerEnabled: 1,
+  /** Gain × on match-end announcer (after SFX chain). */
+  matchEndAnnouncerVolumeMul: 1,
   /** Outside platform half-extent + this (XZ) or below yKill = blast. */
   blastMargin: 12,
   /** When 1, draw a green ring-out boundary loop on the deck (Tweaks → Arena). */

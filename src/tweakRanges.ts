@@ -106,6 +106,8 @@ export const TWEAK_RANGE = {
   winRingoutPresentDelayMs: { min: 0, max: 8000, step: 100 },
   winRingoutPreSplashDelayMs: { min: 0, max: 8000, step: 100 },
   matchEndAutoReturnMs: { min: 0, max: 10000, step: 100 },
+  matchEndAnnouncerEnabled: { min: 0, max: 1, step: 1 },
+  matchEndAnnouncerVolumeMul: { min: 0, max: 2, step: 0.05 },
   voiceOverloadThreshold: { min: 0.8, max: 2.5, step: 0.02 },
   voiceShooterReplayFadeSec: { min: 0.2, max: 6, step: 0.05 },
   voiceDeliveryPlaybackRate: { min: 0.7, max: 2.4, step: 0.02 },
@@ -479,6 +481,8 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   winRingoutPresentDelayMs: 'GAME splash min hold before match-end screen (ms)',
   winRingoutPreSplashDelayMs: 'Cinematic delay after final KO before GAME splash (ms)',
   matchEndAutoReturnMs: 'Match-end overlay → auto-dissolve to lobby (ms)',
+  matchEndAnnouncerEnabled: 'Match end: announcer SFX (0/1)',
+  matchEndAnnouncerVolumeMul: 'Match-end announcer gain × (after SFX chain)',
   voiceOverloadThreshold: 'Overload UI shake',
   voiceShooterReplayFadeSec: 'Hit replay fade (s)',
   voiceDeliveryPlaybackRate: 'Hit voice delivery pitch (×)',
@@ -1254,6 +1258,10 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
     'After the final-stock KO, how long to let the ragdoll / blast moment play before the GAME splash appears.',
   matchEndAutoReturnMs:
     'How long the You Win / You Lose overlay holds before auto-dissolving back to the main menu.',
+  matchEndAnnouncerEnabled:
+    'When 1, plays `match_victory.mp3` / `match_defeat.mp3` at last-stock match end (Settings SFX × master). When 0, uses the short blip instead.',
+  matchEndAnnouncerVolumeMul:
+    'Multiplier on match-end announcer after the SFX chain (raise if the clip is too quiet).',
   botBodyRadius: 'Enemy capsule radius (bigger = easier to hit, harder to ring-out).',
   botPunchRange: 'Distance at which the smart bot tries to throw a fist.',
   botHitRadius: 'Hit detection radius on the bot’s projectile.',
@@ -1758,6 +1766,8 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'winRingoutPreSplashDelayMs',
       'winRingoutPresentDelayMs',
       'matchEndAutoReturnMs',
+      'matchEndAnnouncerEnabled',
+      'matchEndAnnouncerVolumeMul',
       'stunnedStarSpreadMul',
       'stunnedStarSpinMul',
       'stunnedStarScaleMul',
