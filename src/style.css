@@ -403,6 +403,10 @@ body.hide-lobby-html-ui .lobby-portal-hover {
   transform: translate(var(--lobby-modal-offset-x, 0rem), var(--lobby-modal-offset-y, 0rem));
 }
 
+/*
+ * Let clicks pass through the shell/column chrome to the portal hit layer (z-index 19).
+ * Interactive bits re-enable pointer-events on `.lobby-card`, `.lobby-footer-copy`, settings aside.
+ */
 .lobby-shell {
   display: flex;
   flex-direction: row;
@@ -412,6 +416,7 @@ body.hide-lobby-html-ui .lobby-portal-hover {
   width: 100%;
   max-width: min(92vw, 88rem);
   transition: gap 0.28s ease;
+  pointer-events: none;
 }
 
 .lobby-main-column {
@@ -422,6 +427,7 @@ body.hide-lobby-html-ui .lobby-portal-hover {
   flex: 0 1 auto;
   min-width: 0;
   transition: transform 0.28s ease;
+  pointer-events: none;
 }
 
 .lobby-brand {

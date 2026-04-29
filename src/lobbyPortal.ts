@@ -42,7 +42,10 @@ const LOBBY_PORTAL_GLB_URL = new URL('../Assets/Props/portal.glb', import.meta.u
 /** Inner swirl disc — new GLB uses this; older assets used `portalMesh`. */
 const PORTAL_INNER_NODE_NAMES = new Set(['portalswirlmesh', 'portalmesh'])
 /** Vibe Jam 2026 webring exit URL — receives forwarded query params. */
-const VIBE_JAM_PORTAL_URL = 'https://vibejam.cc/portal/2026'
+/** Central webring hub; override with `VITE_VIBEJAM_PORTAL_URL` if the default route changes. */
+const VIBE_JAM_PORTAL_URL =
+  (import.meta.env.VITE_VIBEJAM_PORTAL_URL as string | undefined)?.trim() ||
+  'https://vibejam.cc/portal/2026'
 
 const LOBBY_PORTAL_KEYS: GameConfigKey[] = [
   'lobbyPortalPosX',
@@ -509,9 +512,12 @@ export function mountLobbyPortal(_gameRoot: HTMLElement): LobbyPortalHandle {
 }
 
 /**
- * Build the Vibe Jam 2026 redirect URL. All optional params per spec — the receiving
- * site forwards them to the next game on the webring; we don't stand to know what
- * the next game wants, so we send the safe baseline (`username`, `color`, `speed`, `ref`).
+ * Build the Vibe Jam 2026 exit-portal URL (see `portalEntry.ts` for **inbound** `?portal=true`).
+ *
+ * Spec: leaving players are sent to the **hub** (`VIBE_JAM_PORTAL_URL`) with optional query
+ * params (`username`, `color`, `speed`, `ref`). The hub is responsible for routing to the
+ * next jam game; this build does not control that page. Inbound entry to *this* game uses
+ * `?portal=true` and the same optional params.
  */
 export function buildVibeJamExitUrl(): string {
   const u = new URL(VIBE_JAM_PORTAL_URL)

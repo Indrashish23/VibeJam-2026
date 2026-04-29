@@ -10,6 +10,8 @@ interface ImportMetaEnv {
   readonly VITE_BUG_REPORT_FORM_URL: string | undefined
   /** e.g. `entry.1234567890` — paragraph field for auto context (see docs/bug-report-google-form.md). */
   readonly VITE_BUG_FORM_ENTRY_CONTEXT: string | undefined
+  /** Webring exit-portal hub (full URL). Default: `https://vibejam.cc/portal/2026`. */
+  readonly VITE_VIBEJAM_PORTAL_URL: string | undefined
 }
 
 interface ImportMeta {
