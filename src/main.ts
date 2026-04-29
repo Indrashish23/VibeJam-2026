@@ -92,7 +92,11 @@ import { playFootstepOneShot } from './audio/footstepsSfx'
 import { playTieredHitImpactOneShot } from './audio/combatSfx'
 import { playBananaSlipOneShot, playJumpOneShot, playLandOneShot } from './audio/playerMoveSfx'
 import { playEnemySfxSpatialAt, resumeEnemySfxAudio, type SfxKind } from './audio/enemySfx'
-import { mountUserSettingsPanel, setUserSettingsPointerControls } from './userSettingsUI'
+import {
+  mountLobbySettingsShell,
+  mountUserSettingsPanel,
+  setUserSettingsPointerControls,
+} from './userSettingsUI'
 import { setPartyKitHostSession, getPartyKitHost } from './net/partyKitHost'
 import { createProceduralSky } from './skyDome'
 import { TerrainPhysics } from './physics/terrainPhysics'
@@ -870,7 +874,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   function isUnderLitGltfArenaMap(node: Object3D): boolean {
     let cur: Object3D | null = node
     while (cur) {
-      if (cur.name === 'map:godotExport' || cur.name === 'map:floatingIslandStage') return true
+      if (cur.name === 'map:arena') return true
       cur = cur.parent
     }
     return false
@@ -5238,6 +5242,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let debugMpHb = 0
   function animate() {
     const delta = Math.min(clock.getDelta(), gameConfig.movementMaxDelta)
+    const wantFov = Math.max(20, Math.min(120, gameConfig.cameraFov))
+    if (Math.abs(camera.fov - wantFov) > 0.01) {
+      camera.fov = wantFov
+      camera.updateProjectionMatrix()
+    }
     const wantsUnlit = gameConfig.lightingUnlitMode >= 0.5
     const wantsSelfModelUnlit = gameConfig.lightingUnlitSelfModel >= 0.5
     const wantsEnemyModelUnlit = gameConfig.lightingUnlitEnemyModel >= 0.5
@@ -5964,6 +5973,7 @@ wireBackgroundMusicToFirstGesture()
 {
   const wrap = document.getElementById('user-settings-wrap')
   if (wrap) mountUserSettingsPanel({ root: wrap })
+  mountLobbySettingsShell()
 }
 
 async function resolveLobbyAfterReload(): Promise<LobbyResult> {

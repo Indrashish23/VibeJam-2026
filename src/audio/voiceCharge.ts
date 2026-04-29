@@ -3,6 +3,7 @@ import { Vector3 } from 'three'
 import { postProcessVoiceDecodeBuffer } from './voiceBufferPostProcess'
 import { gameConfig } from '../gameConfig'
 import { getSfxChainMul } from './sfxChain'
+import { getVoicePlaybackMul } from '../userSettingsStorage'
 
 const IMPACT_HIT_URL = new URL('../../Assets/SFX/ImpactSound.mp3', import.meta.url).href
 
@@ -319,7 +320,8 @@ export class VoiceChargeManager {
     options?: { victimHitReceive?: boolean },
   ): GainNode {
     const g = c.createGain()
-    const base = Math.max(0, Math.min(4, gameConfig.voiceClipPlaybackGainMul))
+    const base =
+      Math.max(0, Math.min(4, gameConfig.voiceClipPlaybackGainMul)) * getVoicePlaybackMul()
     const extra = options?.victimHitReceive
       ? Math.max(0, Math.min(3, gameConfig.voiceClipVictimReceiveGainMul))
       : 1
@@ -661,7 +663,8 @@ export class VoiceChargeManager {
       const gain = c.createGain()
       src.buffer = buf
       const t0 = c.currentTime
-      const mul = Math.max(0, Math.min(4, gameConfig.voiceClipPlaybackGainMul))
+      const mul =
+        Math.max(0, Math.min(4, gameConfig.voiceClipPlaybackGainMul)) * getVoicePlaybackMul()
       gain.gain.setValueAtTime(0.85 * mul, t0)
       gain.gain.linearRampToValueAtTime(0, t0 + fadeDur)
       src.connect(gain)

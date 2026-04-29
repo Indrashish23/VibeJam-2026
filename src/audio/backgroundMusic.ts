@@ -1,5 +1,5 @@
 import { gameConfig } from '../gameConfig'
-import { getBgmMul } from '../userSettingsStorage'
+import { getBgmMul, getMasterVolumeMul } from '../userSettingsStorage'
 
 const TRACKS = [new URL('../../Assets/Music/BGMain.mp3', import.meta.url).href] as const
 
@@ -15,7 +15,9 @@ function clamp01(n: number): number {
 
 function applyVolumeFromConfig(): void {
   if (!audio) return
-  const vol = gameplaySuppressed ? 0 : clamp01(gameConfig.bgmVolume * getBgmMul())
+  const vol = gameplaySuppressed
+    ? 0
+    : clamp01(gameConfig.bgmVolume * getBgmMul() * getMasterVolumeMul())
   audio.volume = vol
 }
 

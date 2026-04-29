@@ -53,7 +53,7 @@
           <span>Mouse sensitivity</span>
           <input
             type="number"
-            id="user-s-mouse"
+            data-user-setting="mouse"
             class="user-settings-input"
             min="0.01"
             max="8"
@@ -61,21 +61,22 @@
           />
         </label>
         <label class="user-settings-row">
-          <span>Mic sensitivity (charge)</span>
+          <span>Field of view</span>
           <input
-            type="number"
-            id="user-s-mic"
-            class="user-settings-input"
-            min="0.2"
-            max="4"
-            step="0.05"
+            type="range"
+            data-user-setting="fov"
+            class="user-settings-input user-settings-input--range"
+            min="55"
+            max="110"
+            step="1"
+            value="75"
           />
         </label>
         <label class="user-settings-row">
           <span>Camera shake</span>
           <input
             type="number"
-            id="user-s-shake"
+            data-user-setting="shake"
             class="user-settings-input"
             min="0"
             max="1.5"
@@ -84,31 +85,57 @@
         </label>
         <h3 class="user-settings-h3">Audio</h3>
         <label class="user-settings-row">
+          <span>Master volume</span>
+          <input
+            type="range"
+            data-user-setting="master"
+            class="user-settings-input user-settings-input--range"
+            min="0"
+            max="1"
+            step="0.05"
+            value="1"
+            list="user-s-audio-ticks"
+          />
+        </label>
+        <label class="user-settings-row">
           <span>Music</span>
           <input
             type="range"
-            id="user-s-bgm"
+            data-user-setting="bgm"
             class="user-settings-input user-settings-input--range"
             min="0"
             max="1"
             step="0.1"
             value="1"
             list="user-s-audio-ticks"
-            title="Volume for background music (× dev level in Tweaks → Sound)"
+            title="Background music"
           />
         </label>
         <label class="user-settings-row">
           <span>Sound effects</span>
           <input
             type="range"
-            id="user-s-sfx"
+            data-user-setting="sfx"
             class="user-settings-input user-settings-input--range"
             min="0"
             max="1"
             step="0.1"
             value="1"
             list="user-s-audio-ticks"
-            title="Master for footsteps, voice UI, jump, land, etc. (× Tweaks → Sound → SFX)"
+          />
+        </label>
+        <label class="user-settings-row">
+          <span>Voice playback</span>
+          <span class="user-settings-sub">Other players’ voices on your speakers</span>
+          <input
+            type="range"
+            data-user-setting="voice"
+            class="user-settings-input user-settings-input--range"
+            min="0"
+            max="1"
+            step="0.05"
+            value="1"
+            list="user-s-audio-ticks"
           />
         </label>
         <datalist id="user-s-audio-ticks">
@@ -124,10 +151,6 @@
           <option value="0.9"></option>
           <option value="1"></option>
         </datalist>
-        <p class="user-settings-hint">
-          Extra dev tuning: <kbd class="user-settings-kbd">T</kbd> or
-          <kbd class="user-settings-kbd">−</kbd> → <strong>Sound</strong> (BGM + SFX levels, footsteps, etc.).
-        </p>
       </div>
     </div>
     <div id="username-overlay" class="username-overlay">
@@ -146,9 +169,22 @@
     </div>
 
     <div id="lobby-overlay" class="lobby-overlay" hidden>
-      <div class="lobby-card lobby-card--menu">
-        <h2 class="lobby-title">Play</h2>
-        <p id="lobby-intro" class="lobby-intro"></p>
+      <div class="lobby-shell" id="lobby-shell">
+        <div class="lobby-main-column">
+          <div class="lobby-card lobby-card--menu">
+            <div class="lobby-card-head">
+              <h2 class="lobby-title">Play</h2>
+              <button
+                type="button"
+                id="lobby-settings-open"
+                class="lobby-settings-btn"
+                aria-label="Settings"
+                title="Settings"
+              >
+                ⚙
+              </button>
+            </div>
+            <p id="lobby-intro" class="lobby-intro"></p>
         <button type="button" id="lobby-change-name" class="lobby-link-btn">
           Change display name
         </button>
@@ -156,8 +192,7 @@
         <label class="lobby-map-row" title="Pick the arena. Hosts decide the map for online matches; guests inherit the host's choice.">
           <span class="lobby-map-label">Map</span>
           <select id="lobby-map" class="lobby-map-select">
-            <option value="default">Default</option>
-            <option value="godotExport">Godot export test</option>
+            <option value="arena">Arena</option>
           </select>
         </label>
         <div class="lobby-actions">
@@ -193,16 +228,129 @@
             </button>
           </div>
         </div>
-        <div class="lobby-offline-wrap">
-          <button
-            type="button"
-            id="lobby-replay-tutorial"
-            class="lobby-btn lobby-btn--ghost lobby-btn--small"
-            title="Run the HOWL tutorial again from the start (offline, default map)."
-          >
-            Replay Tutorial
-          </button>
+            <div class="lobby-offline-wrap">
+              <button
+                type="button"
+                id="lobby-replay-tutorial"
+                class="lobby-btn lobby-btn--ghost lobby-btn--small"
+                title="Run the HOWL tutorial again from the start (offline, default map)."
+              >
+                Replay Tutorial
+              </button>
+            </div>
+          </div>
         </div>
+        <aside
+          id="lobby-settings-aside"
+          class="lobby-settings-aside"
+          hidden
+          aria-hidden="true"
+          aria-label="Settings"
+        >
+          <div class="lobby-settings-panel-inner user-settings-panel-like">
+            <div class="user-settings-panel__head">
+              <h2 class="user-settings-panel__title">Settings</h2>
+              <button
+                type="button"
+                id="lobby-settings-close"
+                class="user-settings-panel__close"
+                aria-label="Close settings"
+              >
+                ×
+              </button>
+            </div>
+            <h3 class="user-settings-h3">Gameplay</h3>
+            <label class="user-settings-row">
+              <span>Mouse sensitivity</span>
+              <input
+                type="number"
+                data-user-setting="mouse"
+                class="user-settings-input"
+                min="0.01"
+                max="8"
+                step="0.05"
+              />
+            </label>
+            <label class="user-settings-row">
+              <span>Field of view</span>
+              <input
+                type="range"
+                data-user-setting="fov"
+                class="user-settings-input user-settings-input--range"
+                min="55"
+                max="110"
+                step="1"
+                value="75"
+              />
+            </label>
+            <label class="user-settings-row">
+              <span>Camera shake</span>
+              <input
+                type="number"
+                data-user-setting="shake"
+                class="user-settings-input"
+                min="0"
+                max="1.5"
+                step="0.05"
+              />
+            </label>
+            <h3 class="user-settings-h3">Audio</h3>
+            <label class="user-settings-row">
+              <span>Master volume</span>
+              <input
+                type="range"
+                data-user-setting="master"
+                class="user-settings-input user-settings-input--range"
+                min="0"
+                max="1"
+                step="0.05"
+                value="1"
+                list="user-s-audio-ticks"
+              />
+            </label>
+            <label class="user-settings-row">
+              <span>Music</span>
+              <input
+                type="range"
+                data-user-setting="bgm"
+                class="user-settings-input user-settings-input--range"
+                min="0"
+                max="1"
+                step="0.1"
+                value="1"
+                list="user-s-audio-ticks"
+                title="Background music"
+              />
+            </label>
+            <label class="user-settings-row">
+              <span>Sound effects</span>
+              <input
+                type="range"
+                data-user-setting="sfx"
+                class="user-settings-input user-settings-input--range"
+                min="0"
+                max="1"
+                step="0.1"
+                value="1"
+                list="user-s-audio-ticks"
+              />
+            </label>
+            <label class="user-settings-row">
+              <span>Voice playback</span>
+              <span class="user-settings-sub">Other players’ voices on your speakers</span>
+              <input
+                type="range"
+                data-user-setting="voice"
+                class="user-settings-input user-settings-input--range"
+                min="0"
+                max="1"
+                step="0.05"
+                value="1"
+                list="user-s-audio-ticks"
+              />
+            </label>
+          </div>
+        </aside>
       </div>
     </div>
 

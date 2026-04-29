@@ -10,7 +10,7 @@ import {
 } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { gameConfig } from '../gameConfig'
-import type { MapHandle, MapId } from '../maps'
+import type { MapHandle } from '../maps'
 import type { TerrainPhysics } from '../physics/terrainPhysics'
 const _aim = new Vector3()
 
@@ -61,21 +61,11 @@ function defaultArenaSpawnPoints(): Vector3[] {
   ]
 }
 
-/**
- * Island: spread around origin, ray will correct Y.
- */
-function gltfArenaBananaSpawnPoints(): Vector3[] {
-  return [
-    new Vector3(4, 0, 4),
-    new Vector3(-5, 0, 2),
-    new Vector3(2, 0, -6),
-    new Vector3(-3, 0, -4),
-    new Vector3(6, 0, -1),
-  ]
-}
-
-export function getBananaSpawnCandidates(mapId: MapId): Vector3[] {
-  if (mapId === 'godotExport' || mapId === 'floatingIslandStage') return gltfArenaBananaSpawnPoints()
+export function getBananaSpawnCandidates(map: MapHandle): Vector3[] {
+  if (map.bananaSpawnPoints && map.bananaSpawnPoints.length > 0) {
+    return map.bananaSpawnPoints.map((v) => v.clone())
+  }
+  if (map.id === 'arena') return []
   return defaultArenaSpawnPoints()
 }
 
@@ -323,7 +313,7 @@ export class BananaWorld {
     count: number,
   ): Promise<{ id: string; x: number; y: number; z: number }[]> {
     this.clear()
-    const candidates = getBananaSpawnCandidates(map.id)
+    const candidates = getBananaSpawnCandidates(map)
     const placed: { x: number; y: number; z: number }[] = []
     placeOnTerrain(candidates, terrain, placed, count, (p) => map.isBlastZone(p))
     const out: { id: string; x: number; y: number; z: number }[] = []

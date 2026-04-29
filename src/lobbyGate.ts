@@ -1,7 +1,7 @@
 import { readStoredPlayerName, savePlayerName } from './playerName'
 import { loadUserSettings } from './userSettingsStorage'
 import { isMultiplayerTransportConfigured } from './net/transportConfig'
-import { isMapId, MAP_DEFS, type MapId } from './maps'
+import { isMapId, mapDefsForLobby, migrateLegacyMapId, type MapId } from './maps'
 import { clearTutorialDone, TUTORIAL_ENABLED } from './tutorial'
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js'
 import { gameConfig } from './gameConfig'
@@ -26,13 +26,16 @@ export function randomRoomId(): string {
 const MAP_STORAGE_KEY = 'vibejam_lobby_map'
 
 function readStoredMapId(): MapId {
+  let id: MapId = 'arena'
   try {
     const raw = sessionStorage.getItem(MAP_STORAGE_KEY)
-    if (raw && isMapId(raw)) return raw
+    if (raw) id = migrateLegacyMapId(raw)
   } catch {
     /* sessionStorage may be blocked; fall through. */
   }
-  return 'default'
+  const allowed = new Set(mapDefsForLobby().map((d) => d.id))
+  if (!allowed.has(id)) return 'arena'
+  return id
 }
 
 function saveStoredMapId(id: MapId): void {
@@ -110,7 +113,7 @@ function wireQueueDom(): {
 
 function selectedMapId(ui: ReturnType<typeof wireLobbyDom>): MapId {
   const v = ui.mapSelect?.value
-  return isMapId(v) ? v : 'default'
+  return isMapId(v) ? v : 'arena'
 }
 
 function formatTimerMs(ms: number): string {
@@ -251,15 +254,12 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
     ui.err.textContent = ''
 
     if (ui.mapSelect) {
-      /* Repopulate options so the map registry is the single source of truth. */
-      if (ui.mapSelect.options.length !== MAP_DEFS.length) {
-        ui.mapSelect.replaceChildren()
-        for (const def of MAP_DEFS) {
-          const opt = document.createElement('option')
-          opt.value = def.id
-          opt.textContent = def.label
-          ui.mapSelect.appendChild(opt)
-        }
+      ui.mapSelect.replaceChildren()
+      for (const def of mapDefsForLobby()) {
+        const opt = document.createElement('option')
+        opt.value = def.id
+        opt.textContent = def.label
+        ui.mapSelect.appendChild(opt)
       }
       ui.mapSelect.value = readStoredMapId()
       ui.mapSelect.addEventListener('change', () => {

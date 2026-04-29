@@ -126,7 +126,7 @@ export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<LobbyBa
 
   const skyDome = createProceduralSky(scene)
 
-  const mapHandle: MapHandle = await loadMap('default', scene, hubRoot)
+  const mapHandle: MapHandle = await loadMap('arena', scene, hubRoot)
   hubRoot.traverse((obj) => {
     const m = obj as { isMesh?: boolean; castShadow?: boolean; receiveShadow?: boolean }
     if (m.isMesh) {
@@ -214,6 +214,11 @@ export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<LobbyBa
     const dt = clock.getDelta()
     skyDome.update(dt, camera.position)
     syncLobbyMonkeyPoseFromConfig()
+    const wantFov = Math.max(20, Math.min(120, gameConfig.cameraFov))
+    if (Math.abs(camera.fov - wantFov) > 0.01) {
+      camera.fov = wantFov
+      camera.updateProjectionMatrix()
+    }
     renderer.render(scene, camera)
   }
 

@@ -1,5 +1,6 @@
 import { Vector3 } from 'three'
 import { gameConfig } from '../gameConfig'
+import { getVoicePlaybackMul } from '../userSettingsStorage'
 
 /**
  * Spatializes the peer’s live voice with a Panner (Web Audio) + master gain.
@@ -77,7 +78,10 @@ export function createProximityVoip3d(
         out.gain.value = 0
         return
       }
-      out.gain.value = Math.max(0, Math.min(2, gameConfig.proximityVoipOutputMul))
+      out.gain.value = Math.max(
+        0,
+        Math.min(2, gameConfig.proximityVoipOutputMul * getVoicePlaybackMul()),
+      )
       panner.refDistance = gameConfig.proximityVoipRefDistance
       panner.maxDistance = gameConfig.proximityVoipMaxDistance
       panner.rolloffFactor = gameConfig.proximityVoipRolloff

@@ -1,13 +1,13 @@
 /**
  * Lobby preview only: swap non-arena meshes to MeshBasic when `lightingUnlitMode` is on.
- * Mirrors main-menu arena rule: keeps `map:godotExport` GLB as PBR so shadows read.
+ * Mirrors main-menu arena rule: keeps imported GLB maps (e.g. `map:arena`) as PBR so shadows read.
  */
 import { type Material, Mesh, MeshBasicMaterial, type Object3D } from 'three'
 
-function isUnderGodotArenaExport(node: Object3D): boolean {
+function isUnderImportedArenaMap(node: Object3D): boolean {
   let cur: Object3D | null = node
   while (cur) {
-    if (cur.name === 'map:godotExport' || cur.name === 'map:floatingIslandStage') return true
+    if (cur.name === 'map:arena') return true
     cur = cur.parent
   }
   return false
@@ -76,7 +76,7 @@ export function createLobbyHubUnlitSwapper() {
       const mesh = node as Mesh
       if (!mesh.isMesh || !mesh.material) return
       let meshUnlit = globalUnlit
-      if (meshUnlit && isUnderGodotArenaExport(mesh)) meshUnlit = false
+      if (meshUnlit && isUnderImportedArenaMap(mesh)) meshUnlit = false
       const matRef = mesh.material
       if (Array.isArray(matRef)) {
         mesh.material = matRef.map((m) => mapMaterial(m, meshUnlit))

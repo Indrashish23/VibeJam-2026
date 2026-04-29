@@ -286,6 +286,123 @@ body.hide-lobby-html-ui #lobby-overlay {
   max-width: 100%;
 }
 
+.lobby-shell {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0;
+  width: 100%;
+  max-width: min(52rem, 100%);
+  transition: gap 0.28s ease;
+}
+
+.lobby-main-column {
+  flex: 0 1 auto;
+  min-width: 0;
+  transition: transform 0.28s ease;
+}
+
+.lobby-overlay--settings-open .lobby-main-column {
+  transform: translateX(-0.65rem);
+}
+
+.lobby-settings-aside {
+  flex: 0 0 0;
+  width: 0;
+  max-height: min(88vh, 40rem);
+  overflow: hidden;
+  opacity: 0;
+  transition:
+    flex-basis 0.28s ease,
+    width 0.28s ease,
+    opacity 0.22s ease,
+    margin 0.28s ease;
+  pointer-events: none;
+}
+
+.lobby-overlay--settings-open .lobby-settings-aside {
+  flex: 0 0 min(22rem, 92vw);
+  width: min(22rem, 92vw);
+  opacity: 1;
+  overflow-x: hidden;
+  overflow-y: auto;
+  pointer-events: auto;
+  margin-left: 0.35rem;
+}
+
+.lobby-settings-panel-inner {
+  padding: 0.85rem 1rem 1rem;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.38);
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.45);
+}
+
+.lobby-settings-panel-inner .user-settings-row {
+  max-width: none;
+}
+
+.lobby-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.lobby-card-head .lobby-title {
+  margin: 0;
+}
+
+.lobby-settings-btn {
+  flex-shrink: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: rgba(30, 41, 59, 0.85);
+  color: #e2e8f0;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.lobby-settings-btn:hover {
+  background: rgba(51, 65, 85, 0.95);
+  border-color: rgba(148, 163, 184, 0.65);
+}
+
+.user-settings-sub {
+  display: block;
+  margin-top: -0.15rem;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: #94a3b8;
+}
+
+@media (max-width: 720px) {
+  .lobby-overlay--settings-open .lobby-shell {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .lobby-overlay--settings-open .lobby-main-column {
+    transform: none;
+  }
+
+  .lobby-overlay--settings-open .lobby-settings-aside {
+    flex: 1 1 auto;
+    width: 100%;
+    max-height: min(52vh, 22rem);
+    margin-left: 0;
+    margin-top: 0.5rem;
+  }
+}
+
 .lobby-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
