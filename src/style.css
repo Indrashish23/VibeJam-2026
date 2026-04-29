@@ -330,6 +330,17 @@ body.hide-lobby-html-ui #lobby-overlay {
   filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.45));
 }
 
+.lobby-tagline {
+  margin: 0.15rem 0 0.85rem;
+  text-align: center;
+  font-size: 0.92rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(226, 232, 240, 0.92);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+
 .lobby-overlay--settings-open .lobby-main-column {
   transform: translateX(-0.65rem);
 }

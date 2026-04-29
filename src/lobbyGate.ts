@@ -267,7 +267,9 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
     /* Reveal menu before removing boot curtain so the canvas never flashes without the card. */
     curtain?.setAttribute('hidden', '')
     curtain?.setAttribute('aria-hidden', 'true')
-    ui.intro.textContent = `Signed in as ${displayName}. Quick match for fast PvP, host a private game with a code, or warm up against a bot.`
+    const titleEl = document.getElementById('lobby-title')
+    if (titleEl) titleEl.textContent = `Hello ${displayName},`
+    ui.intro.textContent = `Quick match for fast PvP, host a private game with a code, or warm up against a bot.`
     ui.err.hidden = true
     ui.err.textContent = ''
 
@@ -305,7 +307,9 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
         displayName = name
         userOv.hidden = true
         ui.overlay.hidden = false
-        ui.intro.textContent = `Signed in as ${displayName}. Quick match for fast PvP, host a private game with a code, or warm up against a bot.`
+        const titleElAfter = document.getElementById('lobby-title')
+        if (titleElAfter) titleElAfter.textContent = `Hello ${displayName},`
+        ui.intro.textContent = `Quick match for fast PvP, host a private game with a code, or warm up against a bot.`
       }
       form.addEventListener('submit', onSubmit, { once: true })
     }
