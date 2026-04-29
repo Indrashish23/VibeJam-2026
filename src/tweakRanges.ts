@@ -195,6 +195,10 @@ export const TWEAK_RANGE = {
   chargeHudMicRmsSpan: { min: 0.02, max: 0.35, step: 0.005 },
   chargeHudMicSmoothing: { min: 0.05, max: 1, step: 0.01 },
   chargeHudMicPulseScale: { min: 0.05, max: 1.2, step: 0.01 },
+  bananaItemHudOffsetXRem: { min: -40, max: 40, step: 0.05 },
+  bananaItemHudOffsetYRem: { min: -40, max: 40, step: 0.05 },
+  bananaItemHudScale: { min: 0.2, max: 3, step: 0.02 },
+  bananaItemHudMaxWidthRem: { min: 8, max: 48, step: 0.25 },
   uiHudMasterScale: { min: 0.25, max: 2.5, step: 0.02 },
   percentHudAnchorRight: { min: 0, max: 1, step: 1 },
   percentHudOffsetXRem: { min: -8, max: 12, step: 0.05 },
@@ -297,6 +301,9 @@ export const TWEAK_RANGE = {
   lobbyPortalPulseSpeed: { min: 0, max: 5, step: 0.05 },
   lobbyPortalPulseStrength: { min: 0, max: 1, step: 0.01 },
   lobbyPortalIntensity: { min: 0, max: 4, step: 0.05 },
+  lobbyPortalUvOffsetU: { min: -0.5, max: 0.5, step: 0.005 },
+  lobbyPortalUvOffsetV: { min: -0.5, max: 0.5, step: 0.005 },
+  lobbyPortalDiskUvRadius: { min: 0.2, max: 0.55, step: 0.005 },
 
   stunnedStarScaleMul: { min: 0.35, max: 2.2, step: 0.02 },
   stunnedStarSpinMul: { min: 0.45, max: 5, step: 0.05 },
@@ -580,6 +587,10 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   chargeHudMicRmsSpan: 'Mic icon: RMS span above floor → full pulse',
   chargeHudMicSmoothing: 'Mic icon: loudness smoothing (higher = snappier)',
   chargeHudMicPulseScale: 'Mic icon: max extra scale at full loudness',
+  bananaItemHudOffsetXRem: 'Banana prompt: X offset from center (rem, + = right)',
+  bananaItemHudOffsetYRem: 'Banana prompt: Y offset from center (rem, + = down)',
+  bananaItemHudScale: 'Banana prompt: scale (1 = default)',
+  bananaItemHudMaxWidthRem: 'Banana prompt: max width (rem)',
   uiHudMasterScale: 'HUD viewport master scale',
   percentHudAnchorRight: 'Launch % UI: anchor right (1) vs left (0)',
   percentHudOffsetXRem: 'Launch % UI: inset along anchor edge (rem)',
@@ -785,6 +796,9 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   lobbyPortalPulseSpeed: 'Lobby portal: pulse speed',
   lobbyPortalPulseStrength: 'Lobby portal: pulse strength',
   lobbyPortalIntensity: 'Lobby portal: emissive intensity ×',
+  lobbyPortalUvOffsetU: 'Lobby portal: swirl UV offset U',
+  lobbyPortalUvOffsetV: 'Lobby portal: swirl UV offset V',
+  lobbyPortalDiskUvRadius: 'Lobby portal: circular mask radius (UV)',
   lobbyMonkeyScale: 'Lobby monkey uniform scale',
 }
 
@@ -881,6 +895,13 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   chargeHudMicSmoothing:
     'Low-pass on the visual level (0.2 = moderate). Higher = follows the waveform more closely (can look twitchy).',
   chargeHudMicPulseScale: 'Maximum additional `transform: scale` at full activity (0.38 ≈ +38% size).',
+  bananaItemHudOffsetXRem:
+    'After centering the banana RMB strip, shifts it right (positive) or left (negative), in root `rem`.',
+  bananaItemHudOffsetYRem:
+    'After centering, shifts the strip down (positive) or up (negative), in root `rem`.',
+  bananaItemHudScale: 'Uniform scale on the centered banana item prompt (1 = authored size in layout).',
+  bananaItemHudMaxWidthRem:
+    'Caps the strip width before viewport clamps; the SVG scales down to fit this `rem` width.',
   uiHudMasterScale:
     'Uniform zoom for the HUD viewport that wraps launch percentages and the charge wedge (crosshair separate).',
   percentHudAnchorRight:
@@ -1158,6 +1179,12 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
     'Vibe Jam portal: pulse strength on top of the base radial fade (Godot `pulse_strength`).',
   lobbyPortalIntensity:
     'Vibe Jam portal: overall emissive brightness multiplier on the fire shader.',
+  lobbyPortalUvOffsetU:
+    'Vibe Jam portal: horizontal offset of the swirl center in UV space (0 = mesh center).',
+  lobbyPortalUvOffsetV:
+    'Vibe Jam portal: vertical offset of the swirl center in UV space (0 = mesh center).',
+  lobbyPortalDiskUvRadius:
+    'Vibe Jam portal: circular mask in UV space — lower slightly if corners still peek past the ring.',
 
   sunPosX: 'Directional sun world X (shared with matches; shadow direction).',
   sunPosY: 'Directional sun world Y.',
@@ -1759,6 +1786,10 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'chargeHudMicRmsSpan',
       'chargeHudMicSmoothing',
       'chargeHudMicPulseScale',
+      'bananaItemHudOffsetXRem',
+      'bananaItemHudOffsetYRem',
+      'bananaItemHudScale',
+      'bananaItemHudMaxWidthRem',
     ],
   },
   {
@@ -1871,6 +1902,9 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'lobbyPortalPulseSpeed',
       'lobbyPortalPulseStrength',
       'lobbyPortalIntensity',
+      'lobbyPortalUvOffsetU',
+      'lobbyPortalUvOffsetV',
+      'lobbyPortalDiskUvRadius',
     ],
   },
 ]

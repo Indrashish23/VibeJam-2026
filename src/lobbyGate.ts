@@ -207,6 +207,9 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
         'lobbyPortalPulseSpeed',
         'lobbyPortalPulseStrength',
         'lobbyPortalIntensity',
+        'lobbyPortalUvOffsetU',
+        'lobbyPortalUvOffsetV',
+        'lobbyPortalDiskUvRadius',
       ],
       syncVisualsFromConfig: () => {
         backdrop.syncLobbyBackdropFromConfig()

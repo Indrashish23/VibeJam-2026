@@ -14,7 +14,6 @@
   --vj-text-muted: rgba(245, 240, 232, 0.78);
   --vj-border: rgba(252, 0, 0, 0.42);
   --vj-border-strong: rgba(252, 0, 0, 0.65);
-  --vj-glow-crimson: rgba(252, 0, 0, 0.35);
 }
 
 html,
@@ -49,10 +48,10 @@ body {
   right: 0.75rem;
   width: 2.6rem;
   height: 2.6rem;
-  border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.4);
-  background: rgba(15, 23, 42, 0.9);
-  color: #e2e8f0;
+  border-radius: 0;
+  border: 2px solid transparent;
+  background: rgba(21, 36, 4, 0.94);
+  color: var(--vj-text);
   font-size: 1.2rem;
   line-height: 1;
   cursor: pointer;
@@ -62,8 +61,8 @@ body {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
 }
 .user-settings-fab:hover {
-  background: rgba(30, 41, 59, 0.95);
-  border-color: rgba(148, 163, 184, 0.65);
+  background: var(--vj-moss-bright);
+  border-color: #fff;
 }
 
 .user-settings-backdrop {
@@ -84,9 +83,9 @@ body {
   max-height: min(86vh, 36rem);
   overflow: auto;
   padding: 0.75rem 1rem 1rem;
-  border-radius: 10px;
-  background: rgba(15, 23, 42, 0.98);
-  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 0;
+  background: rgba(21, 36, 4, 0.98);
+  border: 1px solid var(--vj-border);
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
   display: none;
 }
@@ -120,18 +119,19 @@ body {
   font-weight: 700;
 }
 .user-settings-panel__close {
-  border: none;
+  border: 2px solid transparent;
   background: transparent;
-  color: #94a3b8;
+  color: var(--vj-text-muted);
   font-size: 1.5rem;
   line-height: 1;
   cursor: pointer;
   padding: 0.2rem 0.4rem;
-  border-radius: 4px;
+  border-radius: 0;
 }
 .user-settings-panel__close:hover {
-  color: #f1f5f9;
+  color: var(--vj-text);
   background: rgba(255, 255, 255, 0.06);
+  border-color: #fff;
 }
 
 .user-settings-h3 {
@@ -157,10 +157,10 @@ body {
 .user-settings-input {
   max-width: 7rem;
   padding: 0.35rem 0.5rem;
-  border-radius: 6px;
-  border: 1px solid rgba(100, 116, 139, 0.5);
-  background: #0f172a;
-  color: #e2e8f0;
+  border-radius: 0;
+  border: 1px solid var(--vj-border);
+  background: rgba(10, 15, 3, 0.95);
+  color: var(--vj-text);
 }
 .user-settings-input--range {
   max-width: 100%;
@@ -182,9 +182,9 @@ body {
   font: inherit;
   font-size: 0.7rem;
   padding: 0.1em 0.35em;
-  border: 1px solid rgba(148, 163, 184, 0.4);
-  border-radius: 4px;
-  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid var(--vj-border);
+  border-radius: 0;
+  background: rgba(10, 15, 3, 0.75);
 }
 
 .username-overlay {
@@ -208,12 +208,10 @@ body {
   gap: 0.75rem;
   width: min(100%, 20rem);
   padding: 1.25rem;
-  border-radius: 10px;
+  border-radius: 0;
   background: rgba(21, 36, 4, 0.94);
   border: 1px solid var(--vj-border);
-  box-shadow:
-    0 12px 40px rgba(0, 0, 0, 0.55),
-    0 0 28px var(--vj-glow-crimson);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
 }
 
 .username-card label {
@@ -223,7 +221,7 @@ body {
 
 .username-card input {
   padding: 0.5rem 0.65rem;
-  border-radius: 6px;
+  border-radius: 0;
   border: 1px solid var(--vj-border);
   background: rgba(10, 15, 3, 0.9);
   color: inherit;
@@ -237,16 +235,17 @@ body {
 
 .username-card button {
   padding: 0.55rem 1rem;
-  border: none;
-  border-radius: 6px;
+  border: 2px solid transparent;
+  border-radius: 0;
   background: var(--vj-crimson);
   color: #fffaf8;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 4px 18px rgba(252, 0, 0, 0.35);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
 }
 
 .username-card button:hover {
+  border-color: #fff;
   filter: brightness(1.12);
 }
 
@@ -337,32 +336,31 @@ body.hide-lobby-html-ui #lobby-overlay {
 .lobby-portal-tooltip {
   top: calc(var(--portal-y) - var(--portal-r) - 2.6rem);
   padding: 0.4rem 0.75rem;
-  border-radius: 999px;
+  border-radius: 0;
   background: rgba(21, 36, 4, 0.94);
   border: 1px solid var(--vj-border-strong);
   color: var(--vj-text);
   font-size: 0.9rem;
   font-weight: 600;
   letter-spacing: 0.01em;
-  box-shadow:
-    0 6px 18px rgba(0, 0, 0, 0.5),
-    0 0 18px var(--vj-glow-crimson);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
 }
 
 .lobby-portal-confirm {
   top: calc(var(--portal-y) + var(--portal-r) + 0.6rem);
   padding: 0.45rem 0.95rem;
-  border-radius: 8px;
+  border-radius: 0;
   background: var(--vj-crimson);
   color: #fffaf8;
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  border: 2px solid transparent;
   font-weight: 700;
   font-size: 0.92rem;
   cursor: pointer;
-  box-shadow: 0 6px 22px rgba(252, 0, 0, 0.45);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45);
 }
 
 .lobby-portal-confirm:hover {
+  border-color: #fff;
   filter: brightness(1.08);
 }
 
@@ -385,12 +383,10 @@ body.hide-lobby-html-ui .lobby-portal-hover {
 .lobby-card {
   width: min(100%, 22rem);
   padding: 1.35rem;
-  border-radius: 12px;
+  border-radius: 0;
   background: rgba(21, 36, 4, 0.94);
   border: 1px solid var(--vj-border);
-  box-shadow:
-    0 14px 44px rgba(0, 0, 0, 0.55),
-    0 0 32px var(--vj-glow-crimson);
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.55);
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
@@ -414,7 +410,7 @@ body.hide-lobby-html-ui .lobby-portal-hover {
   justify-content: center;
   gap: 0;
   width: 100%;
-  max-width: min(52rem, 100%);
+  max-width: min(92vw, 88rem);
   transition: gap 0.28s ease;
 }
 
@@ -434,16 +430,17 @@ body.hide-lobby-html-ui .lobby-portal-hover {
   justify-content: center;
   align-items: center;
   width: 100%;
-  max-width: min(28rem, 100%);
+  max-width: 100%;
+  margin-top: 1.75rem;
   pointer-events: none;
 }
 
 .lobby-brand-logo {
   width: 100%;
-  max-width: min(22rem, 92vw);
+  max-width: min(96vw, 72rem);
   height: auto;
   display: block;
-  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.45));
+  filter: drop-shadow(0 8px 28px rgba(0, 0, 0, 0.5));
 }
 
 .lobby-tagline {
@@ -453,9 +450,7 @@ body.hide-lobby-html-ui .lobby-portal-hover {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--vj-text-muted);
-  text-shadow:
-    0 2px 8px rgba(0, 0, 0, 0.55),
-    0 0 12px var(--vj-glow-crimson);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
   pointer-events: none;
 }
 
@@ -489,12 +484,10 @@ body.hide-lobby-html-ui .lobby-portal-hover {
 
 .lobby-settings-panel-inner {
   padding: 0.85rem 1rem 1rem;
-  border-radius: 12px;
+  border-radius: 0;
   background: rgba(21, 36, 4, 0.97);
   border: 1px solid var(--vj-border);
-  box-shadow:
-    0 14px 44px rgba(0, 0, 0, 0.5),
-    0 0 24px var(--vj-glow-crimson);
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.5);
 }
 
 .lobby-settings-panel-inner .user-settings-row {
@@ -1806,18 +1799,22 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
 }
 
 /**
- * Banana RMB hint (`Assets/UI/HUD/ui_itemcontrols.svg`): middle-left, same vertical line as charge HUD.
- * Inset/bias mirror `#charge-bar-wrap` via `--item-controls-h-inset` / `--item-controls-v-bias` from `syncChargeHudLayout()`.
+ * Banana RMB hint (`Assets/UI/HUD/ui_itemcontrols.svg`): centered on screen; offsets + scale from Tweaks (`bananaItemHud*`).
  */
 .hud-item-controls-wrap {
   position: absolute;
-  left: var(--item-controls-h-inset, 7.5rem);
-  top: calc(50% + var(--item-controls-v-bias, 8.3rem));
-  transform: translateY(-50%);
-  z-index: 50;
-  width: min(28rem, min(72vw, 85vmin));
-  max-width: calc(100vw - 2.5rem);
+  left: 50%;
+  top: 50%;
+  z-index: 60;
+  width: min(var(--item-controls-max-w-rem, 27rem), min(92vw, 90vmin));
+  max-width: calc(100vw - 1.5rem);
   pointer-events: none;
+  transform: translate(
+      calc(-50% + var(--item-controls-offset-x-rem, 0rem)),
+      calc(-50% + var(--item-controls-offset-y-rem, 0rem))
+    )
+    scale(var(--item-controls-scale, 1));
+  transform-origin: center center;
 }
 
 .hud-item-controls-wrap[hidden] {
@@ -1826,7 +1823,7 @@ body:has(#lobby-overlay:not([hidden])) #debug-mp-panel {
 
 .hud-item-controls-img {
   display: block;
-  width: min(100%, 27rem);
+  width: 100%;
   height: auto;
   margin: 0;
   transform-origin: 50% 50%;

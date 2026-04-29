@@ -58,6 +58,9 @@ const LOBBY_PORTAL_KEYS: GameConfigKey[] = [
   'lobbyPortalPulseSpeed',
   'lobbyPortalPulseStrength',
   'lobbyPortalIntensity',
+  'lobbyPortalUvOffsetU',
+  'lobbyPortalUvOffsetV',
+  'lobbyPortalDiskUvRadius',
 ]
 
 /** Reset runtime config to source defaults so stale Tweaks/HMR drift doesn't reposition the portal. */
@@ -70,8 +73,8 @@ function applyLobbyPortalDefaultsFromSource(): void {
 /**
  * Inner-disc fire/swirl `ShaderMaterial`. Port of the user-provided Godot shader:
  * orange-palette radial swirl with fbm noise modulation, slow pulse, and angular
- * streaks. Outside the unit circle the fragment is `discard`-ed; inside, ALPHA is
- * 1.0 so the disc reads as a solid fire surface against the lobby backdrop. The
+ * streaks. A circular UV mask (`uDiskUvRadius` around a tweakable center) discards
+ * fragments so the inner quad does not show past the ring. The
  * Godot `ALBEDO + EMISSION*1.5` combo is folded into a single `*2.5` multiplier;
  * `uIntensity` is the user-facing emissive boost on top.
  */
@@ -90,6 +93,9 @@ function makeFireSwirlMaterial(): ShaderMaterial {
       uPulseSpeed: { value: gameConfig.lobbyPortalPulseSpeed },
       uPulseStrength: { value: gameConfig.lobbyPortalPulseStrength },
       uIntensity: { value: gameConfig.lobbyPortalIntensity },
+      uUvOffsetU: { value: gameConfig.lobbyPortalUvOffsetU },
+      uUvOffsetV: { value: gameConfig.lobbyPortalUvOffsetV },
+      uDiskUvRadius: { value: gameConfig.lobbyPortalDiskUvRadius },
       uColorCore: { value: new Color(1.0, 1.0, 0.6) },
       uColorMid: { value: new Color(1.0, 0.45, 0.0) },
       uColorOuter: { value: new Color(0.6, 0.05, 0.0) },
@@ -112,6 +118,9 @@ function makeFireSwirlMaterial(): ShaderMaterial {
       uniform float uPulseSpeed;
       uniform float uPulseStrength;
       uniform float uIntensity;
+      uniform float uUvOffsetU;
+      uniform float uUvOffsetV;
+      uniform float uDiskUvRadius;
       uniform vec3 uColorCore;
       uniform vec3 uColorMid;
       uniform vec3 uColorOuter;
@@ -148,12 +157,14 @@ function makeFireSwirlMaterial(): ShaderMaterial {
       }
 
       void main() {
-        vec2 uv = (vUv - 0.5) * uSwirlScale;
+        vec2 c = vec2(0.5 + uUvOffsetU, 0.5 + uUvOffsetV);
+        vec2 delta = vUv - c;
+        float rUV = length(delta);
+        if (rUV > uDiskUvRadius) discard;
+
+        vec2 uv = delta * uSwirlScale;
         float dist = length(uv);
         float angle = atan(uv.y, uv.x);
-
-        /* Slight slack: some GLBs use UVs that kiss the unit circle; hard 1.0 discards all. */
-        if (dist > 1.08) discard;
 
         float t = uTime;
         float swirl_angle = angle - uSwirlTightness * dist + uSwirlSpeed * t;
@@ -182,7 +193,7 @@ function makeFireSwirlMaterial(): ShaderMaterial {
           col = uColorRim;
         }
 
-        float edge_mask = smoothstep(1.0, 0.85, dist);
+        float edge_mask = smoothstep(uDiskUvRadius * uSwirlScale, uDiskUvRadius * uSwirlScale * 0.85, dist);
         col *= edge_mask;
 
         float streak = pow(max(0.0, sin(swirl_angle * 3.0 + t * 4.0)), 8.0);
@@ -368,6 +379,9 @@ export function mountLobbyPortal(_gameRoot: HTMLElement): LobbyPortalHandle {
     swirlMaterial.uniforms.uPulseSpeed.value = gameConfig.lobbyPortalPulseSpeed
     swirlMaterial.uniforms.uPulseStrength.value = gameConfig.lobbyPortalPulseStrength
     swirlMaterial.uniforms.uIntensity.value = gameConfig.lobbyPortalIntensity
+    swirlMaterial.uniforms.uUvOffsetU.value = gameConfig.lobbyPortalUvOffsetU
+    swirlMaterial.uniforms.uUvOffsetV.value = gameConfig.lobbyPortalUvOffsetV
+    swirlMaterial.uniforms.uDiskUvRadius.value = Math.max(0.05, gameConfig.lobbyPortalDiskUvRadius)
   }
   syncFromConfig()
 

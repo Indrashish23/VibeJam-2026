@@ -251,6 +251,7 @@ if (chargeBarWrap) {
   chargeBarWrap.style.setProperty('--charge-pct', '0%')
 }
 syncChargeHudLayout()
+syncBananaItemHudLayout()
 if (!IS_PUBLIC_BUILD) {
   void import('./tweaksPanel').then(({ restoreHudElementPosition }) => {
     restoreHudElementPosition(percentHudEl, 'percentHud')
@@ -264,12 +265,26 @@ function setChargeBarDisplayPct(pct0to100: number): void {
   chargeBarWrap.style.setProperty('--charge-pct', `${c}%`)
 }
 
+function syncBananaItemHudLayout(): void {
+  if (!hudItemControlsWrapEl) return
+  const g = gameConfig
+  hudItemControlsWrapEl.style.setProperty(
+    '--item-controls-offset-x-rem',
+    `${g.bananaItemHudOffsetXRem}rem`,
+  )
+  hudItemControlsWrapEl.style.setProperty(
+    '--item-controls-offset-y-rem',
+    `${g.bananaItemHudOffsetYRem}rem`,
+  )
+  hudItemControlsWrapEl.style.setProperty('--item-controls-scale', String(g.bananaItemHudScale))
+  hudItemControlsWrapEl.style.setProperty(
+    '--item-controls-max-w-rem',
+    `${g.bananaItemHudMaxWidthRem}rem`,
+  )
+}
+
 function syncChargeHudLayout(): void {
   const g = gameConfig
-  if (hudItemControlsWrapEl) {
-    hudItemControlsWrapEl.style.setProperty('--item-controls-h-inset', `${g.chargeHudRightRem}rem`)
-    hudItemControlsWrapEl.style.setProperty('--item-controls-v-bias', `${g.chargeHudVerticalBiasRem}rem`)
-  }
   if (!chargeBarWrap) return
   chargeBarWrap.style.setProperty('--charge-hud-right', `${g.chargeHudRightRem}rem`)
   chargeBarWrap.style.setProperty('--charge-hud-bias', `${g.chargeHudVerticalBiasRem}rem`)
@@ -6128,6 +6143,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         'chargeHudMicRmsSpan',
         'chargeHudMicSmoothing',
         'chargeHudMicPulseScale',
+        'bananaItemHudOffsetXRem',
+        'bananaItemHudOffsetYRem',
+        'bananaItemHudScale',
+        'bananaItemHudMaxWidthRem',
         'lobbyMonkeyPosX',
         'lobbyMonkeyPosY',
         'lobbyMonkeyPosZ',
@@ -6154,6 +6173,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         syncUiHudChrome()
         syncTweaksPanelChrome()
         syncChargeHudLayout()
+        syncBananaItemHudLayout()
         syncHudDragChrome()
       },
       onToggle(open) {
@@ -6166,6 +6186,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       onResetHudLayout: () => {
         resetGameplayHudLayout(percentHudEl, chargeBarWrap)
         syncChargeHudLayout()
+        syncBananaItemHudLayout()
         syncUiHudChrome()
       },
       onTriggerKnockbackDev: () => {

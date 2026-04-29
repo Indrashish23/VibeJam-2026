@@ -56,6 +56,15 @@ export const defaultGameConfig = {
   /** Max extra scale at full activity (0.4 ≈ +40% size at loudest). */
   chargeHudMicPulseScale: 0.38,
 
+  /** Banana RMB throw prompt: horizontal offset from screen center (rem; + = right). */
+  bananaItemHudOffsetXRem: 0,
+  /** Banana RMB throw prompt: vertical offset from screen center (rem; + = down). */
+  bananaItemHudOffsetYRem: 0,
+  /** Banana RMB throw prompt: uniform scale (1 = default). */
+  bananaItemHudScale: 1,
+  /** Banana RMB throw prompt: max width of the SVG strip (rem). */
+  bananaItemHudMaxWidthRem: 27,
+
   /** Uniform scale for `#hud-viewport` (launch % + charge wedge cluster); 1 = default. */
   uiHudMasterScale: 1,
   /** 1 = anchor launch-% cluster to the right; 0 = anchor left. */
@@ -788,25 +797,30 @@ export const defaultGameConfig = {
    * texture (swapped to unlit). Defaults seed the portal at the lobby monkey's position
    * so it's immediately visible; tune via Tweaks.
    */
-  lobbyPortalPosX: 5.5,
-  lobbyPortalPosY: 6.5,
-  lobbyPortalPosZ: 18,
+  lobbyPortalPosX: 17.5,
+  lobbyPortalPosY: 5,
+  lobbyPortalPosZ: 8.5,
   lobbyPortalPitchDeg: 0,
-  lobbyPortalYawDeg: 16,
-  lobbyPortalRollDeg: 0,
-  lobbyPortalScale: 6,
+  lobbyPortalYawDeg: -103,
+  lobbyPortalRollDeg: 6,
+  lobbyPortalScale: 5.5,
   /** Swirl angular speed (Godot shader: `swirl_speed`, hint 0.1..5). */
   lobbyPortalSwirlSpeed: 1.8,
   /** How tightly the swirl wraps around the center (Godot: `swirl_tightness`, 1..20). */
-  lobbyPortalSwirlTightness: 6.0,
+  lobbyPortalSwirlTightness: 11.5,
   /** UV scale of the swirl pattern (Godot: `swirl_scale`, 0.5..5). */
-  lobbyPortalSwirlScale: 2.0,
+  lobbyPortalSwirlScale: 1.45,
   /** Pulse speed of the radial brightness (Godot: `pulse_speed`, 0..5). */
   lobbyPortalPulseSpeed: 1.2,
   /** Pulse strength on top of base radial (Godot: `pulse_strength`, 0..1). */
-  lobbyPortalPulseStrength: 0.18,
+  lobbyPortalPulseStrength: 0.11,
   /** Overall emissive brightness multiplier on the swirl shader. */
-  lobbyPortalIntensity: 1.0,
+  lobbyPortalIntensity: 0.4,
+  /** Swirl UV center offset from mesh UV (0,0) — tweak to align pattern with the frame opening. */
+  lobbyPortalUvOffsetU: 0,
+  lobbyPortalUvOffsetV: 0,
+  /** Circular mask radius in UV space around the center (cuts square inner quad corners). */
+  lobbyPortalDiskUvRadius: 0.48,
 } as const
 
 export type GameConfigKey = keyof typeof defaultGameConfig
