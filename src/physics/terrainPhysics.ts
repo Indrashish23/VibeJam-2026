@@ -179,12 +179,8 @@ export class TerrainPhysics {
     }
     if (this.terrainHandles.size === 0) {
       console.warn(
-        '[terrain] No mesh/cuboid colliders — adding emergency floor so the player does not fall forever.',
+        '[terrain] No terrain colliders — add collision meshes to the map (e.g. GLB col_* meshes).',
       )
-      const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.5, 0))
-      const collider = this.world.createCollider(RAPIER.ColliderDesc.cuboid(400, 0.5, 400).setFriction(1), body)
-      this.terrainFixedBodies.push(body)
-      this.terrainHandles.add(collider.handle)
     }
     /* Broadphase/narrowphase need at least one step before character queries see terrain. */
     this.world.timestep = 1 / 60
