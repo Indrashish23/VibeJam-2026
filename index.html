@@ -171,7 +171,6 @@
     <div id="lobby-overlay" class="lobby-overlay" hidden>
       <div class="lobby-shell" id="lobby-shell">
         <div class="lobby-main-column">
-          <p class="lobby-tagline">1V1 Voice Based Platform Shooter</p>
           <div class="lobby-card lobby-card--menu">
             <div class="lobby-card-head">
               <h2 id="lobby-title" class="lobby-title">Play</h2>
@@ -228,6 +227,11 @@
               Vs Bot
             </button>
           </div>
+          <div class="lobby-bug-report-row">
+            <button type="button" id="lobby-report-bug" class="lobby-btn lobby-btn--ghost lobby-btn--small">
+              Report a bug
+            </button>
+          </div>
         </div>
             <div class="lobby-offline-wrap">
               <button
@@ -249,6 +253,19 @@
               height="288"
               decoding="async"
             />
+          </div>
+          <div class="lobby-footer-copy">
+            <p class="lobby-credit">
+              A game by
+              <a
+                class="lobby-credit-link"
+                href="https://x.com/SoyBoyRoyy"
+                target="_blank"
+                rel="noopener noreferrer"
+                >@Soyboyroy</a
+              >
+            </p>
+            <p class="lobby-tagline">1V1 Voice Based Platform Shooter</p>
           </div>
         </div>
         <aside
@@ -582,6 +599,11 @@
         >
           <h2 id="leave-match-title" class="match-end-title">Leave match?</h2>
           <p class="match-end-sub">You will return to the lobby. This match will end for you here.</p>
+          <p class="leave-match-report">
+            <button type="button" id="leave-match-report-bug" class="leave-match-report-btn">
+              Report a bug (email)
+            </button>
+          </p>
           <div class="match-end-actions">
             <button
               type="button"

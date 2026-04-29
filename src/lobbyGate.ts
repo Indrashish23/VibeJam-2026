@@ -14,6 +14,7 @@ import {
   type QuickMatchResult,
 } from './net/quickMatchQueue'
 import { getCoarseRegion } from './net/regionTag'
+import { openBugReportEmail } from './bugReportMail'
 
 const RAGE_BAIT_LOGO_URL = new URL('../Assets/UI/RageBaitLogo.svg', import.meta.url).href
 
@@ -302,6 +303,14 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
         saveStoredMapId(selectedMapId(ui))
       })
     }
+
+    document.getElementById('lobby-report-bug')?.addEventListener('click', () => {
+      openBugReportEmail({
+        Where: 'Main menu (lobby)',
+        'Selected map': selectedMapId(ui),
+        Display: displayName,
+      })
+    })
 
     ui.changeName.onclick = () => {
       clearErr()

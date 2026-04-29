@@ -81,6 +81,7 @@ import {
 } from './net/webrtcGame'
 import { LowEndDitherShader } from './post/lowEndDitherShader'
 import { CelOutlineShader } from './post/celOutlineShader'
+import { openBugReportEmail } from './bugReportMail'
 import { readStoredPlayerName, savePlayerName } from './playerName'
 import {
   loadUserSettings,
@@ -6069,6 +6070,24 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   })
   leaveMatchOverlay?.addEventListener('click', (e) => {
     if (e.target === leaveMatchOverlay) hideLeaveMatchDialog()
+  })
+
+  document.getElementById('leave-match-report-bug')?.addEventListener('click', () => {
+    const ctx: Record<string, string> = {
+      Where: 'In-game (Esc menu)',
+      Map: map.id,
+      'Lobby mode': lobby.mode,
+    }
+    if (lobby.mode === 'offline') {
+      ctx['Lobby map'] = lobby.mapId
+    } else {
+      ctx.Role = lobby.role
+      ctx.Intent = lobby.intent
+      ctx.Code = lobby.shortCode
+    }
+    ctx['MP phase'] = mpPhase
+    ctx['Bot mode'] = bot.mode
+    openBugReportEmail(ctx)
   })
 
   /** Escape: always offer exit (capture + before tweaks so T panel still owns Escape when open). */
