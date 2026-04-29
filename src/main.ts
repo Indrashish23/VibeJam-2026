@@ -2,6 +2,7 @@
  * Single entry, static imports only — keeps the production bundle one chunk and fast to parse (Vibe Jam instant-play goal).
  */
 import './style.css'
+import { inject } from '@vercel/analytics'
 import {
   AmbientLight,
   BasicShadowMap,
@@ -73,6 +74,7 @@ import { createBrowserHostAuthority } from './net/browserHostAuthority'
 import { isAuthoritativeListenServer } from './net/transportConfig'
 import { simBananaThrowToLanding, feetOnPeel, isFeetInPickUpRange } from './net/bananaSim'
 import { BananaWorld, BANANA_FLOOR_RESPAWN_SEC } from './powerups/bananaWorld'
+import { KnockbackTrailFx, knockQualifiesForTrail } from './vfx/knockbackTrail'
 import { MegaphoneFpProp } from './weapons/megaphoneProp'
 import {
   createWebRtcGameChannel,
@@ -81,7 +83,7 @@ import {
 import { LowEndDitherShader } from './post/lowEndDitherShader'
 import { CelOutlineShader } from './post/celOutlineShader'
 import { openBugReport } from './bugReport'
-import { readStoredPlayerName, savePlayerName } from './playerName'
+import { randomLobbyRivalName, readStoredPlayerName, savePlayerName } from './playerName'
 import {
   loadUserSettings,
   getCameraShakeMul,
@@ -123,6 +125,9 @@ import {
   smokeIntensity01,
   triggerHudDamageShake,
 } from './hud/localPlayerHud'
+
+if (import.meta.env.PROD) inject()
+
 /** Stunned FX SVGs live in `public/ui/` so Vercel/production resolves them without bundling `../Assets/`. */
 const stunnedEffectBgUrl = `${import.meta.env.BASE_URL}ui/StunnedEffectBg.svg`
 const stunnedStarUrl = `${import.meta.env.BASE_URL}ui/StunnedStar.svg`
@@ -714,7 +719,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   /** Percent HUD foe line: peer hello name, falling back to a generic label until the hello arrives. */
   function opponentHudName(): string {
-    if (lobbySmartBotActive && bot.mode === 'smart') return 'Bot'
     if (lobby.mode === 'online') {
       const n = mpOpponentName?.trim()
       if (n) return n
@@ -791,6 +795,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   const pendingVictimHitPosByShotId = new Map<string, Vector3>()
 
   const scene = new Scene()
+  const knockTrailFx = new KnockbackTrailFx(scene)
   scene.background = new Color(
     gameConfig.skyboxColorR,
     gameConfig.skyboxColorG,
@@ -1157,6 +1162,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   megaphoneFp.attachToCamera(camera)
   const _bLand = new Vector3()
   const _bFeet = new Vector3()
+  const _trailFeet = new Vector3()
+  const _trailFeetBot = new Vector3()
   let localHasBanana = false
   /** Blocks double RMB before offline throw async finishes (ms since epoch). */
   let bananaLocalThrowCooldownUntil = 0
@@ -2252,6 +2259,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     playerHurt = 'none'
     playerHurtRecoverLeft = 0
     playerInvulnUntil = 0
+    knockTrailFx.clear()
     if (matchEndOverlay) matchEndOverlay.hidden = true
     browserHost?.reset()
     pendingPeerShotAudioById.clear()
@@ -3192,6 +3200,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     playerHurtAirSince = now
     dashVel.set(0, 0, 0)
     const victimPct = Math.max(0, opts?.victimPercent ?? playerPercent)
+    const vyBeforeMelee = vy
 
     if (opts?.overkill150) {
       playerKnock.copy(_knDir).multiplyScalar(10_000)
@@ -3201,6 +3210,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         victimWhiteFlashUntil,
         performance.now() + Math.max(gameConfig.hitVictimWhiteFlashMs, 960),
       )
+      knockTrailFx.startPlayerTrail(() => {
+        _trailFeet.set(camera.position.x, feetY(), camera.position.z)
+        return _trailFeet
+      })
       return
     }
 
@@ -3233,6 +3246,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     vy += baseKnock * gameConfig.knockVictimBelowAimMul * belowAim
     triggerHitImpactFx()
     triggerLocalVictimWhiteFlash()
+    const vyDeltaMelee = vy - vyBeforeMelee
+    if (knockQualifiesForTrail(playerKnock.length(), vyDeltaMelee)) {
+      knockTrailFx.startPlayerTrail(() => {
+        _trailFeet.set(camera.position.x, feetY(), camera.position.z)
+        return _trailFeet
+      })
+    }
   }
 
   function triggerAggressorHitConfirmFx(victimPercentAfterHit: number): void {
@@ -4631,6 +4651,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
     lobbyDummyPractice = false
     lobbySmartBotActive = true
+    if (!mpOpponentName?.trim()) {
+      mpOpponentName = randomLobbyRivalName()
+    }
+    if (opponentLabelEl) opponentLabelEl.textContent = opponentHudName()
     if (mpWaitLayer) mpWaitLayer.hidden = true
     if (mpCodeHud) mpCodeHud.hidden = true
     updateMicBlockedUi()
@@ -4640,13 +4664,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     else applyRoundReset()
 
     if (mpToast && lobby.intent !== 'vsBot' && lobby.intent !== 'quickMatch') {
-      mpToast.textContent = 'Solo vs smart bot — a real match still starts when someone joins.'
+      mpToast.textContent = 'Solo practice — a real match still starts when someone joins.'
       mpToast.hidden = false
       mpToast.classList.remove('mp-toast--bad')
       window.setTimeout(() => {
         if (
           mpToast &&
-          mpToast.textContent === 'Solo vs smart bot — a real match still starts when someone joins.'
+          mpToast.textContent === 'Solo practice — a real match still starts when someone joins.'
         ) {
           mpToast.hidden = true
         }
@@ -4889,19 +4913,35 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           const crossed150 = prevEnemyPct < 150 && enemyPercent >= 150
           if (crossed150) {
             triggerLaunchPercent150Spectacle()
+            const botVyBeforeCat = bot.vy
             bot.applyLaunchPercentCataclysm(_knDir)
+            if (knockQualifiesForTrail(bot.knockXZ.length(), bot.vy - botVyBeforeCat)) {
+              knockTrailFx.startBotTrail(() => {
+                const fo = bot.getFootOffset()
+                _trailFeetBot.set(bot.root.position.x, bot.root.position.y - fo, bot.root.position.z)
+                return _trailFeetBot
+              })
+            }
           } else {
             /* Knock for this strike scales from launch % *before* this hit (fresh stock = true 0%). */
             const launchMul = launchKnockMulFromPercent(prevEnemyPct)
             const chargeKnockT =
               gameConfig.knockVoiceMinMul +
               shotT * (gameConfig.knockVoiceMaxMul - gameConfig.knockVoiceMinMul)
+            const botVyBefore = bot.vy
             bot.applyKnockback(
               _knDir,
               gameConfig.knockbackOnBot * launchMul * pistolKnockMul * chargeKnockT,
               prevEnemyPct,
               botAimY,
             )
+            if (knockQualifiesForTrail(bot.knockXZ.length(), bot.vy - botVyBefore)) {
+              knockTrailFx.startBotTrail(() => {
+                const fo = bot.getFootOffset()
+                _trailFeetBot.set(bot.root.position.x, bot.root.position.y - fo, bot.root.position.z)
+                return _trailFeetBot
+              })
+            }
           }
           triggerHitImpactFx()
           bot.flashVictimInvuln(gameConfig.hitVictimWhiteFlashMs)
@@ -5791,6 +5831,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       updateMovement(delta)
     }
 
+    knockTrailFx.tick(delta, playerHurt === 'air', bot.isInKnockbackAir())
+
     syncStunnedFxOverlay()
     tickLocalPlayerHud(delta)
     updateDangerAuraFx(performance.now() * 0.001)
@@ -5952,6 +5994,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       if (mpCodeValue) mpCodeValue.textContent = onlineLobby.shortCode
     } else {
       if (mpCodeHud) mpCodeHud.hidden = true
+    }
+    if (onlineLobby.startWithSmartBot) {
+      mpOpponentName = randomLobbyRivalName()
     }
     if (opponentLabelEl) opponentLabelEl.textContent = opponentHudName()
 
