@@ -883,6 +883,10 @@ body.hide-lobby-html-ui .lobby-portal-dialog {
   line-height: 1.45;
 }
 
+.queue-sub:empty {
+  display: none;
+}
+
 .queue-spinner {
   display: inline-flex;
   gap: 0.45rem;
