@@ -77,7 +77,7 @@ export type MapHandle = {
 
 const ARENA_EXPORT_GLB_URL = new URL('../Assets/Maps/arena_export.glb', import.meta.url).href
 /** Uniform scale for authored arena GLB (collision + spawns use world space after this). */
-const ARENA_EXPORT_SCALE = 1.4
+const ARENA_EXPORT_SCALE = 1.7
 
 function normalizeSceneName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
@@ -220,6 +220,45 @@ function collectGltfArenaData(root: Group): {
     }
   })
   return { collisionMeshes, spawnA, spawnB, looseSpawns }
+}
+
+/**
+ * Thick static slab under the exported arena collision AABB. Catches trimesh holes,
+ * one-sided gaps, and any missed geometry without fighting the visible deck above.
+ */
+function getArenaExportSafetyCuboids(collisionMeshes: Mesh[], sceneRoot: Group): {
+  center: Vector3
+  halfExtents: Vector3
+}[] {
+  const box = new Box3()
+  let expanded = false
+  for (const m of collisionMeshes) {
+    box.expandByObject(m)
+    expanded = true
+  }
+  if (!expanded || box.isEmpty()) {
+    sceneRoot.updateMatrixWorld(true)
+    box.setFromObject(sceneRoot)
+  }
+  if (box.isEmpty()) return []
+
+  const center = new Vector3()
+  const size = new Vector3()
+  box.getCenter(center)
+  box.getSize(size)
+
+  const padXZ = 8
+  const slabHalfY = 0.55
+  const topY = box.min.y - 0.02
+  const hx = Math.max(size.x * 0.5 + padXZ, 34)
+  const hz = Math.max(size.z * 0.5 + padXZ, 34)
+
+  return [
+    {
+      center: new Vector3(center.x, topY - slabHalfY, center.z),
+      halfExtents: new Vector3(hx, slabHalfY, hz),
+    },
+  ]
 }
 
 function collectBananaSpawnEmpties(root: Group): Vector3[] {
@@ -432,6 +471,7 @@ async function loadArenaExportMap(_scene: Scene, hubRoot: Group): Promise<MapHan
   return {
     id: 'arena',
     collisionMeshes,
+    rapierCuboids: getArenaExportSafetyCuboids(collisionMeshes, gltf.scene),
     bananaSpawnPoints: bananaSpawnPoints.length > 0 ? bananaSpawnPoints : undefined,
     isBlastZone(pos: Vector3): boolean {
       return pos.y < gameConfig.blastY

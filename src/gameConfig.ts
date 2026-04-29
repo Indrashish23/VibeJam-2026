@@ -262,7 +262,7 @@ export const defaultGameConfig = {
   /** Extra projectile size bonus at full charge `t=1` (0.2 = +20%, 1 = +100%). */
   projectileSizeChargeMaxBonus: 0.57,
   /** Horizontal knockback on player when bot lands a hit (non-parried). */
-  knockbackOnPlayer: 60,
+  knockbackOnPlayer: 30,
   /** Converts horizontal knock impulse into upward vy (pop when hurt; tune with capsule slide). */
   knockVictimLiftMul: 0.74,
   /** Extra vy when the shot connects from below you (uses aim vector Y from shot → victim). */
@@ -272,10 +272,10 @@ export const defaultGameConfig = {
   /** Extra bot vy when the shot is from below (normalized fist→body Y, × strength). */
   knockBotBelowAimMul: 0.58,
   /** Base knock on bot (multiplied by voice `t` lerp). */
-  knockbackOnBot: 60,
+  knockbackOnBot: 30,
   /** At quiet voice (t=0) knock = base × this; at loud (t=1) × that. */
-  knockVoiceMinMul: 0.38,
-  knockVoiceMaxMul: 1,
+  knockVoiceMinMul: 0.22,
+  knockVoiceMaxMul: 0.72,
   /** PvE: percent added when the bot’s fist hits you. */
   botFistPercentGain: 12,
   /** 0..1: bot fist knock lerp (uses knockVoice min/max). */
@@ -301,15 +301,15 @@ export const defaultGameConfig = {
   /** Horizontal knock decay while tumbling from a hit (lower = flies farther before sliding). */
   knockHurtAirDrag: 1.42,
   /** Scales initial hurt-knock impulse (lower = gentler launch speed, tune with knockHurtAirDrag for distance). */
-  knockLaunchImpulseMul: 0.62,
+  knockLaunchImpulseMul: 0.4,
   /** Victim launch % above this (0–1) applies knockHighPctSpeedMul to incoming knock speed. */
-  knockHighPctVictimThreshold: 0.6,
+  knockHighPctVictimThreshold: 0.8,
   /** Extra multiplier on knock speed when victim is above knockHighPctVictimThreshold (e.g. 0.6 = softer hits at high %). */
   knockHighPctSpeedMul: 0.6,
   /** Air strafe strength on hurt knock (world velocity push per second at full input, scaled by air control). */
-  knockAirStrafeAccel: 26,
+  knockAirStrafeAccel: 65,
   /** Full air control of knock drift at 0% victim launch; linearly fades to 0 by knockAirControlFadePct (percent). */
-  knockAirControlFadePct: 80,
+  knockAirControlFadePct: 88,
   /** Full-screen white flash duration when you take a hit (ms). */
   hitVictimWhiteFlashMs: 480,
   /** Ms grounded “down” phase before bot regains movement after a knockback. */
