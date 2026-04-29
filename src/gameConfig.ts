@@ -398,7 +398,7 @@ export const defaultGameConfig = {
   /** Full-opacity hold for KO name + stock overlay before fade-out / respawn (fade-in is added in code). */
   koAnnounceHoldMs: 1000,
   /** Invulnerability after respawn — no incoming/outgoing combat (ms). */
-  respawnInvulnMs: 2000,
+  respawnInvulnMs: 4000,
   /** Enemy mesh flash cadence during respawn invuln (blinks per second). */
   respawnFlashHz: 10,
   botBodyRadius: 0.72,
@@ -417,20 +417,20 @@ export const defaultGameConfig = {
   /** Smart bot: attack window as multiplier of botPunchRange (kept high so smart bot still pressures from range). */
   botSmartAttackRangeMul: 4,
   /** Smart bot: telegraph/aim wind-up before firing (ms). */
-  botSmartAimMs: 272,
+  botSmartAimMs: 340,
   /** Smart bot: cooldown after firing (ms). */
-  botSmartRecoverMs: 336,
+  botSmartRecoverMs: 420,
   /** Smart bot: minimum time between shots (ms). */
-  botSmartShotCooldownMs: 1240,
+  botSmartShotCooldownMs: 1550,
   /**
    * Smart/dummy bot only: horizontal homing acceleration (world units/s²) on voice fists;
-   * bends trajectory toward the player. 0 = off. Tuned ~20% stronger than a mild baseline.
+   * bends trajectory toward the player. 0 = off.
    */
-  botSmartProjectileHomingAccel: 12,
+  botSmartProjectileHomingAccel: 0,
   /** Smart bot: default turn speed (rad/s). */
   botSmartTurnRate: 9.8,
-  /** Smart bot: faster turn speed while aiming (rad/s). ~20% above prior default for tracking. */
-  botSmartAimTurnRate: 16.8,
+  /** Smart bot: faster turn speed while aiming (rad/s). */
+  botSmartAimTurnRate: 14,
   /** Smart bot: shot speed range independent of player voice ranges. */
   botSmartShotSpeedMinMul: 0.34,
   botSmartShotSpeedMaxMul: 1.12,

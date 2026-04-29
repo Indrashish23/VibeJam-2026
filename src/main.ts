@@ -4892,6 +4892,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       const dyHit = _fp.y - bot.bodyCenter.y
       const dzHit = _fp.z - bot.bodyCenter.z
       if (!headscanWallFirst && Math.hypot(dxHit, dyHit * 0.75, dzHit) < reach) {
+        /* Mirror bot→player: do not apply % / knock while the foe is still in respawn invuln. */
+        if (performance.now() < respawnInvulnUntilFoe) {
+          arms.markDealt()
+        } else {
         const shotT = arms.peekShotT()
         const isPistolShot = arms.peekIsPistolShot()
         const hitAudio = arms.takeHitAudio()
@@ -4945,6 +4949,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           }
           triggerHitImpactFx()
           bot.flashVictimInvuln(gameConfig.hitVictimWhiteFlashMs)
+        }
         }
       } else if (!headscanWallFirst && arms.isHeadscan()) {
         arms.markDealt()
