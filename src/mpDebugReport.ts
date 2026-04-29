@@ -1,8 +1,13 @@
 /** Enable with `?mpdebug=1`, `?debug=1`, or localStorage `vibejam_mpdebug` = `1`. */
 
+import { IS_PUBLIC_BUILD } from './buildMode'
+
 export const MP_DEBUG_LS_KEY = 'vibejam_mpdebug'
 
 export function isMpDebugMode(): boolean {
+  /* Public builds (VITE_PUBLIC_BUILD=true on Vercel prod) never expose the
+   * MP debug log dump, regardless of URL params or localStorage flags. */
+  if (IS_PUBLIC_BUILD) return false
   if (import.meta.env.DEV) return true
   try {
     if (typeof localStorage !== 'undefined' && localStorage.getItem(MP_DEBUG_LS_KEY) === '1')

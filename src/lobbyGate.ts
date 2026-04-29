@@ -6,7 +6,8 @@ import { clearTutorialDone, TUTORIAL_ENABLED } from './tutorial'
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js'
 import { gameConfig } from './gameConfig'
 import { mountLobbyBackdrop } from './lobbyBackdrop'
-import { mountTweaksPanel } from './tweaksPanel'
+import { IS_PUBLIC_BUILD } from './buildMode'
+/* Tweaks panel is dev-only; dynamic import below tree-shakes it out of the public build. */
 import {
   QUICK_MATCH_TIMEOUT_MS,
   runQuickMatchQueue,
@@ -157,8 +158,9 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
 
   const tweaksHost = document.getElementById('tweaks-panel-host')
   let disposeLobbyTweaks: (() => void) | null = null
-  if (tweaksHost) {
+  if (!IS_PUBLIC_BUILD && tweaksHost) {
     const controls = new PointerLockControls(backdrop.camera, gameRoot)
+    const { mountTweaksPanel } = await import('./tweaksPanel')
     const mounted = mountTweaksPanel(tweaksHost, {
       controls,
       camera: backdrop.camera,

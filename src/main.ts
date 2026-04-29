@@ -43,12 +43,9 @@ import { BotFighter, type BotMode } from './boxing/bot'
 import { PlayerArms } from './boxing/playerArms'
 import { VoiceChargeManager, audioBufferSliceToWavBlob } from './audio/voiceCharge'
 import { playLocalVoiceRecordReleaseSfx, playLocalVoiceRecordStartSfx } from './audio/voiceRecordUiSfx'
-import {
-  mountTweaksPanel,
-  attachHudOverlayDrag,
-  resetGameplayHudLayout,
-  restoreHudElementPosition,
-} from './tweaksPanel'
+import { IS_PUBLIC_BUILD } from './buildMode'
+/* Tweaks panel + HUD-drag helpers are dev-only; in public builds we never load them
+ * (dynamic import below tree-shakes the module and its `tweakRanges` table out). */
 import {
   startTutorial,
   isTutorialPending,
@@ -232,8 +229,12 @@ if (chargeBarWrap) {
   chargeBarWrap.style.setProperty('--charge-pct', '0%')
   syncChargeHudLayout()
 }
-restoreHudElementPosition(percentHudEl, 'percentHud')
-restoreHudElementPosition(chargeBarWrap, 'chargeHud')
+if (!IS_PUBLIC_BUILD) {
+  void import('./tweaksPanel').then(({ restoreHudElementPosition }) => {
+    restoreHudElementPosition(percentHudEl, 'percentHud')
+    restoreHudElementPosition(chargeBarWrap, 'chargeHud')
+  })
+}
 
 function setChargeBarDisplayPct(pct0to100: number): void {
   if (!chargeBarWrap) return
@@ -5857,8 +5858,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   const tweaksHost = document.getElementById('tweaks-panel-host')
-  if (tweaksHost) {
+  if (!IS_PUBLIC_BUILD && tweaksHost) {
     tweaksHost.replaceChildren()
+    const { mountTweaksPanel, attachHudOverlayDrag, resetGameplayHudLayout } =
+      await import('./tweaksPanel')
     mountTweaksPanel(tweaksHost, {
       controls,
       camera,
