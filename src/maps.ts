@@ -423,6 +423,12 @@ async function loadArenaExportMap(_scene: Scene, hubRoot: Group): Promise<MapHan
   const dropTopY = topY + 6
   const fallbackA = new Vector3(0, dropTopY, 6.8)
   const fallbackB = new Vector3(0, dropTopY, -6.8)
+  /**
+   * Nudge authored opponent spawn along +X / +Z so the bot isn’t wedged into wall seams /
+   * interior collision on arena_export-style maps (spawn empties often sit on mesh edges).
+   */
+  const ARENA_OPPONENT_SPAWN_X_NUDGE = 2.6
+  const ARENA_OPPONENT_SPAWN_Z_NUDGE = 1
 
   const respawnPool: Vector3[] = []
   if (spawnA) respawnPool.push(spawnA.clone())
@@ -454,6 +460,8 @@ async function loadArenaExportMap(_scene: Scene, hubRoot: Group): Promise<MapHan
     },
     getBotSpawn(slot: SpawnSlot, footOffset: number): Vector3 {
       const feet = feetSpawn(slot)
+      feet.x += ARENA_OPPONENT_SPAWN_X_NUDGE
+      feet.z += ARENA_OPPONENT_SPAWN_Z_NUDGE
       feet.y += footOffset
       return feet
     },

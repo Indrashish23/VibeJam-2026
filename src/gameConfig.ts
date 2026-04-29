@@ -362,7 +362,9 @@ export const defaultGameConfig = {
    * timer fires the same path even if the user does nothing.
    */
   matchEndAutoReturnMs: 2400,
-  /** When 1, play `match_victory.mp3` / `match_defeat.mp3` at match end (last stock). */
+  /**
+   * When 1, play `match_victory.mp3` at GAME splash (win: 0–1.8s, lose: 2–5s), ~200ms before flash.
+   */
   matchEndAnnouncerEnabled: 1,
   /** Gain × on match-end announcer (after SFX chain). */
   matchEndAnnouncerVolumeMul: 1,
@@ -778,6 +780,29 @@ export const defaultGameConfig = {
   lobbyMonkeyYawDeg: 16,
   lobbyMonkeyRollDeg: 3,
   lobbyMonkeyScale: 6.05,
+
+  /**
+   * Vibe Jam 2026 webring exit portal — rendered in a dedicated overlay canvas above the
+   * lobby vignette. Geometry comes from `Assets/Props/portall.gltf`; both submeshes are
+   * replaced with custom rainbow shaders at load time.
+   */
+  lobbyPortalPosX: -7,
+  lobbyPortalPosY: 6,
+  lobbyPortalPosZ: 14,
+  lobbyPortalPitchDeg: 0,
+  lobbyPortalYawDeg: -28,
+  lobbyPortalRollDeg: 0,
+  lobbyPortalScale: 5,
+  /** Swirl angular speed of the inner rift (radians/sec base). */
+  lobbyPortalRiftSpeed: 1.0,
+  /** How fast the rainbow hue cycles (full cycles/sec at 1.0). */
+  lobbyPortalHueCycleSpeed: 0.4,
+  /** Hue variation from rift center to edge (multiplied by radius). */
+  lobbyPortalHueRadialBias: 0.6,
+  /** Overall emissive brightness multiplier (rift + ring). */
+  lobbyPortalIntensity: 1.5,
+  /** HSV saturation for the rainbow color. */
+  lobbyPortalSaturation: 1.0,
 } as const
 
 export type GameConfigKey = keyof typeof defaultGameConfig

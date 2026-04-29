@@ -55,6 +55,12 @@ import {
 } from './tutorial'
 import { runLobbyGate, type LobbyResult } from './lobbyGate'
 import {
+  applyPortalEntry,
+  buildPortalAutoBotLobbyResult,
+  hideLobbyAndUsernameOverlays,
+  parsePortalEntry,
+} from './portalEntry'
+import {
   base64ToBlob,
   blobToBase64,
   decodeVoiceShotAudioFrame,
@@ -86,7 +92,10 @@ import {
   wireBackgroundMusicToFirstGesture,
 } from './audio/backgroundMusic'
 import { playFootstepOneShot } from './audio/footstepsSfx'
-import { playMatchEndStinger } from './audio/matchEndSfx'
+import {
+  MATCH_END_ANNOUNCER_LEAD_MS,
+  playMatchGameSplashAnnouncer,
+} from './audio/matchEndSfx'
 import { playTieredHitImpactOneShot } from './audio/combatSfx'
 import { playBananaSlipOneShot, playJumpOneShot, playLandOneShot } from './audio/playerMoveSfx'
 import { playEnemySfxSpatialAt, resumeEnemySfxAudio, type SfxKind } from './audio/enemySfx'
@@ -619,6 +628,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
    * gameplay renderer prepends its own canvas. A stale GL canvas pinned to z-index 0 was
    * occasionally masking the new gameplay canvas on the second peer in quick match. */
   gameRoot.querySelectorAll('canvas.lobby-backdrop-canvas').forEach((node) => node.remove())
+  /* Same idea for the Vibe Jam exit portal overlay (separate canvas + hover wrapper). */
+  gameRoot.querySelectorAll('canvas.lobby-portal-canvas').forEach((node) => node.remove())
+  gameRoot.querySelectorAll('.lobby-portal-hover').forEach((node) => node.remove())
 
   if (DEBUG_MP)
     debugMpLog(
@@ -2143,7 +2155,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   function pvpExpectedSpawn(): { cam: Vector3; camFeetY: number; opp: Vector3 } {
     const slots = spawnSlots()
     const cam = map.getPlayerSpawn(slots.player, eyeH())
-    const opp = map.getBotSpawn(slots.opponent, bot.getFootOffset())
+    const fo = bot.getFootOffset()
+    const opp = resolveArenaBotRootOnDeck(map.getBotSpawn(slots.opponent, fo), fo)
     return { cam, camFeetY: cam.y - eyeH(), opp }
   }
 
@@ -2306,12 +2319,15 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (isOnline && lobby.mode === 'online') {
       spawnActors()
       const { opponent } = spawnSlots()
+      const foNet = bot.getFootOffset()
+      const rawNet = map.getBotSpawn(opponent, foNet)
+      const placedNet = resolveArenaBotRootOnDeck(rawNet, foNet)
       bot.dispose(scene)
       botMode = 'network'
       bot = new BotFighter(scene, 'network', map.getBotSpawn(opponent, 0), {
         bodyColor: randomOpponentCapsuleColor(),
       })
-      bot.root.position.copy(map.getBotSpawn(opponent, bot.getFootOffset()))
+      bot.root.position.copy(placedNet)
       bot.networkTargetPos.copy(bot.root.position)
       bot.alignFacingToward(camera.position)
       rebindOpponentBananaAttachment()
@@ -4072,6 +4088,21 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     terrainPhysics.warpCapsuleToFeet('bot', _moveStart, br, bh)
   }
 
+  /**
+   * Arena GLB spawn markers can sit inside or under the trimesh; raycast from above the
+   * authored point to the first walkable hit so the opponent capsule lands on the deck.
+   */
+  function resolveArenaBotRootOnDeck(rootPos: Vector3, footOffset: number): Vector3 {
+    const v = rootPos.clone()
+    if (map.id !== 'arena') return v
+    const rayOriginY = Math.max(v.y + 22, 125)
+    const hit = terrainPhysics.raycastDown(v.x, rayOriginY, v.z, 340)
+    if (hit && hit.normal.y >= 0.08) {
+      v.y = hit.point.y + footOffset
+    }
+    return v
+  }
+
   /** Immediately sync PvP pose so the peer’s puppet snaps to spawn after a round reset. */
   function flushPvpSpawnPose(): void {
     if (!isPvp()) return
@@ -4102,7 +4133,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   function spawnActors(): void {
     const slots = spawnSlots()
     const playerSpawn = map.getPlayerSpawn(slots.player, eyeH())
-    const botSpawn = map.getBotSpawn(slots.opponent, bot.getFootOffset())
+    const fo = bot.getFootOffset()
+    const botSpawn = resolveArenaBotRootOnDeck(map.getBotSpawn(slots.opponent, fo), fo)
     const yaw = yawFacing(playerSpawn, botSpawn)
 
     camera.position.copy(playerSpawn)
@@ -4188,6 +4220,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   async function playGameOutcomeSplashSequence(outcome: 'win' | 'lose'): Promise<void> {
     if (!winGameSplashEl) return
+    playMatchGameSplashAnnouncer(outcome)
+    await sleepMs(MATCH_END_ANNOUNCER_LEAD_MS)
     if (winGameSplashSubEl) {
       winGameSplashSubEl.textContent = outcome === 'win' ? 'YOU WIN' : 'YOU LOSE'
     }
@@ -4316,9 +4350,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     matchEndCardEl?.classList.remove('match-end-card--forfeit')
     triggerHitImpactFx()
     voice.resumeAudio()
-    if (gameConfig.matchEndAnnouncerEnabled >= 0.5) {
-      playMatchEndStinger(outcome)
-    } else {
+    /* Announcer plays with GAME splash (~200ms lead); only the fallback blip here when off. */
+    if (gameConfig.matchEndAnnouncerEnabled < 0.5) {
       voice.playFallbackHitSound()
     }
     controls.unlock()
@@ -4350,7 +4383,14 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (isPvp()) return
     bot.dispose(scene)
     botMode = mode
-    bot = new BotFighter(scene, botMode, new Vector3(0, 1.45, -gameConfig.groundDepth / 2 + 12))
+    bot = new BotFighter(scene, botMode, new Vector3(0, 40, 0))
+    const foRb = bot.getFootOffset()
+    const slotsRb = spawnSlots()
+    const rawRb = map.getBotSpawn(slotsRb.opponent, foRb)
+    const placedRb = resolveArenaBotRootOnDeck(rawRb, foRb)
+    bot.root.position.copy(placedRb)
+    bot.networkTargetPos.copy(placedRb)
+    bot.alignFacingToward(camera.position)
     rebindOpponentBananaAttachment()
     applyLightingModeToScene(
       gameConfig.lightingUnlitMode >= 0.5,
@@ -6048,9 +6088,26 @@ async function resolveLobbyAfterReload(): Promise<LobbyResult> {
   return runLobbyGate(readStoredPlayerName()?.trim() || 'Angler')
 }
 
-runUsernameGate()
-  .then(() => resolveLobbyAfterReload())
-  .then((lobby) => initGame(lobby))
-  .catch((err) => {
-    console.error('[vibejam] init failed', err)
+/*
+ * Vibe Jam 2026 webring: when a player arrives with `?portal=true`, the spec requires
+ * an instant load straight into the game (no username or lobby UI). We honour that by
+ * applying the optional forwarded params to the local session and constructing the
+ * smart-bot `LobbyResult` directly, bypassing both gates.
+ */
+const portalEntry = parsePortalEntry()
+if (portalEntry) {
+  console.info('[portal] inbound entry', portalEntry)
+  applyPortalEntry(portalEntry)
+  hideLobbyAndUsernameOverlays()
+  clearLegacyRematchKey()
+  initGame(buildPortalAutoBotLobbyResult()).catch((err) => {
+    console.error('[vibejam] portal-entry init failed', err)
   })
+} else {
+  runUsernameGate()
+    .then(() => resolveLobbyAfterReload())
+    .then((lobby) => initGame(lobby))
+    .catch((err) => {
+      console.error('[vibejam] init failed', err)
+    })
+}

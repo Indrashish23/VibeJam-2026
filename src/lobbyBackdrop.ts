@@ -23,6 +23,7 @@ import {
 } from './boxing/monkeyVisualStyle'
 import { defaultGameConfig, gameConfig, type GameConfigKey } from './gameConfig'
 import { createLobbyHubUnlitSwapper } from './lobbyUnlitMaterials'
+import { mountLobbyPortal, type LobbyPortalHandle } from './lobbyPortal'
 import { createProceduralSky } from './skyDome'
 import { loadMap, type MapHandle } from './maps'
 
@@ -173,6 +174,10 @@ export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<LobbyBa
     monkeyRoot.scale.setScalar(Math.max(0.05, gameConfig.lobbyMonkeyScale))
   }
 
+  /* Vibe Jam webring exit portal — separate WebGL overlay above the vignette. Mounted
+   * alongside the backdrop so it shares the lobby lifecycle (pause / resume / dispose). */
+  const portal: LobbyPortalHandle = mountLobbyPortal(gameRoot)
+
   function syncLobbyBackdropFromConfig(): void {
     setSceneBackgroundAndClearColor()
     ambient.intensity = gameConfig.ambientIntensity
@@ -186,6 +191,7 @@ export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<LobbyBa
       texNearest: gameConfig.lobbyMonkeyTexPixelated >= 0.5,
     })
     syncLobbyMonkeyPoseFromConfig()
+    portal.syncFromConfig()
   }
 
   syncLobbyBackdropFromConfig()
@@ -224,6 +230,7 @@ export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<LobbyBa
 
   function pauseRendering(): void {
     paused = true
+    portal.pauseRendering()
   }
 
   function resumeRendering(): void {
@@ -231,6 +238,7 @@ export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<LobbyBa
     paused = false
     /* Reset clock so the first resumed frame doesn't burn a long delta on skyDome / animations. */
     clock.getDelta()
+    portal.resumeRendering()
   }
 
   window.addEventListener('resize', resize)
@@ -241,6 +249,7 @@ export async function mountLobbyBackdrop(gameRoot: HTMLElement): Promise<LobbyBa
     disposed = true
     cancelAnimationFrame(rafId)
     window.removeEventListener('resize', resize)
+    portal.dispose()
     mapHandle.dispose()
     skyDome.dispose()
     scene.remove(ambient)

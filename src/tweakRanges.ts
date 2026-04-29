@@ -284,6 +284,19 @@ export const TWEAK_RANGE = {
   lobbyMonkeyRollDeg: { min: -180, max: 180, step: 1 },
   lobbyMonkeyScale: { min: 0.15, max: 14, step: 0.05 },
 
+  lobbyPortalPosX: { min: -45, max: 45, step: 0.5 },
+  lobbyPortalPosY: { min: -25, max: 35, step: 0.5 },
+  lobbyPortalPosZ: { min: -45, max: 45, step: 0.5 },
+  lobbyPortalPitchDeg: { min: -180, max: 180, step: 1 },
+  lobbyPortalYawDeg: { min: -180, max: 180, step: 1 },
+  lobbyPortalRollDeg: { min: -180, max: 180, step: 1 },
+  lobbyPortalScale: { min: 0.2, max: 14, step: 0.05 },
+  lobbyPortalRiftSpeed: { min: 0, max: 4, step: 0.05 },
+  lobbyPortalHueCycleSpeed: { min: 0, max: 4, step: 0.02 },
+  lobbyPortalHueRadialBias: { min: 0, max: 4, step: 0.02 },
+  lobbyPortalIntensity: { min: 0, max: 4, step: 0.05 },
+  lobbyPortalSaturation: { min: 0, max: 1, step: 0.02 },
+
   stunnedStarScaleMul: { min: 0.35, max: 2.2, step: 0.02 },
   stunnedStarSpinMul: { min: 0.45, max: 5, step: 0.05 },
   stunnedStarSpreadMul: { min: 0.45, max: 2.35, step: 0.02 },
@@ -481,7 +494,7 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   winRingoutPresentDelayMs: 'GAME splash min hold before match-end screen (ms)',
   winRingoutPreSplashDelayMs: 'Cinematic delay after final KO before GAME splash (ms)',
   matchEndAutoReturnMs: 'Match-end overlay → auto-dissolve to lobby (ms)',
-  matchEndAnnouncerEnabled: 'Match end: announcer SFX (0/1)',
+  matchEndAnnouncerEnabled: 'GAME splash announcer (0/1); one clip: win 0–1.8s, lose 2–5s',
   matchEndAnnouncerVolumeMul: 'Match-end announcer gain × (after SFX chain)',
   voiceOverloadThreshold: 'Overload UI shake',
   voiceShooterReplayFadeSec: 'Hit replay fade (s)',
@@ -757,6 +770,19 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   lobbyMonkeyPitchDeg: 'Lobby monkey pitch °',
   lobbyMonkeyYawDeg: 'Lobby monkey yaw °',
   lobbyMonkeyRollDeg: 'Lobby monkey roll °',
+
+  lobbyPortalPosX: 'Lobby portal X (world m)',
+  lobbyPortalPosY: 'Lobby portal Y (world m)',
+  lobbyPortalPosZ: 'Lobby portal Z (world m)',
+  lobbyPortalPitchDeg: 'Lobby portal pitch °',
+  lobbyPortalYawDeg: 'Lobby portal yaw °',
+  lobbyPortalRollDeg: 'Lobby portal roll °',
+  lobbyPortalScale: 'Lobby portal uniform scale',
+  lobbyPortalRiftSpeed: 'Lobby portal: rift swirl speed',
+  lobbyPortalHueCycleSpeed: 'Lobby portal: rainbow cycle speed',
+  lobbyPortalHueRadialBias: 'Lobby portal: hue bias center→edge',
+  lobbyPortalIntensity: 'Lobby portal: emissive intensity ×',
+  lobbyPortalSaturation: 'Lobby portal: rainbow saturation',
   lobbyMonkeyScale: 'Lobby monkey uniform scale',
 }
 
@@ -1111,6 +1137,23 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   lobbyMonkeyRollDeg: 'Roll tilt for the lobby prop.',
   lobbyMonkeyScale: 'Uniform scale of the lobby GLB (LobbyMonkeyModel.glb).',
 
+  lobbyPortalPosX: 'Vibe Jam portal: world X in the lobby preview (three.js units).',
+  lobbyPortalPosY: 'Vibe Jam portal: vertical world Y position.',
+  lobbyPortalPosZ: 'Vibe Jam portal: depth Z position.',
+  lobbyPortalPitchDeg: 'Vibe Jam portal pitch ° (applied with YXZ order).',
+  lobbyPortalYawDeg: 'Vibe Jam portal yaw ° (face the camera).',
+  lobbyPortalRollDeg: 'Vibe Jam portal roll ° (tilt the rift).',
+  lobbyPortalScale: 'Vibe Jam portal uniform scale.',
+  lobbyPortalRiftSpeed:
+    'Vibe Jam portal: angular swirl speed of the inner rift. 0 = static.',
+  lobbyPortalHueCycleSpeed:
+    'Vibe Jam portal: rainbow hue cycles per second across rift + ring.',
+  lobbyPortalHueRadialBias:
+    'Vibe Jam portal: how much hue offsets from rift center to edge (0 = uniform color).',
+  lobbyPortalIntensity:
+    'Vibe Jam portal: overall emissive brightness multiplier on rift + ring.',
+  lobbyPortalSaturation: 'Vibe Jam portal: HSV saturation of the rainbow color.',
+
   sunPosX: 'Directional sun world X (shared with matches; shadow direction).',
   sunPosY: 'Directional sun world Y.',
   sunPosZ: 'Directional sun world Z.',
@@ -1259,7 +1302,7 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   matchEndAutoReturnMs:
     'How long the You Win / You Lose overlay holds before auto-dissolving back to the main menu.',
   matchEndAnnouncerEnabled:
-    'When 1, plays `match_victory.mp3` / `match_defeat.mp3` at last-stock match end (Settings SFX × master). When 0, uses the short blip instead.',
+    'When 1, plays `match_victory.mp3` at the GAME splash (~200ms lead: win 0–1.8s, lose 2–5s). When 0, short blip on match-end screen only.',
   matchEndAnnouncerVolumeMul:
     'Multiplier on match-end announcer after the SFX chain (raise if the clip is too quiet).',
   botBodyRadius: 'Enemy capsule radius (bigger = easier to hit, harder to ring-out).',
@@ -1804,6 +1847,24 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'lobbyMonkeyYawDeg',
       'lobbyMonkeyRollDeg',
       'lobbyMonkeyScale',
+    ],
+  },
+  {
+    id: 'lobbyPortal',
+    title: 'Lobby Vibe Jam portal',
+    keys: [
+      'lobbyPortalPosX',
+      'lobbyPortalPosY',
+      'lobbyPortalPosZ',
+      'lobbyPortalPitchDeg',
+      'lobbyPortalYawDeg',
+      'lobbyPortalRollDeg',
+      'lobbyPortalScale',
+      'lobbyPortalRiftSpeed',
+      'lobbyPortalHueCycleSpeed',
+      'lobbyPortalHueRadialBias',
+      'lobbyPortalIntensity',
+      'lobbyPortalSaturation',
     ],
   },
 ]
