@@ -2519,7 +2519,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         mpOpponentName = 'Player'
       }
       void runMpBeginNow()
-    }, 50)
+    }, 550)
   }
 
   function hideMatchEndOverlayFully(): void {
