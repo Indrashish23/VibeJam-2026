@@ -291,11 +291,12 @@ export const TWEAK_RANGE = {
   lobbyPortalYawDeg: { min: -180, max: 180, step: 1 },
   lobbyPortalRollDeg: { min: -180, max: 180, step: 1 },
   lobbyPortalScale: { min: 0.2, max: 14, step: 0.05 },
-  lobbyPortalRiftSpeed: { min: 0, max: 4, step: 0.05 },
-  lobbyPortalHueCycleSpeed: { min: 0, max: 4, step: 0.02 },
-  lobbyPortalHueRadialBias: { min: 0, max: 4, step: 0.02 },
+  lobbyPortalSwirlSpeed: { min: 0.1, max: 5, step: 0.05 },
+  lobbyPortalSwirlTightness: { min: 1, max: 20, step: 0.1 },
+  lobbyPortalSwirlScale: { min: 0.5, max: 5, step: 0.05 },
+  lobbyPortalPulseSpeed: { min: 0, max: 5, step: 0.05 },
+  lobbyPortalPulseStrength: { min: 0, max: 1, step: 0.01 },
   lobbyPortalIntensity: { min: 0, max: 4, step: 0.05 },
-  lobbyPortalSaturation: { min: 0, max: 1, step: 0.02 },
 
   stunnedStarScaleMul: { min: 0.35, max: 2.2, step: 0.02 },
   stunnedStarSpinMul: { min: 0.45, max: 5, step: 0.05 },
@@ -778,11 +779,12 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   lobbyPortalYawDeg: 'Lobby portal yaw °',
   lobbyPortalRollDeg: 'Lobby portal roll °',
   lobbyPortalScale: 'Lobby portal uniform scale',
-  lobbyPortalRiftSpeed: 'Lobby portal: rift swirl speed',
-  lobbyPortalHueCycleSpeed: 'Lobby portal: rainbow cycle speed',
-  lobbyPortalHueRadialBias: 'Lobby portal: hue bias center→edge',
+  lobbyPortalSwirlSpeed: 'Lobby portal: swirl speed',
+  lobbyPortalSwirlTightness: 'Lobby portal: swirl tightness',
+  lobbyPortalSwirlScale: 'Lobby portal: swirl UV scale',
+  lobbyPortalPulseSpeed: 'Lobby portal: pulse speed',
+  lobbyPortalPulseStrength: 'Lobby portal: pulse strength',
   lobbyPortalIntensity: 'Lobby portal: emissive intensity ×',
-  lobbyPortalSaturation: 'Lobby portal: rainbow saturation',
   lobbyMonkeyScale: 'Lobby monkey uniform scale',
 }
 
@@ -1144,15 +1146,18 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   lobbyPortalYawDeg: 'Vibe Jam portal yaw ° (face the camera).',
   lobbyPortalRollDeg: 'Vibe Jam portal roll ° (tilt the rift).',
   lobbyPortalScale: 'Vibe Jam portal uniform scale.',
-  lobbyPortalRiftSpeed:
-    'Vibe Jam portal: angular swirl speed of the inner rift. 0 = static.',
-  lobbyPortalHueCycleSpeed:
-    'Vibe Jam portal: rainbow hue cycles per second across rift + ring.',
-  lobbyPortalHueRadialBias:
-    'Vibe Jam portal: how much hue offsets from rift center to edge (0 = uniform color).',
+  lobbyPortalSwirlSpeed:
+    'Vibe Jam portal: angular swirl speed of the fire shader (Godot `swirl_speed`).',
+  lobbyPortalSwirlTightness:
+    'Vibe Jam portal: how tightly the swirl wraps the center (Godot `swirl_tightness`).',
+  lobbyPortalSwirlScale:
+    'Vibe Jam portal: UV scale of the swirl pattern (Godot `swirl_scale`).',
+  lobbyPortalPulseSpeed:
+    'Vibe Jam portal: radial brightness pulse speed (Godot `pulse_speed`).',
+  lobbyPortalPulseStrength:
+    'Vibe Jam portal: pulse strength on top of the base radial fade (Godot `pulse_strength`).',
   lobbyPortalIntensity:
-    'Vibe Jam portal: overall emissive brightness multiplier on rift + ring.',
-  lobbyPortalSaturation: 'Vibe Jam portal: HSV saturation of the rainbow color.',
+    'Vibe Jam portal: overall emissive brightness multiplier on the fire shader.',
 
   sunPosX: 'Directional sun world X (shared with matches; shadow direction).',
   sunPosY: 'Directional sun world Y.',
@@ -1860,11 +1865,12 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'lobbyPortalYawDeg',
       'lobbyPortalRollDeg',
       'lobbyPortalScale',
-      'lobbyPortalRiftSpeed',
-      'lobbyPortalHueCycleSpeed',
-      'lobbyPortalHueRadialBias',
+      'lobbyPortalSwirlSpeed',
+      'lobbyPortalSwirlTightness',
+      'lobbyPortalSwirlScale',
+      'lobbyPortalPulseSpeed',
+      'lobbyPortalPulseStrength',
       'lobbyPortalIntensity',
-      'lobbyPortalSaturation',
     ],
   },
 ]

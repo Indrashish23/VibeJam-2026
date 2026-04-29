@@ -783,9 +783,10 @@ export const defaultGameConfig = {
 
   /**
    * Vibe Jam 2026 webring exit portal — rendered in a dedicated overlay canvas above the
-   * lobby vignette. Geometry comes from `Assets/Props/portall.gltf`; both submeshes are
-   * replaced with custom rainbow shaders at load time. Defaults seed the portal at the
-   * lobby monkey's position so it's immediately visible; tune via Tweaks.
+   * lobby. Geometry comes from `Assets/Props/portal.glb`; the inner `PortalSwirlMesh` gets
+   * a custom fire/orange swirl shader, while the outer textured ring uses the GLB's baked
+   * texture (swapped to unlit). Defaults seed the portal at the lobby monkey's position
+   * so it's immediately visible; tune via Tweaks.
    */
   lobbyPortalPosX: 5.5,
   lobbyPortalPosY: 6.5,
@@ -794,16 +795,18 @@ export const defaultGameConfig = {
   lobbyPortalYawDeg: 16,
   lobbyPortalRollDeg: 0,
   lobbyPortalScale: 6,
-  /** Swirl angular speed of the inner rift (radians/sec base). */
-  lobbyPortalRiftSpeed: 1.0,
-  /** How fast the rainbow hue cycles (full cycles/sec at 1.0). */
-  lobbyPortalHueCycleSpeed: 0.4,
-  /** Hue variation from rift center to edge (multiplied by radius). */
-  lobbyPortalHueRadialBias: 0.6,
-  /** Overall emissive brightness multiplier (rift + ring). */
-  lobbyPortalIntensity: 2.0,
-  /** HSV saturation for the rainbow color. */
-  lobbyPortalSaturation: 1.0,
+  /** Swirl angular speed (Godot shader: `swirl_speed`, hint 0.1..5). */
+  lobbyPortalSwirlSpeed: 1.8,
+  /** How tightly the swirl wraps around the center (Godot: `swirl_tightness`, 1..20). */
+  lobbyPortalSwirlTightness: 6.0,
+  /** UV scale of the swirl pattern (Godot: `swirl_scale`, 0.5..5). */
+  lobbyPortalSwirlScale: 2.0,
+  /** Pulse speed of the radial brightness (Godot: `pulse_speed`, 0..5). */
+  lobbyPortalPulseSpeed: 1.2,
+  /** Pulse strength on top of base radial (Godot: `pulse_strength`, 0..1). */
+  lobbyPortalPulseStrength: 0.18,
+  /** Overall emissive brightness multiplier on the swirl shader. */
+  lobbyPortalIntensity: 1.0,
 } as const
 
 export type GameConfigKey = keyof typeof defaultGameConfig

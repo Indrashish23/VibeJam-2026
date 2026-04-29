@@ -1,29 +1,32 @@
 /**
  * Vibe Jam 2026 webring exit portal — a transparent overlay above the lobby vignette.
  *
- * Renders `Assets/Props/portall.gltf` in a dedicated WebGL canvas (alpha:true) stacked
- * **above** `.lobby-overlay` (vignette) but **below** the lobby buttons. The two GLTF
- * submeshes are replaced with custom emissive shaders:
+ * Renders `Assets/Props/portal.glb` in a dedicated WebGL canvas (alpha:true) stacked
+ * **above** `.lobby-overlay` but **below** the lobby buttons. The model has two submeshes:
  *
- *   - `portalMesh` (inner disc) — animated radial swirl with rainbow hue cycling.
- *   - the outer ring node      — solid hue-cycling energy band (no baked texture).
+ *   - `PortalSwirlMesh` (inner disc) — replaced with a hand-tuned fire/swirl shader
+ *     (orange palette, fbm-modulated rotational swirl with a pulse + radial streaks).
+ *   - the outer textured ring (`tripo_node_...`) — material swapped to `MeshBasicMaterial`
+ *     so the embedded GLB texture renders unlit (this scene has no lights).
  *
  * A DOM hit-area is sized each frame to the projected screen-space circle of the
- * portal so hover/click hit-testing is precise. Hover reveals a `Leaving so soon?`
- * pill plus an `Enter portal` confirm button; the button is what actually redirects
- * (avoids accidental misclicks per design).
+ * inner swirl mesh so hover/click hit-testing is precise. Hover reveals a
+ * `Leaving so soon?` pill plus an `Enter portal` confirm button; only the button
+ * actually triggers the redirect (avoids accidental misclicks per design).
  *
- * Camera matches the lobby backdrop's viewpoint so positioning Tweaks behave the same
- * as the lobby monkey relative to the arena.
+ * Camera matches the lobby backdrop's viewpoint so positioning Tweaks behave the
+ * same as the lobby monkey relative to the arena.
  */
 import {
-  AdditiveBlending,
   Clock,
+  Color,
   DoubleSide,
   Group,
-  LoadingManager,
   MathUtils,
   Mesh,
+  MeshBasicMaterial,
+  MeshStandardMaterial,
+  NormalBlending,
   PerspectiveCamera,
   Scene,
   ShaderMaterial,
@@ -34,23 +37,8 @@ import {
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { defaultGameConfig, gameConfig, type GameConfigKey } from './gameConfig'
 
-const LOBBY_PORTAL_GLTF_URL = new URL('../Assets/Props/portall.gltf', import.meta.url).href
-/*
- * Multi-file GLTF (gltf + bin + texture) — Vite hashes each filename independently, so the
- * relative `"uri": "portall0.bin"` inside the gltf JSON points at a stale name in production.
- * We import the companion `.bin` via `new URL` (Vite emits + hashes it) and remap inside a
- * `LoadingManager` so GLTFLoader resolves the correct hashed URL at runtime.
- *
- * The albedo texture in the gltf is NOT imported: we replace both submesh materials with
- * custom shaders, so loading the 1.4 MB albedo would be pure waste. The URL modifier
- * substitutes a 1×1 transparent PNG instead, which the loader accepts without warnings.
- */
-const LOBBY_PORTAL_BIN_URL = new URL('../Assets/Props/portall0.bin', import.meta.url).href
-/** 1×1 transparent PNG (data URL) — placeholder for the throwaway portal albedo texture. */
-const PORTAL_DUMMY_TEX_DATA_URL =
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNgYAAAAAMAAWgmWQ0AAAAASUVORK5CYII='
-
-const PORTAL_INNER_NODE_NAME = 'portalMesh'
+const LOBBY_PORTAL_GLB_URL = new URL('../Assets/Props/portal.glb', import.meta.url).href
+const PORTAL_INNER_NODE_NAME = 'PortalSwirlMesh'
 /** Vibe Jam 2026 webring exit URL — receives forwarded query params. */
 const VIBE_JAM_PORTAL_URL = 'https://vibejam.cc/portal/2026'
 
@@ -62,11 +50,12 @@ const LOBBY_PORTAL_KEYS: GameConfigKey[] = [
   'lobbyPortalYawDeg',
   'lobbyPortalRollDeg',
   'lobbyPortalScale',
-  'lobbyPortalRiftSpeed',
-  'lobbyPortalHueCycleSpeed',
-  'lobbyPortalHueRadialBias',
+  'lobbyPortalSwirlSpeed',
+  'lobbyPortalSwirlTightness',
+  'lobbyPortalSwirlScale',
+  'lobbyPortalPulseSpeed',
+  'lobbyPortalPulseStrength',
   'lobbyPortalIntensity',
-  'lobbyPortalSaturation',
 ]
 
 /** Reset runtime config to source defaults so stale Tweaks/HMR drift doesn't reposition the portal. */
@@ -76,29 +65,33 @@ function applyLobbyPortalDefaultsFromSource(): void {
   }
 }
 
-/** Shared GLSL: HSV→RGB so both shaders cycle the same rainbow palette in sync. */
-const HSV2RGB_GLSL = /* glsl */ `
-  vec3 hsv2rgb(vec3 c) {
-    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
-    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
-  }
-`
-
-/** Inner rift shader: animated radial swirl + rainbow hue cycling, additive blending. */
-function makeRiftMaterial(): ShaderMaterial {
+/**
+ * Inner-disc fire/swirl `ShaderMaterial`. Port of the user-provided Godot shader:
+ * orange-palette radial swirl with fbm noise modulation, slow pulse, and angular
+ * streaks. Outside the unit circle the fragment is `discard`-ed; inside, ALPHA is
+ * 1.0 so the disc reads as a solid fire surface against the lobby backdrop. The
+ * Godot `ALBEDO + EMISSION*1.5` combo is folded into a single `*2.5` multiplier;
+ * `uIntensity` is the user-facing emissive boost on top.
+ */
+function makeFireSwirlMaterial(): ShaderMaterial {
   return new ShaderMaterial({
     transparent: true,
-    blending: AdditiveBlending,
+    blending: NormalBlending,
     depthWrite: false,
+    depthTest: false,
     side: DoubleSide,
     uniforms: {
       uTime: { value: 0 },
-      uRiftSpeed: { value: gameConfig.lobbyPortalRiftSpeed },
-      uHueCycleSpeed: { value: gameConfig.lobbyPortalHueCycleSpeed },
-      uHueRadialBias: { value: gameConfig.lobbyPortalHueRadialBias },
+      uSwirlSpeed: { value: gameConfig.lobbyPortalSwirlSpeed },
+      uSwirlTightness: { value: gameConfig.lobbyPortalSwirlTightness },
+      uSwirlScale: { value: gameConfig.lobbyPortalSwirlScale },
+      uPulseSpeed: { value: gameConfig.lobbyPortalPulseSpeed },
+      uPulseStrength: { value: gameConfig.lobbyPortalPulseStrength },
       uIntensity: { value: gameConfig.lobbyPortalIntensity },
-      uSaturation: { value: gameConfig.lobbyPortalSaturation },
+      uColorCore: { value: new Color(1.0, 1.0, 0.6) },
+      uColorMid: { value: new Color(1.0, 0.45, 0.0) },
+      uColorOuter: { value: new Color(0.6, 0.05, 0.0) },
+      uColorRim: { value: new Color(0.15, 0.0, 0.0) },
     },
     vertexShader: /* glsl */ `
       varying vec2 vUv;
@@ -111,100 +104,108 @@ function makeRiftMaterial(): ShaderMaterial {
       precision highp float;
       varying vec2 vUv;
       uniform float uTime;
-      uniform float uRiftSpeed;
-      uniform float uHueCycleSpeed;
-      uniform float uHueRadialBias;
+      uniform float uSwirlSpeed;
+      uniform float uSwirlTightness;
+      uniform float uSwirlScale;
+      uniform float uPulseSpeed;
+      uniform float uPulseStrength;
       uniform float uIntensity;
-      uniform float uSaturation;
-      ${HSV2RGB_GLSL}
+      uniform vec3 uColorCore;
+      uniform vec3 uColorMid;
+      uniform vec3 uColorOuter;
+      uniform vec3 uColorRim;
 
-      // Cheap hash + value noise for swirl texture.
-      float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-      float noise(vec2 p) {
-        vec2 i = floor(p), f = fract(p);
-        float a = hash(i);
-        float b = hash(i + vec2(1.0, 0.0));
-        float c = hash(i + vec2(0.0, 1.0));
-        float d = hash(i + vec2(1.0, 1.0));
+      #define TAU 6.2831853
+
+      float hash(vec2 p) {
+        p = fract(p * vec2(127.1, 311.7));
+        p += dot(p, p + 19.19);
+        return fract(p.x * p.y);
+      }
+
+      float smoothnoise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
         vec2 u = f * f * (3.0 - 2.0 * f);
-        return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+        return mix(
+          mix(hash(i + vec2(0.0, 0.0)), hash(i + vec2(1.0, 0.0)), u.x),
+          mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x),
+          u.y
+        );
+      }
+
+      float fbm(vec2 p) {
+        float v = 0.0;
+        float a = 0.5;
+        for (int i = 0; i < 5; i++) {
+          v += a * smoothnoise(p);
+          p = p * 2.1 + vec2(1.7, 9.2);
+          a *= 0.5;
+        }
+        return v;
       }
 
       void main() {
-        vec2 p = vUv - 0.5;
-        float r = length(p) * 2.0;
-        float theta = atan(p.y, p.x);
+        vec2 uv = (vUv - 0.5) * uSwirlScale;
+        float dist = length(uv);
+        float angle = atan(uv.y, uv.x);
 
-        // Swirling angular field rotates around center; faster near the rim.
-        float swirl = sin(theta * 5.0 + r * 7.0 - uTime * uRiftSpeed * 2.5);
-        // Animated noise gives a "plasma" feel on top of the swirl.
-        float n = noise(vec2(theta * 1.6 + uTime * uRiftSpeed * 0.7, r * 4.0 - uTime * uRiftSpeed * 0.45));
-        float energy = 0.55 + 0.45 * swirl * n;
+        if (dist > 1.0) discard;
 
-        // Rainbow: cycle base hue with time, bias by radius so center/edge differ.
-        float hue = fract(uTime * uHueCycleSpeed + r * uHueRadialBias + swirl * 0.06);
-        vec3 color = hsv2rgb(vec3(hue, uSaturation, 1.0));
+        float t = uTime;
+        float swirl_angle = angle - uSwirlTightness * dist + uSwirlSpeed * t;
+        vec2 swirl_uv = vec2(cos(swirl_angle) * dist, sin(swirl_angle) * dist);
 
-        // Soft circular alpha: fade hard outside r=1, dim slightly at center for a 'core' look.
-        float ringMask = smoothstep(1.0, 0.55, r) * smoothstep(0.0, 0.18, r);
-        float alpha = clamp(ringMask * (0.55 + energy * 0.7), 0.0, 1.0);
+        float n = fbm(swirl_uv * 3.5 + vec2(t * 0.3, t * 0.15));
+        float n2 = fbm(swirl_uv * 6.0 - vec2(t * 0.2, t * 0.4));
+        float noise_val = mix(n, n2, 0.4);
 
-        gl_FragColor = vec4(color * energy * uIntensity, alpha);
+        float radial = 1.0 - smoothstep(0.0, 1.0, dist);
+        radial = pow(radial, 0.7);
+
+        float pulse = 1.0 + uPulseStrength * sin(t * uPulseSpeed * TAU);
+        radial *= pulse;
+
+        float ramp = clamp(radial * 0.75 + noise_val * 0.5, 0.0, 1.0);
+
+        vec3 col;
+        if (ramp > 0.75) {
+          col = mix(uColorMid, uColorCore, (ramp - 0.75) / 0.25);
+        } else if (ramp > 0.45) {
+          col = mix(uColorOuter, uColorMid, (ramp - 0.45) / 0.30);
+        } else if (ramp > 0.15) {
+          col = mix(uColorRim, uColorOuter, (ramp - 0.15) / 0.30);
+        } else {
+          col = uColorRim;
+        }
+
+        float edge_mask = smoothstep(1.0, 0.85, dist);
+        col *= edge_mask;
+
+        float streak = pow(max(0.0, sin(swirl_angle * 3.0 + t * 4.0)), 8.0);
+        streak *= (1.0 - dist) * 0.6;
+        col += vec3(1.0, 0.6, 0.1) * streak;
+
+        // Combine ALBEDO + EMISSION (Godot semantics) into one bright unlit term.
+        vec3 finalCol = col * 2.5 * uIntensity;
+        gl_FragColor = vec4(finalCol, 1.0);
       }
     `,
   })
 }
 
-/** Outer ring shader: solid hue-cycling band with a fresnel-style rim boost. */
-function makeRingMaterial(): ShaderMaterial {
-  return new ShaderMaterial({
-    transparent: true,
-    blending: AdditiveBlending,
-    depthWrite: false,
+/**
+ * Convert a PBR `MeshStandardMaterial` to an unlit `MeshBasicMaterial` preserving the
+ * base-color map and tint. The lobby portal scene has no lights, so leaving the GLB's
+ * PBR material on the outer ring would render it black.
+ */
+function unlitFromStandard(src: MeshStandardMaterial): MeshBasicMaterial {
+  return new MeshBasicMaterial({
+    map: src.map,
+    color: src.color,
+    transparent: src.transparent,
     side: DoubleSide,
-    uniforms: {
-      uTime: { value: 0 },
-      uHueCycleSpeed: { value: gameConfig.lobbyPortalHueCycleSpeed },
-      uHueRadialBias: { value: gameConfig.lobbyPortalHueRadialBias },
-      uIntensity: { value: gameConfig.lobbyPortalIntensity },
-      uSaturation: { value: gameConfig.lobbyPortalSaturation },
-    },
-    vertexShader: /* glsl */ `
-      varying vec3 vWorldNormal;
-      varying vec3 vWorldPos;
-      void main() {
-        vec4 worldPos = modelMatrix * vec4(position, 1.0);
-        vWorldPos = worldPos.xyz;
-        vWorldNormal = normalize(mat3(modelMatrix) * normal);
-        gl_Position = projectionMatrix * viewMatrix * worldPos;
-      }
-    `,
-    fragmentShader: /* glsl */ `
-      precision highp float;
-      varying vec3 vWorldNormal;
-      varying vec3 vWorldPos;
-      uniform float uTime;
-      uniform float uHueCycleSpeed;
-      uniform float uHueRadialBias;
-      uniform float uIntensity;
-      uniform float uSaturation;
-      ${HSV2RGB_GLSL}
-
-      void main() {
-        // Fresnel-like rim using camera position (cameraPosition is auto-injected by three).
-        vec3 viewDir = normalize(cameraPosition - vWorldPos);
-        float rim = 1.0 - clamp(dot(normalize(vWorldNormal), viewDir), 0.0, 1.0);
-        rim = pow(rim, 1.5);
-
-        // Hue cycles in sync with the rift; radial bias offsets per-fragment for a band gradient.
-        float hue = fract(uTime * uHueCycleSpeed + rim * uHueRadialBias * 0.4);
-        vec3 color = hsv2rgb(vec3(hue, uSaturation, 1.0));
-
-        float brightness = (0.65 + 0.55 * rim) * uIntensity;
-        float alpha = clamp(0.6 + rim * 0.5, 0.0, 1.0);
-        gl_FragColor = vec4(color * brightness, alpha);
-      }
-    `,
+    depthWrite: true,
   })
 }
 
@@ -243,8 +244,8 @@ export function mountLobbyPortal(gameRoot: HTMLElement): LobbyPortalHandle {
   const portalRoot = new Group()
   scene.add(portalRoot)
 
-  const riftMaterial = makeRiftMaterial()
-  const ringMaterial = makeRingMaterial()
+  const swirlMaterial = makeFireSwirlMaterial()
+  const swappedRingMaterials: MeshBasicMaterial[] = []
   let innerMesh: Mesh | null = null
 
   /* Hit-area + tooltip + confirm button: created up-front so we can show/hide via class toggles. */
@@ -297,41 +298,33 @@ export function mountLobbyPortal(gameRoot: HTMLElement): LobbyPortalHandle {
 
   void (async () => {
     try {
-      const manager = new LoadingManager()
-      manager.setURLModifier((rawUrl) => {
-        /*
-         * three.js resolves the gltf's relative URIs against its own URL, so requests look
-         * like `<...>/portall0.bin` or `<...>/textures/tripo_mat_..._albedo.png`. Map the
-         * `.bin` to the Vite-emitted hashed URL. The albedo is not used (materials are
-         * replaced with custom shaders) — point it at a 1×1 transparent placeholder so we
-         * skip the 1.4 MB download.
-         */
-        if (rawUrl.endsWith('portall0.bin')) return LOBBY_PORTAL_BIN_URL
-        if (rawUrl.includes('tripo_mat_') && rawUrl.endsWith('_albedo.png'))
-          return PORTAL_DUMMY_TEX_DATA_URL
-        return rawUrl
-      })
-      const loader = new GLTFLoader(manager)
-      const gltf = await loader.loadAsync(LOBBY_PORTAL_GLTF_URL)
+      const loader = new GLTFLoader()
+      const gltf = await loader.loadAsync(LOBBY_PORTAL_GLB_URL)
       const root = gltf.scene
       portalRoot.add(root)
       root.traverse((obj) => {
         const m = obj as Mesh & { isMesh?: boolean; name?: string }
         if (!m.isMesh) return
         if (m.name === PORTAL_INNER_NODE_NAME) {
-          m.material = riftMaterial
-          /* Render order: inner rift on top of outer ring inside the same pass. */
+          /* Replace inner swirl quad with the fire/orange shader. */
+          m.material = swirlMaterial
           m.renderOrder = 2
+          m.frustumCulled = false
           innerMesh = m
         } else {
-          m.material = ringMaterial
+          /* Swap PBR → unlit so the textured outer frame renders without scene lights. */
+          const oldMat = m.material as MeshStandardMaterial
+          const lit = unlitFromStandard(oldMat)
+          swappedRingMaterials.push(lit)
+          m.material = lit
           m.renderOrder = 1
+          oldMat.dispose()
         }
       })
       portalLoaded = true
       syncFromConfig()
     } catch (err) {
-      console.warn('[lobbyPortal] Failed to load portall.gltf', err)
+      console.warn('[lobbyPortal] Failed to load portal.glb', err)
     }
   })()
 
@@ -349,16 +342,12 @@ export function mountLobbyPortal(gameRoot: HTMLElement): LobbyPortalHandle {
     )
     portalRoot.scale.setScalar(Math.max(0.05, gameConfig.lobbyPortalScale))
 
-    riftMaterial.uniforms.uRiftSpeed.value = gameConfig.lobbyPortalRiftSpeed
-    riftMaterial.uniforms.uHueCycleSpeed.value = gameConfig.lobbyPortalHueCycleSpeed
-    riftMaterial.uniforms.uHueRadialBias.value = gameConfig.lobbyPortalHueRadialBias
-    riftMaterial.uniforms.uIntensity.value = gameConfig.lobbyPortalIntensity
-    riftMaterial.uniforms.uSaturation.value = gameConfig.lobbyPortalSaturation
-
-    ringMaterial.uniforms.uHueCycleSpeed.value = gameConfig.lobbyPortalHueCycleSpeed
-    ringMaterial.uniforms.uHueRadialBias.value = gameConfig.lobbyPortalHueRadialBias
-    ringMaterial.uniforms.uIntensity.value = gameConfig.lobbyPortalIntensity
-    ringMaterial.uniforms.uSaturation.value = gameConfig.lobbyPortalSaturation
+    swirlMaterial.uniforms.uSwirlSpeed.value = gameConfig.lobbyPortalSwirlSpeed
+    swirlMaterial.uniforms.uSwirlTightness.value = gameConfig.lobbyPortalSwirlTightness
+    swirlMaterial.uniforms.uSwirlScale.value = gameConfig.lobbyPortalSwirlScale
+    swirlMaterial.uniforms.uPulseSpeed.value = gameConfig.lobbyPortalPulseSpeed
+    swirlMaterial.uniforms.uPulseStrength.value = gameConfig.lobbyPortalPulseStrength
+    swirlMaterial.uniforms.uIntensity.value = gameConfig.lobbyPortalIntensity
   }
   syncFromConfig()
 
@@ -423,8 +412,7 @@ export function mountLobbyPortal(gameRoot: HTMLElement): LobbyPortalHandle {
       return
     }
     const dt = clock.getDelta()
-    riftMaterial.uniforms.uTime.value += dt
-    ringMaterial.uniforms.uTime.value += dt
+    swirlMaterial.uniforms.uTime.value += dt
     /* Re-sync FOV in case Tweaks changes it (matches lobby backdrop behaviour). */
     const wantFov = Math.max(20, Math.min(120, gameConfig.cameraFov))
     if (Math.abs(camera.fov - wantFov) > 0.01) {
@@ -461,8 +449,9 @@ export function mountLobbyPortal(gameRoot: HTMLElement): LobbyPortalHandle {
         mo.geometry?.dispose()
       }
     })
-    riftMaterial.dispose()
-    ringMaterial.dispose()
+    swirlMaterial.dispose()
+    for (const mat of swappedRingMaterials) mat.dispose()
+    swappedRingMaterials.length = 0
     scene.remove(portalRoot)
     renderer.dispose()
     try {
@@ -489,9 +478,9 @@ export function buildVibeJamExitUrl(): string {
   /*
    * No first-class player color exists in this build; fall back to a stable hex so the
    * receiving game still has something to render. Honour any color we received via
-   * `?portal=true` by stashing it; otherwise default to a vibe-jam-ish purple.
+   * `?portal=true` by stashing it; otherwise default to a fiery orange to match the rift.
    */
-  u.searchParams.set('color', incomingPortalColor() ?? '#a855f7')
+  u.searchParams.set('color', incomingPortalColor() ?? '#ff7300')
   u.searchParams.set('speed', String(gameConfig.moveSpeed ?? 5))
   u.searchParams.set('ref', location.host)
   return u.toString()
