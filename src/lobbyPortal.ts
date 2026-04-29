@@ -33,12 +33,14 @@ import {
   Sphere,
   Vector3,
   WebGLRenderer,
+  type Material,
 } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { defaultGameConfig, gameConfig, type GameConfigKey } from './gameConfig'
 
 const LOBBY_PORTAL_GLB_URL = new URL('../Assets/Props/portal.glb', import.meta.url).href
-const PORTAL_INNER_NODE_NAME = 'PortalSwirlMesh'
+/** Inner swirl disc — new GLB uses this; older assets used `portalMesh`. */
+const PORTAL_INNER_NODE_NAMES = new Set(['portalswirlmesh', 'portalmesh'])
 /** Vibe Jam 2026 webring exit URL — receives forwarded query params. */
 const VIBE_JAM_PORTAL_URL = 'https://vibejam.cc/portal/2026'
 
@@ -150,7 +152,8 @@ function makeFireSwirlMaterial(): ShaderMaterial {
         float dist = length(uv);
         float angle = atan(uv.y, uv.x);
 
-        if (dist > 1.0) discard;
+        /* Slight slack: some GLBs use UVs that kiss the unit circle; hard 1.0 discards all. */
+        if (dist > 1.08) discard;
 
         float t = uTime;
         float swirl_angle = angle - uSwirlTightness * dist + uSwirlSpeed * t;
@@ -195,18 +198,23 @@ function makeFireSwirlMaterial(): ShaderMaterial {
 }
 
 /**
- * Convert a PBR `MeshStandardMaterial` to an unlit `MeshBasicMaterial` preserving the
- * base-color map and tint. The lobby portal scene has no lights, so leaving the GLB's
- * PBR material on the outer ring would render it black.
+ * Outer ring: GLB ships `MeshStandardMaterial` but the portal scene has no lights.
+ * Fall back to a basic unlit material; clone `MeshBasicMaterial` if already basic.
  */
-function unlitFromStandard(src: MeshStandardMaterial): MeshBasicMaterial {
-  return new MeshBasicMaterial({
-    map: src.map,
-    color: src.color,
-    transparent: src.transparent,
-    side: DoubleSide,
-    depthWrite: true,
-  })
+function unlitFromModelMaterial(src: Material): MeshBasicMaterial {
+  if (src instanceof MeshStandardMaterial) {
+    return new MeshBasicMaterial({
+      map: src.map,
+      color: src.color,
+      transparent: src.transparent,
+      side: DoubleSide,
+      depthWrite: true,
+    })
+  }
+  if (src instanceof MeshBasicMaterial) {
+    return src.clone()
+  }
+  return new MeshBasicMaterial({ color: 0xffffff, side: DoubleSide, depthWrite: true })
 }
 
 export type LobbyPortalHandle = {
@@ -216,8 +224,17 @@ export type LobbyPortalHandle = {
   resumeRendering: () => void
 }
 
-export function mountLobbyPortal(gameRoot: HTMLElement): LobbyPortalHandle {
+export function mountLobbyPortal(_gameRoot: HTMLElement): LobbyPortalHandle {
   applyLobbyPortalDefaultsFromSource()
+  void _gameRoot
+  /*
+   * Mount on `document.body`, not `game-root`: `#game-root` is z-index 0 while
+   * `#lobby-overlay` is z-index 18, so a portal canvas *inside* game-root stays
+   * underneath the lobby layer’s stacking context and can disappear visually.
+   * A fixed canvas on `body` at z-index 17 paints between the backdrop (0) and
+   * the lobby shell (18); transparent regions of the lobby still show it.
+   */
+  const portalHost = document.body
 
   const scene = new Scene()
   /*
@@ -238,8 +255,7 @@ export function mountLobbyPortal(gameRoot: HTMLElement): LobbyPortalHandle {
   renderer.setSize(window.innerWidth, window.innerHeight)
   renderer.setClearColor(0x000000, 0)
   renderer.domElement.classList.add('lobby-portal-canvas')
-  /* Append AFTER the lobby-overlay element (z-index above the vignette via CSS class). */
-  gameRoot.appendChild(renderer.domElement)
+  portalHost.appendChild(renderer.domElement)
 
   const portalRoot = new Group()
   scene.add(portalRoot)
@@ -268,7 +284,7 @@ export function mountLobbyPortal(gameRoot: HTMLElement): LobbyPortalHandle {
   confirmBtn.textContent = 'Enter portal'
   hitWrap.appendChild(confirmBtn)
 
-  gameRoot.appendChild(hitWrap)
+  portalHost.appendChild(hitWrap)
 
   let hovered = false
   function setHovered(next: boolean): void {
@@ -305,20 +321,24 @@ export function mountLobbyPortal(gameRoot: HTMLElement): LobbyPortalHandle {
       root.traverse((obj) => {
         const m = obj as Mesh & { isMesh?: boolean; name?: string }
         if (!m.isMesh) return
-        if (m.name === PORTAL_INNER_NODE_NAME) {
-          /* Replace inner swirl quad with the fire/orange shader. */
+        const nm = (m.name || '').toLowerCase()
+        if (PORTAL_INNER_NODE_NAMES.has(nm)) {
+          const prev = m.material
+          if (Array.isArray(prev)) prev.forEach((mm) => mm.dispose())
+          else prev.dispose()
           m.material = swirlMaterial
           m.renderOrder = 2
           m.frustumCulled = false
           innerMesh = m
         } else {
-          /* Swap PBR → unlit so the textured outer frame renders without scene lights. */
-          const oldMat = m.material as MeshStandardMaterial
-          const lit = unlitFromStandard(oldMat)
+          const prev = m.material
+          const mats = Array.isArray(prev) ? prev : [prev]
+          const lit = unlitFromModelMaterial(mats[0] as Material)
           swappedRingMaterials.push(lit)
+          if (Array.isArray(prev)) prev.forEach((mm) => mm.dispose())
+          else prev.dispose()
           m.material = lit
           m.renderOrder = 1
-          oldMat.dispose()
         }
       })
       portalLoaded = true

@@ -249,8 +249,8 @@ if (hudItemControlsImgEl) hudItemControlsImgEl.src = hudItemControlsSvgUrl
 if (chargeBarWrap) {
   chargeBarWrap.style.setProperty('--charge-fill-mask', `url('${chargeBarFillMaskUrl}')`)
   chargeBarWrap.style.setProperty('--charge-pct', '0%')
-  syncChargeHudLayout()
 }
+syncChargeHudLayout()
 if (!IS_PUBLIC_BUILD) {
   void import('./tweaksPanel').then(({ restoreHudElementPosition }) => {
     restoreHudElementPosition(percentHudEl, 'percentHud')
@@ -265,8 +265,12 @@ function setChargeBarDisplayPct(pct0to100: number): void {
 }
 
 function syncChargeHudLayout(): void {
-  if (!chargeBarWrap) return
   const g = gameConfig
+  if (hudItemControlsWrapEl) {
+    hudItemControlsWrapEl.style.setProperty('--item-controls-h-inset', `${g.chargeHudRightRem}rem`)
+    hudItemControlsWrapEl.style.setProperty('--item-controls-v-bias', `${g.chargeHudVerticalBiasRem}rem`)
+  }
+  if (!chargeBarWrap) return
   chargeBarWrap.style.setProperty('--charge-hud-right', `${g.chargeHudRightRem}rem`)
   chargeBarWrap.style.setProperty('--charge-hud-bias', `${g.chargeHudVerticalBiasRem}rem`)
   chargeBarWrap.style.setProperty('--charge-hud-width', `${g.chargeHudWidthRem}rem`)
@@ -643,8 +647,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
    * occasionally masking the new gameplay canvas on the second peer in quick match. */
   gameRoot.querySelectorAll('canvas.lobby-backdrop-canvas').forEach((node) => node.remove())
   /* Same idea for the Vibe Jam exit portal overlay (separate canvas + hover wrapper). */
-  gameRoot.querySelectorAll('canvas.lobby-portal-canvas').forEach((node) => node.remove())
-  gameRoot.querySelectorAll('.lobby-portal-hover').forEach((node) => node.remove())
+  /* Portal mounts on `document.body` (see lobbyPortal.ts) so it layers above the backdrop. */
+  document.querySelectorAll('canvas.lobby-portal-canvas').forEach((node) => node.remove())
+  document.querySelectorAll('.lobby-portal-hover').forEach((node) => node.remove())
 
   if (DEBUG_MP)
     debugMpLog(
@@ -1045,6 +1050,14 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let botMode: BotMode = isOnline ? 'dummy' : 'dummy'
   let bot = new BotFighter(scene, botMode, new Vector3())
 
+  /** Imported arena uses trimesh for shots; config `groundWidth/Depth` box is wrong for that map. */
+  function syncProjectileSyntheticBoundsForMap(): void {
+    const synthetic = map.id !== 'arena'
+    arms.setUseSyntheticProjectileBounds(synthetic)
+    bot.setUseSyntheticProjectileBounds(synthetic)
+  }
+  syncProjectileSyntheticBoundsForMap()
+
   /**
    * Red wireframe capsule debug helpers. Lazily-rebuilt geometry when sizing changes; always-on listener
    * for the matching `*CollisionView` flag in the tweaks panel.
@@ -1330,6 +1343,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       !seriesTransitionActive &&
       mpPhase === 'live'
     hudItemControlsWrapEl.hidden = !show
+    hudItemControlsWrapEl.setAttribute('aria-hidden', show ? 'false' : 'true')
   }
 
   function syncBananaHandVis(): void {
@@ -1955,6 +1969,10 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   const voice = new VoiceChargeManager()
   let chargingLmb = false
+  /** Set when LMB/RMB begins a charge; used for max-duration watchdog. */
+  let chargeStartedAtMs = 0
+  /** Frames in a row where charge flags are set but MediaRecorder is not running. */
+  let chargeRecorderDesyncStreak = 0
   /** Last smoothed voice charge (for shot power + UI). */
   let voiceChargeSmoothed = 0
   /** 0–1 smoothed RMS activity for charge-HUD mic icon pulse. */
@@ -2004,6 +2022,56 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     pistolNextSlot = 0
     pistolReloadRevealed = 0
     pistolReloadAccMs = 0
+  }
+
+  /** Stop hold-to-charge / pistol reload recording; mirrors the multiplayer lobby freeze cleanup. */
+  function cancelOngoingVoiceCharge(): void {
+    if (!chargingLmb && !chargingRmb) {
+      if (voice.isChargeRecordingNow()) {
+        void voice.finishChargeRecording()
+        setLocalVoipRecordingBlocked(false)
+      }
+      chargeStartedAtMs = 0
+      chargeRecorderDesyncStreak = 0
+      return
+    }
+    chargingLmb = false
+    chargingRmb = false
+    chargeStartedAtMs = 0
+    chargeRecorderDesyncStreak = 0
+    voice.resetChargeMeter()
+    voiceChargeSmoothed = 0
+    chargeHudMicAmpSmoothed = 0
+    void voice.finishChargeRecording()
+    setLocalVoipRecordingBlocked(false)
+    setChargeBarDisplayPct(0)
+    if (chargeBarWrap) chargeBarWrap.classList.remove('charge-bar-wrap--overload')
+    if (chargeBarWrap) chargeBarWrap.classList.remove('charge-bar-wrap--ready')
+    bot.setRecordingTelegraph(false)
+  }
+
+  function tryPointerCaptureFromMouse(e: MouseEvent): void {
+    const pe = e as PointerEvent
+    if (typeof pe.pointerId === 'number') {
+      try {
+        renderer.domElement.setPointerCapture(pe.pointerId)
+      } catch {
+        /* invalid or already captured */
+      }
+    }
+  }
+
+  function tryReleasePointerCaptureFromMouse(e: MouseEvent): void {
+    const pe = e as PointerEvent
+    if (typeof pe.pointerId === 'number') {
+      try {
+        if (renderer.domElement.hasPointerCapture(pe.pointerId)) {
+          renderer.domElement.releasePointerCapture(pe.pointerId)
+        }
+      } catch {
+        /* ignore */
+      }
+    }
   }
   /** Fire the +1 pop animation next to the ammo count by re-triggering its CSS keyframe. */
   function popAmmoFeedback(): void {
@@ -2092,6 +2160,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         bot.dispose(scene)
         bot = new BotFighter(scene, 'dummy', botStart)
         rebindOpponentBananaAttachment()
+        syncProjectileSyntheticBoundsForMap()
       } else {
         bot.root.position.copy(botStart)
       }
@@ -2118,6 +2187,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           new Vector3(debugRoomSaved.botX, debugRoomSaved.botY, debugRoomSaved.botZ),
         )
         rebindOpponentBananaAttachment()
+        syncProjectileSyntheticBoundsForMap()
       } else {
         bot.root.position.set(debugRoomSaved.botX, debugRoomSaved.botY, debugRoomSaved.botZ)
       }
@@ -2128,6 +2198,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   async function resetRoundAfterTweakEdit(): Promise<void> {
     chargingLmb = false
+    chargeStartedAtMs = 0
+    chargeRecorderDesyncStreak = 0
     clearPistolState()
     voice.resetChargeMeter()
     voiceChargeSmoothed = 0
@@ -2365,6 +2437,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       bot.networkTargetPos.copy(bot.root.position)
       bot.alignFacingToward(camera.position)
       rebindOpponentBananaAttachment()
+      syncProjectileSyntheticBoundsForMap()
       warpRapierCapsulesToCurrentActors()
       syncHostSmartBotVoiceHandler()
     }
@@ -3091,6 +3164,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         ? gameConfig.pvpAuthComboKnockMul
         : 1
 
+    cancelOngoingVoiceCharge()
     playerHurt = 'air'
     playerHurtAirSince = now
     dashVel.set(0, 0, 0)
@@ -4097,6 +4171,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         return
       }
       spawnActors()
+      syncProjectileSyntheticBoundsForMap()
       applySunShadowFrustum()
       syncBlastBoundsLine()
       applyLightingModeToScene(
@@ -4229,6 +4304,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     arms.resetAll()
     bot.setIntentInputs(playerPercent, enemyPercent)
     chargingLmb = false
+    chargeStartedAtMs = 0
+    chargeRecorderDesyncStreak = 0
     clearPistolState()
     {
       const cap = Math.round(gameConfig.voiceShotAmmoMax)
@@ -4448,6 +4525,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     bot.networkTargetPos.copy(placedRb)
     bot.alignFacingToward(camera.position)
     rebindOpponentBananaAttachment()
+    syncProjectileSyntheticBoundsForMap()
     applyLightingModeToScene(
       gameConfig.lightingUnlitMode >= 0.5,
       gameConfig.lightingUnlitSelfModel >= 0.5,
@@ -4904,6 +4982,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
               ) &&
               performance.now() >= respawnInvulnUntilYou
             ) {
+              cancelOngoingVoiceCharge()
               playerBananaSlipUntil = performance.now() + gameConfig.bananaSlipMs
               triggerStunnedHitOverlay()
               triggerHudDamageShake(hudDamagePctEl, hudPortraitWrapEl, playerPercent)
@@ -5052,9 +5131,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
-  window.addEventListener('blur', clearMovementKeys)
+  function onWindowBlurOrHide(): void {
+    clearMovementKeys()
+    if (chargingLmb || chargingRmb) cancelOngoingVoiceCharge()
+  }
+  window.addEventListener('blur', onWindowBlurOrHide)
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) clearMovementKeys()
+    if (document.hidden) onWindowBlurOrHide()
   })
 
   function gameplayInputBlocked(): boolean {
@@ -5145,6 +5228,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         }
         if (!voiceInputBlocked) queueLocalAnimOneShot('recording')
         chargingRmb = true
+        chargeStartedAtMs = performance.now()
+        tryPointerCaptureFromMouse(e)
       }
       return
     }
@@ -5162,17 +5247,23 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
     if (!voiceInputBlocked) queueLocalAnimOneShot('recording')
     chargingLmb = true
+    chargeStartedAtMs = performance.now()
+    tryPointerCaptureFromMouse(e)
   }
 
   function onMouseUp(e: MouseEvent): void {
     if (e.button === 2 && chargingRmb) {
       chargingRmb = false
+      chargeStartedAtMs = 0
+      tryReleasePointerCaptureFromMouse(e)
       void finishPistolReload()
       return
     }
     if (e.button !== 0) return
     if (!chargingLmb) return
     chargingLmb = false
+    chargeStartedAtMs = 0
+    tryReleasePointerCaptureFromMouse(e)
     void releaseVoiceShot()
   }
 
@@ -5543,15 +5634,25 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
 
     if (multiplayerBlocksPlay() && (chargingLmb || chargingRmb)) {
-      chargingLmb = false
-      chargingRmb = false
-      voice.resetChargeMeter()
-      voiceChargeSmoothed = 0
-      chargeHudMicAmpSmoothed = 0
-      void voice.finishChargeRecording()
-      setLocalVoipRecordingBlocked(false)
-      setChargeBarDisplayPct(0)
-      bot.setRecordingTelegraph(false)
+      cancelOngoingVoiceCharge()
+    }
+
+    if (chargingLmb || chargingRmb) {
+      if (!voice.isChargeRecordingNow()) {
+        chargeRecorderDesyncStreak++
+        if (chargeRecorderDesyncStreak >= 3) {
+          cancelOngoingVoiceCharge()
+          chargeRecorderDesyncStreak = 0
+        }
+      } else {
+        chargeRecorderDesyncStreak = 0
+      }
+      const maxHoldMs = (Math.max(0.5, gameConfig.voiceRecordMaxSec) + 0.75) * 1000
+      if (chargeStartedAtMs > 0 && performance.now() - chargeStartedAtMs > maxHoldMs) {
+        cancelOngoingVoiceCharge()
+      }
+    } else {
+      chargeRecorderDesyncStreak = 0
     }
 
     if (!voiceInputBlocked && !voiceResumeCountdownActive && !multiplayerBlocksPlay()) {

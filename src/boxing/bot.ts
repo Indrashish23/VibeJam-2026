@@ -189,6 +189,11 @@ export class BotFighter {
   private readonly projTerrainResolve = new Vector3()
   projDealt = true
   private projSizeMul = 1
+  /**
+   * When false (imported arena GLB), skip `applyProjectileArenaBounds` — config ground size does not
+   * match the mesh and clips bot shots near real spawns.
+   */
+  private useSyntheticProjectileBounds = true
 
   /** Optional decoded clip on bot projectile (PvP / future); spatial playback for victim. */
   private projHitAudio: AudioBuffer | null = null
@@ -545,6 +550,10 @@ export class BotFighter {
       this.playerSampleBuffer.length = 0
       this.hasPlayerSample = false
     }
+  }
+
+  setUseSyntheticProjectileBounds(use: boolean): void {
+    this.useSyntheticProjectileBounds = use
   }
 
   setHostAiVoiceShotHandler(
@@ -1391,6 +1400,7 @@ export class BotFighter {
       } else {
         this.projPos.copy(this.projTerrainResolve)
         if (
+          this.useSyntheticProjectileBounds &&
           applyProjectileArenaBounds(
             this.projPos,
             this.projVel,
@@ -1433,6 +1443,7 @@ export class BotFighter {
     }
     this.projPos.copy(this.projTerrainResolve)
     if (
+      this.useSyntheticProjectileBounds &&
       applyProjectileArenaBounds(
         this.projPos,
         this.projVel,

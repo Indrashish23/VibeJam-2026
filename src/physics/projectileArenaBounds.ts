@@ -2,9 +2,10 @@ import { Vector3 } from 'three'
 import { gameConfig } from '../gameConfig'
 
 /**
- * Axis-aligned arena deck / rim bounds for voice projectiles when mesh coverage is incomplete.
- * Matches legacy `PlayerArms.resolveArenaImpact` behavior: mutates `pos` / `vel` on side contact
- * and returns true when the shot should despawn (wall / clamped rim).
+ * Axis-aligned deck / rim bounds from `gameConfig.groundWidth` / `groundDepth` (procedural arena).
+ * Used when trimesh is absent or as a supplement; **disabled on imported arena GLB** where that box
+ * does not match world space and clips shots near real spawns — Rapier trimesh handles walls there.
+ * Mutates `pos` / `vel` on side contact; returns true when the shot should despawn (wall / rim).
  */
 export function applyProjectileArenaBounds(
   pos: Vector3,

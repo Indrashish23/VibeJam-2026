@@ -70,6 +70,11 @@ export class PlayerArms {
   private readonly _cpScratch = new Vector3()
   private readonly _terrainResolve = new Vector3()
   private terrainPhysics: TerrainPhysics | null = null
+  /**
+   * When false (imported arena GLB), skip the axis-aligned box from `gameConfig.groundWidth/Depth` —
+   * it does not match the mesh and kills shots near real spawns. Trimesh handles walls instead.
+   */
+  private useSyntheticProjectileBounds = true
 
   constructor(camera: PerspectiveCamera, scene: Scene) {
     this.camera = camera
@@ -99,6 +104,10 @@ export class PlayerArms {
   /** When set, projectiles use Rapier terrain (walls block; upward floor normals pass through). */
   setTerrainPhysics(terrain: TerrainPhysics | null): void {
     this.terrainPhysics = terrain
+  }
+
+  setUseSyntheticProjectileBounds(use: boolean): void {
+    this.useSyntheticProjectileBounds = use
   }
 
   private shoulderWorld(out: Vector3): void {
@@ -337,6 +346,7 @@ export class PlayerArms {
         } else {
           this.proj.pos.copy(this._terrainResolve)
           if (
+            this.useSyntheticProjectileBounds &&
             applyProjectileArenaBounds(
               this.proj.pos,
               this.proj.vel,
@@ -349,6 +359,7 @@ export class PlayerArms {
         return
       }
       if (
+        this.useSyntheticProjectileBounds &&
         applyProjectileArenaBounds(
           this.proj.pos,
           this.proj.vel,
@@ -390,6 +401,7 @@ export class PlayerArms {
       } else {
         this.proj.pos.copy(this._terrainResolve)
         if (
+          this.useSyntheticProjectileBounds &&
           applyProjectileArenaBounds(
             this.proj.pos,
             this.proj.vel,
@@ -403,6 +415,7 @@ export class PlayerArms {
     }
 
     if (
+      this.useSyntheticProjectileBounds &&
       applyProjectileArenaBounds(
         this.proj.pos,
         this.proj.vel,
