@@ -261,6 +261,11 @@ export const defaultGameConfig = {
   projectileSizeBase: 1.15,
   /** Extra projectile size bonus at full charge `t=1` (0.2 = +20%, 1 = +100%). */
   projectileSizeChargeMaxBonus: 0.57,
+  /**
+   * Rapier terrain vs voice projectiles: if hit normal Y is above this, treat as floor/deck and
+   * do not stop the shot (walls and ceilings still block).
+   */
+  projectileFloorPassMinNormalY: 0.58,
   /** Horizontal knockback on player when bot lands a hit (non-parried). */
   knockbackOnPlayer: 30,
   /** Converts horizontal knock impulse into upward vy (pop when hurt; tune with capsule slide). */

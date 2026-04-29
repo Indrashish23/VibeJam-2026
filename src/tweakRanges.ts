@@ -23,6 +23,7 @@ export const TWEAK_RANGE = {
   punchHitRadius: { min: 0.2, max: 4, step: 0.05 },
   projectileSizeBase: { min: 0.25, max: 3, step: 0.02 },
   projectileSizeChargeMaxBonus: { min: 0, max: 1, step: 0.01 },
+  projectileFloorPassMinNormalY: { min: 0.35, max: 0.95, step: 0.01 },
   knockbackOnPlayer: { min: 0, max: CAP, step: 2 },
   knockVictimLiftMul: { min: 0, max: 1.6, step: 0.02 },
   knockVictimBelowAimMul: { min: 0, max: 2, step: 0.02 },
@@ -427,6 +428,8 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   punchHitRadius: 'Fist hit radius',
   projectileSizeBase: 'Projectile size base ×',
   projectileSizeChargeMaxBonus: 'Projectile max size bonus at full charge',
+  projectileFloorPassMinNormalY:
+    'Terrain hit normal Y above this = floor (projectile passes); below = wall/ceiling (blocks)',
   knockbackOnPlayer: 'Knockback on you',
   knockVictimLiftMul: 'Knock → upward pop (you)',
   knockVictimBelowAimMul: 'Extra lift when shot from below (you)',
@@ -1127,6 +1130,8 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
     'Base projectile size multiplier. Affects both visible projectile size and hit radius baseline.',
   projectileSizeChargeMaxBonus:
     'Extra projectile size at full charge tick `t=1` (0.2 = +20%). Scale = base × (1 + bonus × t).',
+  projectileFloorPassMinNormalY:
+    'Terrain ray hit: if surface normal Y is above this, the shot passes (floor/deck); below blocks as a wall or ceiling.',
 
   knockbackOnPlayer: 'Horizontal push you take when an enemy fist connects.',
   knockVictimLiftMul:
@@ -1386,6 +1391,7 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'punchHitRadius',
       'projectileSizeBase',
       'projectileSizeChargeMaxBonus',
+      'projectileFloorPassMinNormalY',
       'voiceShotSpeedMinMul',
       'voiceShotSpeedMaxMul',
       'voiceMinChargeToFire',

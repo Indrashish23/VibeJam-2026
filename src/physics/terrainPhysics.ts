@@ -363,4 +363,42 @@ export class TerrainPhysics {
     if (!hit) return null
     return rayColliderIntersectionToi(hit)
   }
+
+  /**
+   * Ray vs static terrain with hit normal (for projectiles). Direction need not be unit length.
+   */
+  raycastTerrainWithNormal(
+    ox: number,
+    oy: number,
+    oz: number,
+    dirX: number,
+    dirY: number,
+    dirZ: number,
+    maxDistance: number,
+  ): { toi: number; nx: number; ny: number; nz: number } | null {
+    const len = Math.hypot(dirX, dirY, dirZ)
+    if (len < 1e-8) return null
+    const inv = 1 / len
+    const ux = dirX * inv
+    const uy = dirY * inv
+    const uz = dirZ * inv
+    const hit = this.world.castRayAndGetNormal(
+      new RAPIER.Ray({ x: ox, y: oy, z: oz }, { x: ux, y: uy, z: uz }),
+      maxDistance,
+      false,
+      QUERY_NO_EXCLUDE,
+      undefined,
+      undefined,
+      undefined,
+      (collider) => this.terrainHandles.has(collider.handle),
+    )
+    if (!hit) return null
+    const toi = rayColliderIntersectionToi(hit)
+    return {
+      toi,
+      nx: hit.normal.x,
+      ny: hit.normal.y,
+      nz: hit.normal.z,
+    }
+  }
 }

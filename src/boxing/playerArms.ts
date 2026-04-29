@@ -1,5 +1,7 @@
 import { PerspectiveCamera, Scene, Vector3 } from 'three'
 import { gameConfig } from '../gameConfig'
+import { advanceProjectilePastTerrain } from '../physics/projectileTerrain'
+import type { TerrainPhysics } from '../physics/terrainPhysics'
 import { VoiceProjectileVisual } from './voiceProjectileVisual'
 
 /** Visual / hit size for the voice projectile (matches former fist radius). */
@@ -65,6 +67,8 @@ export class PlayerArms {
   private readonly _tmp = new Vector3()
   /** Scratch for `getProjectileContactPoint` (avoid per-hit `target.clone()` alloc). */
   private readonly _cpScratch = new Vector3()
+  private readonly _terrainResolve = new Vector3()
+  private terrainPhysics: TerrainPhysics | null = null
 
   constructor(camera: PerspectiveCamera, scene: Scene) {
     this.camera = camera
@@ -89,6 +93,11 @@ export class PlayerArms {
 
   dispose(): void {
     this.projVfx.dispose(this.scene)
+  }
+
+  /** When set, projectiles use Rapier terrain (walls block; upward floor normals pass through). */
+  setTerrainPhysics(terrain: TerrainPhysics | null): void {
+    this.terrainPhysics = terrain
   }
 
   private shoulderWorld(out: Vector3): void {
@@ -292,6 +301,22 @@ export class PlayerArms {
         this.resetProjectile()
         return
       }
+      if (this.terrainPhysics) {
+        if (
+          advanceProjectilePastTerrain(
+            this.terrainPhysics,
+            this.proj.prevPos,
+            this.proj.pos,
+            this._terrainResolve,
+          )
+        ) {
+          this.proj.pos.copy(this._terrainResolve)
+          this.resetProjectile()
+        } else {
+          this.proj.pos.copy(this._terrainResolve)
+        }
+        return
+      }
       const rad = PROJECTILE_R * this.proj.sizeMul
       const hw = gameConfig.groundWidth / 2 + rad
       const hd = gameConfig.groundDepth / 2 + rad
@@ -314,6 +339,23 @@ export class PlayerArms {
     this._tmp.subVectors(this.proj.pos, this.proj.spawnPos)
     if (this._tmp.length() > maxR + 1e-3) {
       this.resetProjectile()
+      return
+    }
+
+    if (this.terrainPhysics) {
+      if (
+        advanceProjectilePastTerrain(
+          this.terrainPhysics,
+          this.proj.prevPos,
+          this.proj.pos,
+          this._terrainResolve,
+        )
+      ) {
+        this.proj.pos.copy(this._terrainResolve)
+        this.resetProjectile()
+      } else {
+        this.proj.pos.copy(this._terrainResolve)
+      }
       return
     }
 

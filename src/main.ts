@@ -1004,6 +1004,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   scene.add(camera)
 
   const arms = new PlayerArms(camera, scene)
+  arms.setTerrainPhysics(terrainPhysics)
   /** Outgoing compact anim state for networked enemy playback (local mesh is intentionally disabled). */
   type NetAnimBase = 'idle' | 'running' | 'jumping' | 'hitreact'
   type NetAnimOneShot = 'recording' | 'shooting' | null

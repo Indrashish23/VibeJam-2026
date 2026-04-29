@@ -24,7 +24,6 @@ import {
   applyMonkeyExternalBaseColorTexture,
   applyMonkeyFlatVertexPixelatedStyle,
 } from './monkeyVisualStyle'
-import { PROJECTILE_R } from './playerArms'
 import { VoiceProjectileVisual } from './voiceProjectileVisual'
 import {
   pickClipForSlot,
@@ -32,6 +31,7 @@ import {
   type AvatarClipName,
   type AvatarOneShotClip,
 } from './localPlayerAvatar'
+import { advanceProjectilePastTerrain } from '../physics/projectileTerrain'
 import type { TerrainPhysics } from '../physics/terrainPhysics'
 
 export type BotProfile = {
@@ -183,6 +183,8 @@ export class BotFighter {
   readonly projPos = new Vector3()
   readonly projVel = new Vector3()
   private readonly projSpawn = new Vector3()
+  private readonly projIntegratePrev = new Vector3()
+  private readonly projTerrainResolve = new Vector3()
   projDealt = true
   private projSizeMul = 1
 
@@ -1343,8 +1345,9 @@ export class BotFighter {
     this.spawnProjectileAimed(_work, speedMul, voiceClip)
   }
 
-  private integrateProjectile(delta: number): void {
+  private integrateProjectile(delta: number, terrain: TerrainPhysics): void {
     if (!this.projFlying) return
+    this.projIntegratePrev.copy(this.projPos)
     const maxR = gameConfig.punchMaxRange
     const g = gameConfig.fistGravity
     const drag = gameConfig.fistAirDrag
@@ -1356,11 +1359,18 @@ export class BotFighter {
         this.clearProjectile()
         return
       }
-      const rad = PROJECTILE_R * this.projSizeMul
-      const hw = gameConfig.groundWidth / 2 + rad
-      const hd = gameConfig.groundDepth / 2 + rad
-      if (Math.abs(this.projPos.x) > hw || Math.abs(this.projPos.z) > hd) {
+      if (
+        advanceProjectilePastTerrain(
+          terrain,
+          this.projIntegratePrev,
+          this.projPos,
+          this.projTerrainResolve,
+        )
+      ) {
+        this.projPos.copy(this.projTerrainResolve)
         this.clearProjectile()
+      } else {
+        this.projPos.copy(this.projTerrainResolve)
       }
       return
     }
@@ -1381,30 +1391,19 @@ export class BotFighter {
       return
     }
 
-    const rad = PROJECTILE_R * this.projSizeMul
-    const hw = gameConfig.groundWidth / 2 - rad * 0.5
-    const hd = gameConfig.groundDepth / 2 - rad * 0.5
-    const minY = rad
     if (
-      Math.abs(this.projPos.x) <= hw &&
-      Math.abs(this.projPos.z) <= hd &&
-      this.projPos.y <= minY + 0.1
+      advanceProjectilePastTerrain(
+        terrain,
+        this.projIntegratePrev,
+        this.projPos,
+        this.projTerrainResolve,
+      )
     ) {
-      this.projPos.y = minY
-      this.projVel.y = 0
-      this.projVel.x *= 0.8
-      this.projVel.z *= 0.8
+      this.projPos.copy(this.projTerrainResolve)
+      this.clearProjectile()
+      return
     }
-    let hit = false
-    if (Math.abs(this.projPos.x) > hw) {
-      this.projPos.x = Math.sign(this.projPos.x) * hw
-      hit = true
-    }
-    if (Math.abs(this.projPos.z) > hd) {
-      this.projPos.z = Math.sign(this.projPos.z) * hd
-      hit = true
-    }
-    if (hit) this.clearProjectile()
+    this.projPos.copy(this.projTerrainResolve)
   }
 
   /** PvP only: hide incoming fist once it reaches local player torso (does not affect authority). */
@@ -1451,7 +1450,7 @@ export class BotFighter {
       this.bodyCenter.copy(this.root.position)
       this.bodyCenter.y += this.feetFromCenter * 0.52
 
-      this.integrateProjectile(delta)
+      this.integrateProjectile(delta, terrain)
       this.clearProjectileNearLocalPlayer(playerPos)
       this.projVfx.update({
         active: this.projActive && this.projFlying,
@@ -1565,7 +1564,7 @@ export class BotFighter {
       }
     }
 
-    this.integrateProjectile(delta)
+    this.integrateProjectile(delta, terrain)
     this.projVfx.update({
       active: this.projActive && this.projFlying,
       position: this.projPos,
