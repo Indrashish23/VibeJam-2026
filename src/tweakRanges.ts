@@ -70,6 +70,7 @@ export const TWEAK_RANGE = {
   blastMargin: { min: 0, max: 80, step: 1 },
   showBlastBounds: { min: 0, max: 1, step: 1 },
   blastY: { min: -120, max: -2, step: 1 },
+  blastYHigh: { min: 30, max: 240, step: 1 },
   startStocks: { min: 1, max: 12, step: 1 },
   koAnnounceHoldMs: { min: 200, max: 4000, step: 50 },
   respawnInvulnMs: { min: 0, max: 8000, step: 50 },
@@ -544,6 +545,7 @@ export const TWEAK_DISPLAY_NAME: Partial<Record<GameConfigKey, string>> = {
   blastMargin: 'Blast margin',
   showBlastBounds: 'Show ring-out bounds (green loop)',
   blastY: 'Kill plane Y',
+  blastYHigh: 'Ceiling KO Y',
   startStocks: 'Start stocks',
   koAnnounceHoldMs: 'KO hold (ms)',
   respawnInvulnMs: 'Respawn invuln (ms)',
@@ -866,6 +868,8 @@ export const TWEAK_TOOLTIP: Record<GameConfigKey, string> = {
   showBlastBounds:
     'When 1, draws a bright green rectangle on the deck at the ring-out line (half arena + blast margin in XZ).',
   blastY: 'World Y below which you are eliminated (falling off the stage).',
+  blastYHigh:
+    'World Y above which a fighter is instantly KO\'d. Catches huge straight-up knockbacks that would otherwise drift past the kill plane unsampled.',
   startStocks: 'Stock count each player starts with in stock mode.',
   koAnnounceHoldMs:
     'How long the KO overlay stays at full opacity before fade-out (ms). Fade-in is added automatically so this value matches what you see.',
@@ -1572,6 +1576,7 @@ export const TWEAK_SECTIONS: { id: string; title: string; keys: GameConfigKey[] 
       'blastMargin',
       'showBlastBounds',
       'blastY',
+      'blastYHigh',
       'startStocks',
       'koAnnounceHoldMs',
       'respawnInvulnMs',

@@ -17,7 +17,7 @@ import {
   type BufferGeometry,
 } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
-import { addArena, getArenaCollisionCuboids } from './arena'
+import { addArena, getArenaCollisionCuboids, isOutsideArenaBounds } from './arena'
 import { gameConfig } from './gameConfig'
 import { createArenaTriplanarMaterial, loadArenaTriplanarTexture } from './maps/arenaTriplanarMaterial'
 
@@ -299,10 +299,7 @@ function loadDefaultMap(_scene: Scene, hubRoot: Group): MapHandle {
     collisionMeshes: [],
     rapierCuboids: getArenaCollisionCuboids(),
     isBlastZone(pos: Vector3): boolean {
-      if (pos.y < gameConfig.blastY) return true
-      const halfW = gameConfig.groundWidth / 2 + gameConfig.blastMargin
-      const halfD = gameConfig.groundDepth / 2 + gameConfig.blastMargin
-      return Math.abs(pos.x) > halfW || Math.abs(pos.z) > halfD
+      return isOutsideArenaBounds(pos.x, pos.y, pos.z)
     },
     getPlayerSpawn(slot: SpawnSlot, eyeHeight: number): Vector3 {
       const feet = defaultFeetSpawn(slot)
@@ -481,7 +478,7 @@ async function loadArenaExportMap(_scene: Scene, hubRoot: Group): Promise<MapHan
     bananaSpawnPoints: bananaSpawnPoints.length > 0 ? bananaSpawnPoints : undefined,
     arenaRandomFootBounds,
     isBlastZone(pos: Vector3): boolean {
-      return pos.y < gameConfig.blastY
+      return isOutsideArenaBounds(pos.x, pos.y, pos.z)
     },
     getPlayerSpawn(slot: SpawnSlot, eyeHeight: number): Vector3 {
       const feet = feetSpawn(slot)

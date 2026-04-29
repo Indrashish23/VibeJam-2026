@@ -107,12 +107,14 @@ export function simulateVoiceShotHit(origin, vel, oppCenter, shotScale = 1) {
   return { hit: false }
 }
 
-/** Feet / ring-out using same rules as client `isBlastZone`-style bounds. */
+/** Feet / ring-out using same cylindrical bound as client `isOutsideArenaBounds`. */
 export function checkFeetEliminated(pose) {
   if (!pose || typeof pose.x !== 'number' || typeof pose.z !== 'number') return false
-  const fy = pose.fy
-  if (typeof fy === 'number' && fy < C.blastY) return true
-  const hw = C.groundWidth / 2 + C.blastMargin
-  const hd = C.groundDepth / 2 + C.blastMargin
-  return Math.abs(pose.x) > hw || Math.abs(pose.z) > hd
+  const fy = typeof pose.fy === 'number' ? pose.fy : 0
+  if (fy < C.blastY) return true
+  if (fy > C.blastYHigh) return true
+  const halfW = C.groundWidth / 2
+  const halfD = C.groundDepth / 2
+  const r = Math.sqrt(halfW * halfW + halfD * halfD) + C.blastMargin
+  return pose.x * pose.x + pose.z * pose.z > r * r
 }

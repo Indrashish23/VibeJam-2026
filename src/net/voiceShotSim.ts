@@ -1,4 +1,5 @@
 import { gameConfig } from '../gameConfig'
+import { isOutsideArenaBounds } from '../arena'
 
 export type PoseLite = { x: number; fy: number; z: number; ry?: number }
 
@@ -110,9 +111,6 @@ export function simulateVoiceShotHit(
 }
 
 export function checkFeetEliminated(pose: PoseLite): boolean {
-  const fy = pose.fy
-  if (typeof fy === 'number' && fy < gameConfig.blastY) return true
-  const hw = gameConfig.groundWidth / 2 + gameConfig.blastMargin
-  const hd = gameConfig.groundDepth / 2 + gameConfig.blastMargin
-  return Math.abs(pose.x) > hw || Math.abs(pose.z) > hd
+  const fy = typeof pose.fy === 'number' ? pose.fy : 0
+  return isOutsideArenaBounds(pose.x, fy, pose.z)
 }

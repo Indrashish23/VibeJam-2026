@@ -101,9 +101,37 @@ export function addArena(parent: Object3D): Group {
   return stage
 }
 
+/**
+ * Cylindrical blast bound radius (XZ): circumscribed around the rectangular deck
+ * + `blastMargin`. A circle (vs. axis-aligned box) prevents corner-leaks where a
+ * fighter clips just past the deck diagonal but no single axis exceeds half-width.
+ */
+export function arenaBlastRadius(): number {
+  const halfW = gameConfig.groundWidth / 2
+  const halfD = gameConfig.groundDepth / 2
+  return Math.sqrt(halfW * halfW + halfD * halfD) + gameConfig.blastMargin
+}
+
+/**
+ * Authoritative ring-out check used by every KO trigger (offline + PvP, player +
+ * bot/peer, banana sim).
+ *
+ * Catches three escape modes:
+ *  - **Below** (`y < blastY`): falling off — original kill plane.
+ *  - **Above** (`y > blastYHigh`): bug fix — a vertical knockback could carry a
+ *    fighter past the kill plane never being sampled (or hang at extreme Y while
+ *    physics drifts), so we KO once they cross the ceiling.
+ *  - **Outside cylinder** (`x² + z² > r²`): drifted past the deck horizontally.
+ *    Cylindrical (vs. axis box) so corner escapes always trigger.
+ */
+export function isOutsideArenaBounds(x: number, y: number, z: number): boolean {
+  if (y < gameConfig.blastY) return true
+  if (y > gameConfig.blastYHigh) return true
+  const r = arenaBlastRadius()
+  return x * x + z * z > r * r
+}
+
+/** Backwards-compat: existing callers pass a `Vector3`. */
 export function isBlastZone(pos: Vector3): boolean {
-  if (pos.y < gameConfig.blastY) return true
-  const halfW = gameConfig.groundWidth / 2 + gameConfig.blastMargin
-  const halfD = gameConfig.groundDepth / 2 + gameConfig.blastMargin
-  return Math.abs(pos.x) > halfW || Math.abs(pos.z) > halfD
+  return isOutsideArenaBounds(pos.x, pos.y, pos.z)
 }

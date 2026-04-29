@@ -38,6 +38,7 @@ import { PointerLockControls } from 'three/addons/controls/PointerLockControls.j
 import { gameConfig } from './gameConfig'
 import { bumpPlayerRecord } from './playerRecord'
 import { isMapId, loadMap, type MapHandle, type MapId, type SpawnSlot } from './maps'
+import { arenaBlastRadius } from './arena'
 import { pickGroundedRespawnFoot, pickRandomGroundedFootInBounds } from './spawnRespawn'
 import { BotFighter, type BotMode } from './boxing/bot'
 import { PlayerArms } from './boxing/playerArms'
@@ -1131,7 +1132,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     gameConfig.pcCapsuleHeight,
   )
 
-  /** Green XZ loop: ring-out boundary (|x|/|z| vs half-extent + blast margin). Toggle via Tweaks `showBlastBounds`. */
+  /** Green XZ circle: cylindrical ring-out boundary at `arenaBlastRadius()`. Toggle via Tweaks `showBlastBounds`. */
+  const BLAST_BOUNDS_SEGMENTS = 64
   const blastBoundsGeom = new BufferGeometry()
   const blastBoundsLine = new LineLoop(
     blastBoundsGeom,
@@ -1144,15 +1146,14 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     const show = gameConfig.showBlastBounds >= 0.5
     blastBoundsLine.visible = show
     if (!show) return
-    const hw = gameConfig.groundWidth * 0.5 + gameConfig.blastMargin
-    const hd = gameConfig.groundDepth * 0.5 + gameConfig.blastMargin
+    const r = arenaBlastRadius()
     const y = 0.065
-    blastBoundsGeom.setFromPoints([
-      new Vector3(-hw, y, -hd),
-      new Vector3(hw, y, -hd),
-      new Vector3(hw, y, hd),
-      new Vector3(-hw, y, hd),
-    ])
+    const pts: Vector3[] = []
+    for (let i = 0; i < BLAST_BOUNDS_SEGMENTS; i++) {
+      const t = (i / BLAST_BOUNDS_SEGMENTS) * Math.PI * 2
+      pts.push(new Vector3(Math.cos(t) * r, y, Math.sin(t) * r))
+    }
+    blastBoundsGeom.setFromPoints(pts)
   }
   syncBlastBoundsLine()
 

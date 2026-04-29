@@ -386,12 +386,15 @@ export const defaultGameConfig = {
   matchEndAnnouncerEnabled: 1,
   /** Gain × on match-end announcer (after SFX chain). */
   matchEndAnnouncerVolumeMul: 1,
-  /** Outside platform half-extent + this (XZ) or below yKill = blast. */
+  /** Cylindrical blast bound XZ extra radius beyond the deck's circumscribed circle. */
   blastMargin: 12,
-  /** When 1, draw a green ring-out boundary loop on the deck (Tweaks → Arena). */
+  /** When 1, draw a green ring-out boundary circle on the deck (Tweaks → Arena). */
   showBlastBounds: 0,
   /** Fall below this Y on blast zone (death plane). */
   blastY: -38,
+  /** Above this Y counts as ring-out (catches infinite straight-up knockbacks
+   *  that would otherwise never re-enter the blastY plane). */
+  blastYHigh: 80,
 
   /** Stocks per fighter at match start / round reset (Smash-style ring-outs). */
   startStocks: 2,
