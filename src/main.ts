@@ -2490,7 +2490,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     tryPointerLock()
     window.setTimeout(() => {
       if (mpToast) mpToast.hidden = true
-    }, 1200)
+    }, 4200)
   }
 
   function scheduleMpBegin(): void {
