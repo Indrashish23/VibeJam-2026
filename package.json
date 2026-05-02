@@ -3,13 +3,18 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "dev:online": "concurrently -n party,vite -c cyan,magenta \"npm run party:dev\" \"npm run dev\"",
     "dev:b": "vite --port 5174 --strictPort",
     "start": "vite",
     "build": "tsc && vite build",
+    "build:electron": "cross-env ELECTRON=1 npm run build",
     "preview": "vite preview",
+    "electron:dev": "concurrently -k -n vite,electron -c blue,green \"vite\" \"wait-on http://127.0.0.1:5173 && cross-env ELECTRON_DEV_SERVER=1 electron .\"",
+    "electron:editor": "concurrently -k -n vite,electron -c blue,green \"vite\" \"wait-on http://127.0.0.1:5173 && cross-env ELECTRON_DEV_SERVER=1 electron . --editor\"",
+    "electron:build": "npm run build:electron && electron-builder --win portable --x64",
     "party:dev": "partykit dev",
     "party:deploy": "partykit deploy",
     "pvp:listen": "node scripts/pvp-host.mjs"
@@ -17,8 +22,12 @@
   "devDependencies": {
     "@types/three": "^0.184.0",
     "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^39.2.7",
+    "electron-builder": "^26.4.0",
     "typescript": "~6.0.2",
-    "vite": "^8.0.9"
+    "vite": "^8.0.9",
+    "wait-on": "^9.0.3"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.19.3",
@@ -26,5 +35,29 @@
     "partysocket": "^1.1.18",
     "three": "^0.184.0",
     "ws": "^8.18.0"
+  },
+  "build": {
+    "appId": "com.ragebait.vibegamejam",
+    "productName": "Vibe Jam",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    }
   }
 }

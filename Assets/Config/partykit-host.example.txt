@@ -1,0 +1,6 @@
+# Copy this file to partykit-host.txt in the same folder (Assets/Config/).
+# Place that folder next to your portable Vibe Jam.exe — same layout as Assets/Scenes/.
+#
+# One line only — your PartyKit WebSocket host with NO https:// or wss:// prefix.
+# Example:
+# my-room.myuser.partykit.dev

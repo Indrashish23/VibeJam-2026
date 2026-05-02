@@ -110,6 +110,59 @@ export function simulateVoiceShotHit(
   return { hit: false }
 }
 
+export type FfaHitTarget = { fighterId: string; center: { x: number; y: number; z: number } }
+
+/**
+ * FFA: ray/sphere test against every **other** fighter; winner is the closest hit along the shot path.
+ * Deterministic when distances tie (lexicographic fighterId).
+ */
+export function simulateVoiceShotHitFfa(
+  origin: { x: number; y: number; z: number },
+  vel: { x: number; y: number; z: number },
+  targets: readonly FfaHitTarget[],
+  shotScale = 1,
+):
+  | { hit: false }
+  | {
+      hit: true
+      victimFighterId: string
+      dx: number
+      dz: number
+      hx: number
+      hy: number
+      hz: number
+    } {
+  let bestDist = Infinity
+  let best: {
+    victimFighterId: string
+    dx: number
+    dz: number
+    hx: number
+    hy: number
+    hz: number
+  } | null = null
+
+  const sorted = [...targets].sort((a, b) => a.fighterId.localeCompare(b.fighterId))
+  for (const t of sorted) {
+    const sim = simulateVoiceShotHit(origin, vel, t.center, shotScale)
+    if (!sim.hit) continue
+    const d = Math.hypot(sim.hx - origin.x, sim.hy - origin.y, sim.hz - origin.z)
+    if (d < bestDist - 1e-6 || (Math.abs(d - bestDist) <= 1e-6 && (!best || t.fighterId.localeCompare(best.victimFighterId) < 0))) {
+      bestDist = d
+      best = {
+        victimFighterId: t.fighterId,
+        dx: sim.dx,
+        dz: sim.dz,
+        hx: sim.hx,
+        hy: sim.hy,
+        hz: sim.hz,
+      }
+    }
+  }
+
+  return best ? { hit: true, ...best } : { hit: false }
+}
+
 export function checkFeetEliminated(pose: PoseLite): boolean {
   const fy = typeof pose.fy === 'number' ? pose.fy : 0
   return isOutsideArenaBounds(pose.x, fy, pose.z)

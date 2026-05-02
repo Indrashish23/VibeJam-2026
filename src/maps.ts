@@ -36,7 +36,16 @@ export function mapDefsForLobby(): MapDef[] {
   return MAP_DEFS.filter((d) => !d.devOnly)
 }
 
-export type SpawnSlot = 'a' | 'b'
+/** Player spawn markers — maps support up to eight authored corners (`spawn_a` … `spawn_h`). */
+export type SpawnSlot = 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h'
+
+export const SPAWN_SLOT_ORDER: readonly SpawnSlot[] = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+
+export function spawnSlotFromIndex(index: number): SpawnSlot {
+  const n = SPAWN_SLOT_ORDER.length
+  const i = ((index % n) + n) % n
+  return SPAWN_SLOT_ORDER[i]!
+}
 
 /** World XZ rectangle for sampling random grounded feet on arena GLB maps. */
 export type RandomFootXZBounds = { minX: number; maxX: number; minZ: number; maxZ: number }
@@ -170,6 +179,32 @@ function spawnSlotFromName(normalized: string): SpawnSlot | null {
   ) {
     return 'b'
   }
+  if (
+    normalized === 'spawn_c' ||
+    normalized === 'spawn_p3' ||
+    normalized === 'player_spawn_3' ||
+    normalized === 'spawn_3' ||
+    normalized === 'p3' ||
+    normalized === 'playerspawn3' ||
+    normalized === 'playerspawn_3'
+  ) {
+    return 'c'
+  }
+  if (
+    normalized === 'spawn_d' ||
+    normalized === 'spawn_p4' ||
+    normalized === 'player_spawn_4' ||
+    normalized === 'spawn_4' ||
+    normalized === 'p4' ||
+    normalized === 'playerspawn4' ||
+    normalized === 'playerspawn_4'
+  ) {
+    return 'd'
+  }
+  if (normalized === 'spawn_e' || normalized === 'spawn_p5' || normalized === 'p5') return 'e'
+  if (normalized === 'spawn_f' || normalized === 'spawn_p6' || normalized === 'p6') return 'f'
+  if (normalized === 'spawn_g' || normalized === 'spawn_p7' || normalized === 'p7') return 'g'
+  if (normalized === 'spawn_h' || normalized === 'spawn_p8' || normalized === 'p8') return 'h'
   return null
 }
 
@@ -291,7 +326,10 @@ function loadDefaultMap(_scene: Scene, hubRoot: Group): MapHandle {
   function defaultFeetSpawn(slot: SpawnSlot): Vector3 {
     const arenaHalf = Math.min(gameConfig.groundWidth, gameConfig.groundDepth) * 0.5 - 2.5
     const spacing = Math.min(6.8, arenaHalf * 0.38)
-    return new Vector3(0, 0, slot === 'a' ? spacing : -spacing)
+    const ix = SPAWN_SLOT_ORDER.indexOf(slot)
+    const i = ix >= 0 ? ix : 0
+    const t = (i / Math.max(1, SPAWN_SLOT_ORDER.length)) * Math.PI * 2
+    return new Vector3(Math.sin(t) * spacing * 0.85, 0, Math.cos(t) * spacing * 0.85)
   }
 
   return {
@@ -314,9 +352,10 @@ function loadDefaultMap(_scene: Scene, hubRoot: Group): MapHandle {
       const spacing = Math.min(6.8, arenaHalf * 0.38)
       const wx = gameConfig.groundWidth * 0.32
       const dz = gameConfig.groundDepth * 0.32
+      const altSlot = SPAWN_SLOT_ORDER[(SPAWN_SLOT_ORDER.indexOf(slot) + 1) % SPAWN_SLOT_ORDER.length]!
       const list = [
         defaultFeetSpawn(slot),
-        defaultFeetSpawn(slot === 'a' ? 'b' : 'a'),
+        defaultFeetSpawn(altSlot),
         new Vector3(wx, 0, spacing * 0.4),
         new Vector3(-wx, 0, spacing * 0.4),
         new Vector3(wx * 0.62, 0, -spacing * 0.48),
@@ -363,7 +402,29 @@ function applyTriplanarToArenaVisuals(root: Group): void {
   })
 }
 
-async function loadArenaExportMap(_scene: Scene, hubRoot: Group): Promise<MapHandle> {
+async function loadArenaExportMap(scene: Scene, hubRoot: Group): Promise<MapHandle> {
+  return loadArenaFromGlbUrl(scene, hubRoot, ARENA_EXPORT_GLB_URL, ARENA_EXPORT_SCALE, {
+    applyTriplanar: true,
+  })
+}
+
+/**
+ * URL-based arena loader — same shape as `loadArenaExportMap` but parameterized so the
+ * scene editor's arena translator can spawn an arena from any editor-authored GLB URL.
+ * Returns a `MapHandle` with `id: 'arena'` so the rest of the game (blast-zone checks,
+ * spawn picks, respawn raycasts) treats it identically to the canonical arena.
+ *
+ * Collision + spawn conventions are unchanged: GLB nodes whose name matches the `col_*`
+ * or Godot-CSG patterns become Rapier trimesh colliders; nodes matching the spawn-name
+ * patterns in `spawnSlotFromName` / `looksLikeSpawnMarker` become player spawns.
+ */
+export async function loadArenaFromGlbUrl(
+  _scene: Scene,
+  hubRoot: Group,
+  url: string,
+  scale = ARENA_EXPORT_SCALE,
+  options: { applyTriplanar?: boolean } = {},
+): Promise<MapHandle> {
   const container = new Group()
   container.name = 'map:arena'
   hubRoot.add(container)
@@ -371,7 +432,7 @@ async function loadArenaExportMap(_scene: Scene, hubRoot: Group): Promise<MapHan
   const loader = new GLTFLoader()
   const gltf = await new Promise<{ scene: Group }>((resolve, reject) => {
     loader.load(
-      ARENA_EXPORT_GLB_URL,
+      url,
       (data) => resolve(data as unknown as { scene: Group }),
       undefined,
       (err) => reject(err),
@@ -379,7 +440,7 @@ async function loadArenaExportMap(_scene: Scene, hubRoot: Group): Promise<MapHan
   })
 
   container.add(gltf.scene)
-  gltf.scene.scale.setScalar(ARENA_EXPORT_SCALE)
+  gltf.scene.scale.setScalar(scale)
   gltf.scene.updateMatrixWorld(true)
   const { collisionMeshes: tagged, spawnA: sA, spawnB: sB, looseSpawns } = collectGltfArenaData(
     gltf.scene,
@@ -409,7 +470,9 @@ async function loadArenaExportMap(_scene: Scene, hubRoot: Group): Promise<MapHan
   }
   logArenaCollisionMeshesDev(collisionMeshes)
 
-  applyTriplanarToArenaVisuals(gltf.scene)
+  if (options.applyTriplanar !== false) {
+    applyTriplanarToArenaVisuals(gltf.scene)
+  }
 
   let spawnA = sA
   let spawnB = sB
@@ -463,12 +526,23 @@ async function loadArenaExportMap(_scene: Scene, hubRoot: Group): Promise<MapHan
   respawnPool.push(fallbackA.clone(), fallbackB.clone())
 
   function feetSpawn(slot: SpawnSlot): Vector3 {
-    return (slot === 'a' ? spawnA : spawnB)?.clone() ?? (slot === 'a' ? fallbackA : fallbackB).clone()
+    if (slot === 'a' && spawnA) return spawnA.clone()
+    if (slot === 'b' && spawnB) return spawnB.clone()
+    const li = SPAWN_SLOT_ORDER.indexOf(slot)
+    if (li >= 2 && looseSpawns.length > li - 2) {
+      return looseSpawns[li - 2]!.clone()
+    }
+    const ix = SPAWN_SLOT_ORDER.indexOf(slot)
+    const t = ((ix >= 0 ? ix : 0) / 8) * Math.PI * 2
+    const r = Math.min(6.8, Math.min(arMaxX - arMinX, arMaxZ - arMinZ) * 0.22)
+    const cx = (arMinX + arMaxX) * 0.5 + Math.sin(t) * r
+    const cz = (arMinZ + arMaxZ) * 0.5 + Math.cos(t) * r
+    return new Vector3(cx, dropTopY, cz)
   }
 
   if (!spawnA || !spawnB) {
     console.warn(
-      '[map:arena] Missing player spawn(s); using bbox fallbacks. Name empties PlayerSpawn1 / PlayerSpawn2 (or spawn_player / spawn_player_2).',
+      '[map:arena] Missing primary spawn(s); using bbox / extras. Add PlayerSpawn1 / PlayerSpawn2 or spawn_a … spawn_d empties.',
     )
   }
 
@@ -493,7 +567,8 @@ async function loadArenaExportMap(_scene: Scene, hubRoot: Group): Promise<MapHan
       return feet
     },
     getRespawnFootCandidates(slot: SpawnSlot): Vector3[] {
-      const opp: SpawnSlot = slot === 'a' ? 'b' : 'a'
+      const ix = SPAWN_SLOT_ORDER.indexOf(slot)
+      const opp: SpawnSlot = SPAWN_SLOT_ORDER[(ix + 1) % SPAWN_SLOT_ORDER.length]!
       const merged = [feetSpawn(slot), feetSpawn(opp), ...respawnPool.map((v) => v.clone())]
       return dedupeSpawnPoints(merged, 1.6)
     },

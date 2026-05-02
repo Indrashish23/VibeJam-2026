@@ -107,6 +107,33 @@ export function simulateVoiceShotHit(origin, vel, oppCenter, shotScale = 1) {
   return { hit: false }
 }
 
+/** @param {{ fighterId: string, center: { x: number, y: number, z: number } }} targets */
+export function simulateVoiceShotHitFfa(origin, vel, targets, shotScale = 1) {
+  let bestDist = Infinity
+  let best = null
+  const sorted = [...targets].sort((a, b) => a.fighterId.localeCompare(b.fighterId))
+  for (const t of sorted) {
+    const sim = simulateVoiceShotHit(origin, vel, t.center, shotScale)
+    if (!sim.hit) continue
+    const d = Math.hypot(sim.hx - origin.x, sim.hy - origin.y, sim.hz - origin.z)
+    if (
+      d < bestDist - 1e-6 ||
+      (Math.abs(d - bestDist) <= 1e-6 && (!best || t.fighterId.localeCompare(best.victimFighterId) < 0))
+    ) {
+      bestDist = d
+      best = {
+        victimFighterId: t.fighterId,
+        dx: sim.dx,
+        dz: sim.dz,
+        hx: sim.hx,
+        hy: sim.hy,
+        hz: sim.hz,
+      }
+    }
+  }
+  return best ? { hit: true, ...best } : { hit: false }
+}
+
 /** Feet / ring-out using same cylindrical bound as client `isOutsideArenaBounds`. */
 export function checkFeetEliminated(pose) {
   if (!pose || typeof pose.x !== 'number' || typeof pose.z !== 'number') return false

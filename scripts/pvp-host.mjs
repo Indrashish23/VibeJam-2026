@@ -1,23 +1,20 @@
 #!/usr/bin/env node
 /**
  * Authoritative listen server (Quake-style dedicated host).
- * Anyone can run `npm run pvp:listen` — clients point `VITE_PVP_RELAY_URL` (or session URL) here.
  *
  * - Relays JSON like a dumb pipe (voice blobs, poses, hello).
- * - Validates voice-shot ballistics against last known rival pose; emits authDamage / authMatchEnd only from here.
+ * - Validates voice-shot ballistics (FFA closest-hit); emits authDamage / authMatchEnd.
  * - Validates ring-out from pose packets.
- *
- * Usage: npm run pvp:listen
- * Env: PVP_LISTEN_PORT (default 8765)
  */
 
 import os from 'node:os'
 import { WebSocketServer } from 'ws'
-import { COMBAT } from './lib/combatConstants.mjs'
+import { COMBAT as C } from './lib/combatConstants.mjs'
 import {
   checkFeetEliminated,
   opponentBodyCenterFromPose,
   simulateVoiceShotHit,
+  simulateVoiceShotHitFfa,
 } from './lib/voiceShotSim.mjs'
 
 const PORT = Number(process.env.PVP_LISTEN_PORT || 8765)
@@ -27,33 +24,84 @@ let bananaRelaxedTrustWarned = false
 /**
  * @typedef {{
  *   peers: Set<import('ws').WebSocket>
- *   poses: { host: object | null, guest: object | null }
- *   percent: { host: number, guest: number }
+ *   poses: Record<string, object | null>
+ *   percent: Record<string, number>
  *   shots: Set<string>
  *   ended: boolean
- *   stocks: { host: number, guest: number }
- *   ringOutPending: 'host' | 'guest' | null
- *   respawnInvulnUntil: { host: number, guest: number }
+ *   stocks: Record<string, number>
+ *   ringOutPending: Record<string, boolean>
+ *   respawnInvulnUntil: Record<string, number>
  * }} Room
  */
 
 /** @type {Map<string, Room>} */
 const rooms = new Map()
 
+function newRoom() {
+  const n = Math.max(1, Math.round(COMBAT.startStocks))
+  return {
+    peers: new Set(),
+    poses: {},
+    percent: {},
+    shots: new Set(),
+    ended: false,
+    stocks: {},
+    ringOutPending: {},
+    respawnInvulnUntil: {},
+  }
+}
+
+function ensureFighter(r, id, stockCount = Math.max(1, Math.round(COMBAT.startStocks))) {
+  if (!(id in r.poses)) r.poses[id] = null
+  if (r.stocks[id] === undefined) r.stocks[id] = stockCount
+  if (r.percent[id] === undefined) r.percent[id] = 0
+  if (r.respawnInvulnUntil[id] === undefined) r.respawnInvulnUntil[id] = 0
+  if (r.ringOutPending[id] === undefined) r.ringOutPending[id] = false
+}
+
+function fighterIds(r) {
+  return Object.keys(r.stocks).sort((a, b) => a.localeCompare(b))
+}
+
+function remainingAlive(r) {
+  return fighterIds(r).filter((id) => r.stocks[id] > 0)
+}
+
+function defaultPose(id, allIds) {
+  const spacing = Math.min(6.8, Math.min(COMBAT.groundWidth, COMBAT.groundDepth) * 0.5 - 2.5)
+  const fy = 0
+  const ix = allIds.indexOf(id)
+  const i = ix >= 0 ? ix : 0
+  const total = Math.max(2, allIds.length)
+  const t = (i / total) * Math.PI * 2
+  const x = Math.sin(t) * spacing * 0.85
+  const z = Math.cos(t) * spacing * 0.85
+  const ry = Math.atan2(-x, -z)
+  return { x, z, fy, ry }
+}
+
+function legacyPercents(r) {
+  const fh = r.percent.host
+  const fg = r.percent.guest
+  if (typeof fh === 'number' && typeof fg === 'number') {
+    return { percentHost: fh, percentGuest: fg }
+  }
+  return {}
+}
+
+function legacyStocks(r) {
+  const sh = r.stocks.host
+  const sg = r.stocks.guest
+  if (typeof sh === 'number' && typeof sg === 'number') {
+    return { stocksHost: sh, stocksGuest: sg }
+  }
+  return {}
+}
+
 function getOrCreateRoom(roomId) {
   let r = rooms.get(roomId)
   if (!r) {
-    const n = Math.max(1, Math.round(COMBAT.startStocks))
-    r = {
-      peers: new Set(),
-      poses: { host: null, guest: null },
-      percent: { host: 0, guest: 0 },
-      shots: new Set(),
-      ended: false,
-      stocks: { host: n, guest: n },
-      ringOutPending: null,
-      respawnInvulnUntil: { host: 0, guest: 0 },
-    }
+    r = newRoom()
     rooms.set(roomId, r)
   }
   return r
@@ -86,13 +134,6 @@ function leaveRoom(ws) {
   broadcastPresence(roomId)
 }
 
-function defaultPose(role) {
-  const spacing = Math.min(6.8, Math.min(COMBAT.groundWidth, COMBAT.groundDepth) * 0.5 - 2.5)
-  const fy = 0
-  if (role === 'host') return { x: 0, z: spacing, fy, ry: 0 }
-  return { x: 0, z: -spacing, fy, ry: Math.PI }
-}
-
 function broadcast(roomId, raw, except) {
   const r = rooms.get(roomId)
   if (!r) return
@@ -113,69 +154,76 @@ function broadcastAll(roomId, raw) {
 
 function validateRingOut(roomId, r) {
   if (r.ended) return
-  const roles = /** @type {const} */ (['host', 'guest'])
+  const ids = fighterIds(r)
   const now = Date.now()
-  for (const role of roles) {
-    if (r.ringOutPending === role) continue
-    /* Stale post-respawn pose can briefly still report feet below blastY before
-     * the teleport propagates back as a fresh pose. Gate ring-out on the
-     * respawn invuln window so we don't double-deduct stocks on the same KO. */
-    if (now < (r.respawnInvulnUntil?.[role] ?? 0)) continue
-    const pose = r.poses[role]
+  for (const id of ids) {
+    if (r.ringOutPending[id]) continue
+    if (now < (r.respawnInvulnUntil[id] ?? 0)) continue
+    const pose = r.poses[id]
     if (pose && checkFeetEliminated(pose)) {
-      r.stocks[role] = Math.max(0, r.stocks[role] - 1)
-      if (r.stocks[role] <= 0) {
-        r.ended = true
-        const winner = role === 'host' ? 'guest' : 'host'
-        const payload = JSON.stringify({
-          type: 'authMatchEnd',
-          winnerRole: winner,
-          reason: 'ring',
-        })
-        broadcastAll(roomId, payload)
+      r.stocks[id] = Math.max(0, r.stocks[id] - 1)
+      if (r.stocks[id] <= 0) {
+        r.ringOutPending[id] = false
+        const alive = remainingAlive(r)
+        if (alive.length === 1) {
+          r.ended = true
+          const w = alive[0]
+          broadcastAll(
+            roomId,
+            JSON.stringify({
+              type: 'authMatchEnd',
+              winnerFighterId: w,
+              winnerRole: w === 'host' || w === 'guest' ? w : undefined,
+              reason: 'ring',
+            }),
+          )
+          return
+        }
+        broadcastAll(
+          roomId,
+          JSON.stringify({
+            type: 'authFighterEliminated',
+            fighterId: id,
+            percents: { ...r.percent },
+            stocks: { ...r.stocks },
+            ...legacyPercents(r),
+            ...legacyStocks(r),
+          }),
+        )
         return
       }
-      r.ringOutPending = role
-      const ko = JSON.stringify({
-        type: 'authStockKO',
-        victimRole: role,
-        stocksHost: r.stocks.host,
-        stocksGuest: r.stocks.guest,
-      })
-      broadcastAll(roomId, ko)
+      r.ringOutPending[id] = true
+      broadcastAll(
+        roomId,
+        JSON.stringify({
+          type: 'authStockKO',
+          victimFighterId: id,
+          victimRole: id === 'host' || id === 'guest' ? id : undefined,
+          percents: { ...r.percent },
+          stocks: { ...r.stocks },
+          ...legacyPercents(r),
+          ...legacyStocks(r),
+        }),
+      )
       return
     }
   }
 }
 
-function validateVoiceShot(roomId, ws, raw, data) {
+function validateVoiceShot(roomId, ws, parsed) {
   const r = rooms.get(roomId)
   if (!r || r.ended) return
-  const aggressor = ws._vjRole
-  if (aggressor !== 'host' && aggressor !== 'guest') return
+  const aggressor = ws._vjFighterId
+  if (!aggressor || r.stocks[aggressor] === undefined) return
 
-  const victim = aggressor === 'host' ? 'guest' : 'host'
-  if (Date.now() < (r.respawnInvulnUntil[victim] || 0)) return
-
-  let oppPose = r.poses[victim]
-  if (!oppPose) oppPose = defaultPose(victim)
-
-  const oppCenter = opponentBodyCenterFromPose(oppPose)
-  if (!oppCenter) return
-
-  const ox = data.ox
-  const oy = data.oy
-  const oz = data.oz
-  const vx = data.vx
-  const vy = data.vy
-  const vz = data.vz
-  const shotId = data.shotId
-
+  const ox = dataOx(parsed)
+  const shotId = parsed.shotId
   if (typeof ox !== 'number' || typeof shotId !== 'string') return
 
-  const tRaw = data.chargeT
+  const ids = fighterIds(r)
+  const tRaw = parsed.chargeT
   const chargeT = typeof tRaw === 'number' ? Math.max(0, Math.min(1, tRaw)) : 0.5
-  const shotScaleRaw = data.shotScale
+  const shotScaleRaw = parsed.shotScale
   const shotScale = typeof shotScaleRaw === 'number' ? Math.max(0.15, shotScaleRaw) : 1
   if (chargeT < COMBAT.voiceMinChargeToFire - 1e-6) return
   const minF = Math.max(0.01, Math.min(0.99, COMBAT.voiceMinChargeToFire))
@@ -183,36 +231,72 @@ function validateVoiceShot(roomId, ws, raw, data) {
   const t = (c - minF) / (1 - minF + 1e-6)
   const gain = COMBAT.percentGainMin + t * (COMBAT.percentGainMax - COMBAT.percentGainMin)
 
-  const sim = simulateVoiceShotHit(
-    { x: ox, y: oy, z: oz },
-    { x: vx, y: vy, z: vz },
-    oppCenter,
-    shotScale,
-  )
+  const targets = []
+  for (const vid of ids) {
+    if (vid === aggressor) continue
+    if ((r.stocks[vid] ?? 0) <= 0) continue
+    if (Date.now() < (r.respawnInvulnUntil[vid] ?? 0)) continue
+    let oppPose = r.poses[vid]
+    if (!oppPose) oppPose = defaultPose(vid, ids)
+    const center = opponentBodyCenterFromPose(oppPose)
+    if (center) targets.push({ fighterId: vid, center })
+  }
 
-  if (!sim.hit) return
+  let sim
+  if (targets.length === 1) {
+    sim = simulateVoiceShotHit(
+      { x: ox, y: parsed.oy, z: parsed.oz },
+      { x: parsed.vx, y: parsed.vy, z: parsed.vz },
+      targets[0].center,
+      shotScale,
+    )
+    if (!sim.hit) return
+    sim = { ...sim, victimFighterId: targets[0].fighterId }
+  } else if (targets.length > 1) {
+    const ffa = simulateVoiceShotHitFfa(
+      { x: ox, y: parsed.oy, z: parsed.oz },
+      { x: parsed.vx, y: parsed.vy, z: parsed.vz },
+      targets,
+      shotScale,
+    )
+    if (!ffa.hit) return
+    sim = ffa
+  } else {
+    return
+  }
+
+  const victim = sim.victimFighterId
+  if (Date.now() < (r.respawnInvulnUntil[victim] ?? 0)) return
   if (r.shots.has(shotId)) return
   r.shots.add(shotId)
   if (r.shots.size > 512) r.shots.clear()
 
-  r.percent[victim] = Math.min(999, r.percent[victim] + gain)
+  r.percent[victim] = Math.min(999, (r.percent[victim] ?? 0) + gain)
 
-  const dmg = JSON.stringify({
-    type: 'authDamage',
-    aggressorRole: aggressor,
-    victimRole: victim,
-    dx: sim.dx,
-    dz: sim.dz,
-    hx: sim.hx,
-    hy: sim.hy,
-    hz: sim.hz,
-    shotId,
-    percentHost: r.percent.host,
-    percentGuest: r.percent.guest,
-    chargeT,
-    percentGain: gain,
-  })
-  broadcastAll(roomId, dmg)
+  broadcastAll(
+    roomId,
+    JSON.stringify({
+      type: 'authDamage',
+      aggressorFighterId: aggressor,
+      victimFighterId: victim,
+      aggressorRole: aggressor === 'host' || aggressor === 'guest' ? aggressor : undefined,
+      victimRole: victim === 'host' || victim === 'guest' ? victim : undefined,
+      dx: sim.dx,
+      dz: sim.dz,
+      hx: sim.hx,
+      hy: sim.hy,
+      hz: sim.hz,
+      shotId,
+      percents: { ...r.percent },
+      chargeT,
+      percentGain: gain,
+      ...legacyPercents(r),
+    }),
+  )
+}
+
+function dataOx(parsed) {
+  return typeof parsed.ox === 'number' ? parsed.ox : undefined
 }
 
 function relay(sender, raw) {
@@ -265,26 +349,39 @@ wss.on('connection', (ws, req) => {
     }
 
     const t = parsed?.type
+    if (t === 'sessionRoster' && Array.isArray(parsed.fighters)) {
+      for (const row of parsed.fighters) {
+        const fid = typeof row?.fighterId === 'string' ? row.fighterId : null
+        if (fid) ensureFighter(r, fid)
+      }
+    }
     if (t === 'hello' && parsed.role) {
-      ws._vjRole = parsed.role === 'host' || parsed.role === 'guest' ? parsed.role : undefined
+      const roleOk = parsed.role === 'host' || parsed.role === 'guest' ? parsed.role : undefined
+      const fid = typeof parsed.fighterId === 'string' && parsed.fighterId.length > 0 ? parsed.fighterId : roleOk
+      ws._vjRole = roleOk
+      ws._vjFighterId = fid
+      if (fid) ensureFighter(r, fid)
     }
 
     if (t === 'authRespawn' && ws._vjRole === 'host') {
-      const vr = parsed.victimRole
-      if (vr === 'host' || vr === 'guest') {
+      const vr = parsed.victimFighterId ?? parsed.victimRole
+      if (typeof vr === 'string' && r.stocks[vr] !== undefined) {
         const msRaw = parsed.invulnMs
         const ms =
           typeof msRaw === 'number' && Number.isFinite(msRaw) ? Math.min(120_000, Math.max(0, msRaw)) : 2000
-        /* Set invuln window BEFORE clearing the ring-out latch so a stale incoming
-         * pose can't double-deduct stocks between these two state mutations. */
         r.respawnInvulnUntil[vr] = Date.now() + ms
-        if (r.ringOutPending === vr) r.ringOutPending = null
+        if (r.ringOutPending[vr]) r.ringOutPending[vr] = false
       }
     }
 
-    if (t === 'pose' && ws._vjRole && typeof parsed.x === 'number' && typeof parsed.z === 'number') {
-      const role = ws._vjRole
-      r.poses[role] = {
+    if (
+      t === 'pose' &&
+      ws._vjFighterId &&
+      typeof parsed.x === 'number' &&
+      typeof parsed.z === 'number'
+    ) {
+      const fid = ws._vjFighterId
+      r.poses[fid] = {
         x: parsed.x,
         z: parsed.z,
         fy: parsed.fy,
@@ -293,15 +390,16 @@ wss.on('connection', (ws, req) => {
       validateRingOut(roomId, r)
     }
 
-    /* Best-of host: begin next round after a ring-out (clears ended gate + percents). */
     if (t === 'seriesHostBeginNext' && ws._vjRole === 'host') {
       r.ended = false
-      r.percent = { host: 0, guest: 0 }
       r.shots.clear()
       const n = Math.max(1, Math.round(COMBAT.startStocks))
-      r.stocks = { host: n, guest: n }
-      r.ringOutPending = null
-      r.respawnInvulnUntil = { host: 0, guest: 0 }
+      for (const id of fighterIds(r)) {
+        r.percent[id] = 0
+        r.stocks[id] = n
+        r.ringOutPending[id] = false
+        r.respawnInvulnUntil[id] = 0
+      }
       return
     }
 
@@ -315,7 +413,7 @@ wss.on('connection', (ws, req) => {
     }
 
     if (t === 'voiceShot') {
-      validateVoiceShot(roomId, ws, raw, parsed)
+      validateVoiceShot(roomId, ws, parsed)
     }
   })
 

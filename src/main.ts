@@ -37,7 +37,14 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js'
 import { gameConfig } from './gameConfig'
 import { bumpPlayerRecord } from './playerRecord'
-import { isMapId, loadMap, type MapHandle, type MapId, type SpawnSlot } from './maps'
+import {
+  isMapId,
+  loadMap,
+  spawnSlotFromIndex,
+  type MapHandle,
+  type MapId,
+  type SpawnSlot,
+} from './maps'
 import { arenaBlastRadius } from './arena'
 import { pickGroundedRespawnFoot, pickRandomGroundedFootInBounds } from './spawnRespawn'
 import { BotFighter, type BotMode } from './boxing/bot'
@@ -72,16 +79,14 @@ import {
   createMultiplayerSocket,
   type MultiplayerWire,
 } from './net/multiplayerSocket'
-import { createBrowserHostAuthority } from './net/browserHostAuthority'
+import { createFfaBrowserAuthority } from './net/browserHostAuthority'
 import { isAuthoritativeListenServer } from './net/transportConfig'
 import { simBananaThrowToLanding, feetOnPeel, isFeetInPickUpRange } from './net/bananaSim'
 import { BananaWorld, BANANA_FLOOR_RESPAWN_SEC } from './powerups/bananaWorld'
 import { KnockbackTrailFx, knockQualifiesForTrail } from './vfx/knockbackTrail'
 import { MegaphoneFpProp } from './weapons/megaphoneProp'
-import {
-  createWebRtcGameChannel,
-  type WebRtcGameApi,
-} from './net/webrtcGame'
+import { createWebRtcStarTransport } from './net/webrtcStar'
+import type { WebRtcGameApi } from './net/webrtcGame'
 import { LowEndDitherShader } from './post/lowEndDitherShader'
 import { CelOutlineShader } from './post/celOutlineShader'
 import { openBugReport } from './bugReport'
@@ -687,6 +692,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   let tweaksPanelOpen = false
   let leaveMatchDialogOpen = false
+  /**
+   * Editor overlay state. Gates combat/AI/pointer-lock identically to `tweaksPanelOpen`
+   * so the scene editor can pause the game without tearing down state. Mutated by the
+   * editor handle's `open`/`close` via the `onPlay` + F12 wiring added near the end of
+   * `initGame`.
+   */
+  let editorOpen = false
 
   function syncHudDragChrome(): void {
     gameRoot.classList.toggle(
@@ -709,12 +721,17 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   let mpSocket: MultiplayerWire | null = null
   /** When set, game JSON prefers WebRTC data channel; signaling stays on `mpSocket`. */
   let rtcGame: WebRtcGameApi | null = null
+  /** Stable id for this tab in the current match (`host` / `guest` for 1v1, or roster ids for FFA). */
+  let localFighterId: string = lobby.mode === 'online' ? lobby.role : 'host'
+  /** Authoritative fighter order for spawn assignment (defaults to 1v1). */
+  let orderedFighterIds: string[] =
+    lobby.mode === 'online' ? ['host', 'guest'] : ['host', 'guest']
 
   function setLocalVoipRecordingBlocked(blocked: boolean): void {
     rtcGame?.setLocalVoipGameRecordingBlock(blocked)
   }
   /** Host-only authority when using browser P2P (no Node `pvp-host`). */
-  let browserHost: ReturnType<typeof createBrowserHostAuthority> | null = null
+  let browserHost: ReturnType<typeof createFfaBrowserAuthority> | null = null
   let mpPresenceCount = 0
   let mpOpponentName: string | null = null
   let peerSeenInRoom = false
@@ -1612,7 +1629,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       for (const role of ['host', 'guest'] as const) {
         if (role === 'host') {
           if (browserHost) {
-            const p = browserHost.getLastPose('host')
+            const p = browserHost.getLastPose(localFighterId)
             if (p) {
               _bFeet.set(p.x, p.fy, p.z)
             } else {
@@ -1709,8 +1726,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   if (isOnline && lobby.mode === 'online' && !isAuthoritativeListenServer()) {
-    rtcGame = createWebRtcGameChannel({
-      role: lobby.role,
+    rtcGame = createWebRtcStarTransport({
+      localFighterId,
+      sessionHostFighterId: 'host',
+      remotePeers: lobby.role === 'host' ? ['guest'] : ['host'],
+      isSessionHost: lobby.role === 'host',
       signalSend: (o) => sendMp(o),
       includeProximityVoip: false,
       onGameJsonString: (raw) => {
@@ -1740,7 +1760,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     })
     if (lobby.role === 'host') {
       /** RTC data channels do not echo sends back to the sender — host must apply the same payloads locally. */
-      browserHost = createBrowserHostAuthority((o) => {
+      browserHost = createFfaBrowserAuthority(orderedFighterIds, (o) => {
         rtcGame!.sendGameJson(o)
         dispatchPeerGamePayload(o)
       })
@@ -1760,7 +1780,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   const arenaOpponentPlannedRoot = new Vector3()
   /** Offline: ring-out victim is mid-KO pipeline (prevents duplicate KOs while still in blast). */
   let offlineBlastKoPending: null | 'you' | 'foe' = null
-  const hostKoRespawnTimers = new Map<'host' | 'guest', ReturnType<typeof setTimeout>>()
+  const hostKoRespawnTimers = new Map<string, ReturnType<typeof setTimeout>>()
   let victimWhiteFlashUntil = 0
 
   const playerKnock = new Vector3()
@@ -2699,7 +2719,23 @@ async function initGame(lobby: LobbyResult): Promise<void> {
             type: 'hello',
             displayName: displayPlayerName(),
             role: lobby.role,
+            fighterId: localFighterId,
             mapId: map.id,
+          })
+          sendGameTraffic({
+            type: 'sessionRoster',
+            fighters: [
+              {
+                fighterId: 'host',
+                displayName: displayPlayerName(),
+                lobbyRole: 'host' as const,
+              },
+              {
+                fighterId: 'guest',
+                displayName: mpOpponentName?.trim() || 'Player',
+                lobbyRole: 'guest' as const,
+              },
+            ],
           })
         }
         /* Host is authoritative on map: guest must finish loading terrain before match start,
@@ -2716,22 +2752,38 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (ty === 'authStockKO' && lobby.mode === 'online') {
       const sh = data.stocksHost
       const sg = data.stocksGuest
+      const stRec = data.stocks as Record<string, unknown> | undefined
       const beforeYou = stocksYou
       const beforeFoe = stocksFoe
-      if (typeof sh === 'number' && typeof sg === 'number' && Number.isFinite(sh) && Number.isFinite(sg)) {
+      if (stRec && typeof stRec === 'object') {
+        const parsed: Record<string, number> = {}
+        for (const [k, v] of Object.entries(stRec)) {
+          if (typeof v === 'number' && Number.isFinite(v)) parsed[k] = v
+        }
+        applyNetworkStocksFromRecord(parsed)
+      } else if (
+        typeof sh === 'number' &&
+        typeof sg === 'number' &&
+        Number.isFinite(sh) &&
+        Number.isFinite(sg)
+      ) {
         applyNetworkStocksFromPayload(sh, sg)
       }
-      const vr =
-        data.victimRole === 'host' || data.victimRole === 'guest' ? data.victimRole : undefined
+      const vf =
+        typeof data.victimFighterId === 'string'
+          ? data.victimFighterId
+          : data.victimRole === 'host' || data.victimRole === 'guest'
+            ? data.victimRole
+            : undefined
       console.info('[stockKO] authStockKO received', {
-        victimRole: vr,
+        victimFighterId: vf,
         stocksHost: sh,
         stocksGuest: sg,
         stocksYou,
         stocksFoe,
       })
-      if (vr) {
-        const isYouVictim = vr === lobby.role
+      if (vf) {
+        const isYouVictim = vf === localFighterId
         const before = isYouVictim ? beforeYou : beforeFoe
         const after = isYouVictim ? stocksYou : stocksFoe
         showKoAnnouncement(
@@ -2742,7 +2794,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         )
         scheduleKoAnnouncementDismiss(gameConfig.koAnnounceHoldMs)
         if (lobby.role === 'host') {
-          scheduleAuthRespawnHost(vr)
+          scheduleAuthRespawnHost(vf)
         }
       }
       return
@@ -2757,22 +2809,46 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       mpDiagCounters.recvAuthDamage++
       const ph = data.percentHost
       const pg = data.percentGuest
+      const perc = data.percents as Record<string, unknown> | undefined
       const gain =
         typeof data.percentGain === 'number' && Number.isFinite(data.percentGain) ? data.percentGain : 0
-      const victimRoleKnown =
-        data.victimRole === 'host' || data.victimRole === 'guest' ? data.victimRole : undefined
+      const victimFighter =
+        typeof data.victimFighterId === 'string'
+          ? data.victimFighterId
+          : data.victimRole === 'host' || data.victimRole === 'guest'
+            ? data.victimRole
+            : undefined
       let crossedLaunch150 = false
-      if (
-        typeof ph === 'number' &&
-        typeof pg === 'number' &&
-        victimRoleKnown &&
-        gain > 0
-      ) {
-        const victimNew = victimRoleKnown === 'host' ? ph : pg
+      if (perc && typeof perc === 'object' && victimFighter && gain > 0) {
+        const vn = perc[victimFighter]
+        const victimNew = typeof vn === 'number' ? vn : 0
         const victimOld = victimNew - gain
         crossedLaunch150 = victimNew >= 150 && victimOld < 150 - 1e-6
+      } else {
+        const victimRoleKnown =
+          data.victimRole === 'host' || data.victimRole === 'guest' ? data.victimRole : undefined
+        if (
+          typeof ph === 'number' &&
+          typeof pg === 'number' &&
+          victimRoleKnown &&
+          gain > 0
+        ) {
+          const victimNew = victimRoleKnown === 'host' ? ph : pg
+          const victimOld = victimNew - gain
+          crossedLaunch150 = victimNew >= 150 && victimOld < 150 - 1e-6
+        }
       }
-      if (typeof ph === 'number' && typeof pg === 'number') {
+      if (perc && typeof perc === 'object') {
+        const lp = perc[localFighterId]
+        playerPercent = typeof lp === 'number' ? lp : playerPercent
+        const remotes = orderedFighterIds.filter((id) => id !== localFighterId)
+        const oppPercents = remotes.map((id) => {
+          const v = perc[id]
+          return typeof v === 'number' ? v : 0
+        })
+        enemyPercent = oppPercents.length > 0 ? Math.max(...oppPercents) : enemyPercent
+        syncHud()
+      } else if (typeof ph === 'number' && typeof pg === 'number') {
         if (lobby.role === 'host') {
           playerPercent = ph
           enemyPercent = pg
@@ -2787,10 +2863,17 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         data.aggressorRole === 'host' || data.aggressorRole === 'guest'
           ? data.aggressorRole
           : undefined
-      if (aggressorRole === lobby.role) {
+      const aggressorFighter =
+        typeof data.aggressorFighterId === 'string' ? data.aggressorFighterId : aggressorRole
+      if (aggressorFighter === localFighterId || aggressorRole === lobby.role) {
         triggerAggressorHitConfirmFx(enemyPercent)
-        const vr = data.victimRole === 'host' || data.victimRole === 'guest' ? data.victimRole : undefined
-        if (vr && vr !== lobby.role) {
+        const vr =
+          typeof data.victimFighterId === 'string'
+            ? data.victimFighterId
+            : data.victimRole === 'host' || data.victimRole === 'guest'
+              ? data.victimRole
+              : undefined
+        if (vr && vr !== localFighterId) {
           bot.flashVictimInvuln(gameConfig.hitVictimWhiteFlashMs)
         }
         const sid = typeof data.shotId === 'string' ? data.shotId : null
@@ -2803,11 +2886,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           }
         }
       }
-      if (
-        data.victimRole === lobby.role &&
-        typeof data.dx === 'number' &&
-        typeof data.dz === 'number'
-      ) {
+      const victimLocal =
+        typeof data.victimFighterId === 'string'
+          ? data.victimFighterId === localFighterId
+          : data.victimRole === lobby.role
+      if (victimLocal && typeof data.dx === 'number' && typeof data.dz === 'number') {
         let knockFromWorld: Vector3 | undefined
         if (
           typeof data.hx === 'number' &&
@@ -2847,12 +2930,25 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       return
     }
 
-    if (ty === 'authMatchEnd' && lobby.mode === 'online' && typeof data.winnerRole === 'string') {
+    if (ty === 'authMatchEnd' && lobby.mode === 'online') {
       if (!opponentForfeitHandled && !matchOutcome && !seriesTransitionActive) {
+        const wf = typeof data.winnerFighterId === 'string' ? data.winnerFighterId : undefined
         const wr =
           data.winnerRole === 'host' || data.winnerRole === 'guest' ? data.winnerRole : undefined
-        if (wr) void concludeRoundElimination(wr === lobby.role)
+        const iWon = wf ? wf === localFighterId : wr ? wr === lobby.role : false
+        if (wf || wr) void concludeRoundElimination(iWon)
       }
+      return
+    }
+
+    if (ty === 'sessionRoster' && lobby.mode === 'online' && Array.isArray(data.fighters)) {
+      const rows = data.fighters as { fighterId?: string; lobbyRole?: string }[]
+      const ids = rows
+        .map((r) => (typeof r.fighterId === 'string' ? r.fighterId : null))
+        .filter((x): x is string => x !== null)
+      if (ids.length >= 2) orderedFighterIds = ids
+      const mine = rows.find((r) => r.lobbyRole === lobby.role)
+      if (mine && typeof mine.fighterId === 'string') localFighterId = mine.fighterId
       return
     }
 
@@ -3047,8 +3143,15 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       typeof data.fy === 'number' &&
       typeof data.ry === 'number'
     ) {
+      const poseSender =
+        typeof data.fromFighterId === 'string'
+          ? data.fromFighterId
+          : lobby.role === 'host'
+            ? 'guest'
+            : 'host'
+      if (poseSender === localFighterId) return
       if (lobby.role === 'host' && browserHost) {
-        browserHost.setPose('guest', {
+        browserHost.setPose(poseSender, {
           x: data.x,
           z: data.z,
           fy: data.fy,
@@ -3092,8 +3195,14 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         data.fromRole === 'host' || data.fromRole === 'guest' || data.fromRole === 'bot'
           ? data.fromRole
           : undefined
-      if (lobby.role === 'host' && browserHost && fromRole && fromRole !== 'bot') {
-        browserHost.processVoiceShot(fromRole, data)
+      const aggressorId =
+        typeof data.fromFighterId === 'string'
+          ? data.fromFighterId
+          : fromRole && fromRole !== 'bot'
+            ? fromRole
+            : undefined
+      if (lobby.role === 'host' && browserHost && aggressorId && aggressorId !== 'bot') {
+        browserHost.processVoiceShot(aggressorId, data)
       }
       if (fromRole && (fromRole === 'bot' || fromRole !== lobby.role)) {
         const b64 = typeof data.audioB64 === 'string' ? data.audioB64 : undefined
@@ -3280,6 +3389,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     const fy = camera.position.y - eyeH()
     sendGameTraffic({
       type: 'pose',
+      fromFighterId: localFighterId,
       x: camera.position.x,
       z: camera.position.z,
       fy,
@@ -3505,10 +3615,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           shotScale: sizeMul,
           mime: pvpMime,
           fromRole: lobby.role,
+          fromFighterId: localFighterId,
         }
         sendGameTraffic(payloadLead)
         if (lobby.role === 'host' && browserHost) {
-          browserHost.processVoiceShot('host', payloadLead)
+          browserHost.processVoiceShot(localFighterId, payloadLead)
         }
         void sendVoiceShotAudio(pvpShotId, pvpMime, blob)
       } catch {
@@ -3723,10 +3834,11 @@ async function initGame(lobby: LobbyResult): Promise<void> {
           shotScale: sizeMul,
           mime,
           fromRole: lobby.role,
+          fromFighterId: localFighterId,
         }
         sendGameTraffic(payloadLead)
         if (lobby.role === 'host' && browserHost) {
-          browserHost.processVoiceShot('host', payloadLead)
+          browserHost.processVoiceShot(localFighterId, payloadLead)
         }
         void sendVoiceShotAudio(shotId, mime, wavBlob)
       } catch {
@@ -3803,6 +3915,16 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     /* Caller syncs HUD badges — may defer so KO padlock animation can show `before` → `after`. */
   }
 
+  function applyNetworkStocksFromRecord(st: Record<string, number>): void {
+    if (lobby.mode !== 'online') return
+    const y = st[localFighterId]
+    if (typeof y === 'number' && Number.isFinite(y)) stocksYou = Math.max(0, y)
+    const remotes = orderedFighterIds.filter((id) => id !== localFighterId)
+    if (remotes.length > 0) {
+      stocksFoe = Math.max(...remotes.map((id) => (typeof st[id] === 'number' ? st[id]! : 0)))
+    }
+  }
+
   function syncStockBadgeNums(): void {
     if (hudStockYouNumEl) hudStockYouNumEl.textContent = String(Math.max(0, stocksYou))
   }
@@ -3818,12 +3940,6 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     el.classList.remove('hud-stock-badge--flash')
     void el.offsetWidth
     el.classList.add('hud-stock-badge--flash')
-  }
-
-  function spawnSlotForRole(roleNet: 'host' | 'guest'): SpawnSlot {
-    const slots = spawnSlots()
-    if (lobby.mode !== 'online') return slots.player
-    return roleNet === lobby.role ? slots.player : slots.opponent
   }
 
   let koAnnounceHoldTimer: ReturnType<typeof window.setTimeout> | null = null
@@ -3962,19 +4078,19 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }, delayMs + KO_ANNOUNCE_OVERLAY_FADE_IN_MS)
   }
 
-  function scheduleAuthRespawnHost(victimRole: 'host' | 'guest'): void {
-    const prev = hostKoRespawnTimers.get(victimRole)
+  function scheduleAuthRespawnHost(victimFighterId: string): void {
+    const prev = hostKoRespawnTimers.get(victimFighterId)
     if (prev != null) window.clearTimeout(prev)
     const tid = window.setTimeout(() => {
-      hostKoRespawnTimers.delete(victimRole)
-      computeAndEmitAuthRespawn(victimRole)
+      hostKoRespawnTimers.delete(victimFighterId)
+      computeAndEmitAuthRespawn(victimFighterId)
     }, gameConfig.koAnnounceHoldMs + KO_ANNOUNCE_OVERLAY_FADE_IN_MS)
-    hostKoRespawnTimers.set(victimRole, tid)
+    hostKoRespawnTimers.set(victimFighterId, tid)
   }
 
-  function computeAndEmitAuthRespawn(victimRole: 'host' | 'guest'): void {
+  function computeAndEmitAuthRespawn(victimFighterId: string): void {
     if (lobby.mode !== 'online' || lobby.role !== 'host') return
-    const slot = spawnSlotForRole(victimRole)
+    const slot = spawnSlotForFighter(victimFighterId)
     const candidates = map.getRespawnFootCandidates(slot)
     let feet = pickGroundedRespawnFoot(terrainPhysics, map, candidates)
     if (!feet) {
@@ -3982,7 +4098,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
     const slots = spawnSlots()
     let ry: number
-    const victimIsLocal = victimRole === lobby.role
+    const victimIsLocal = victimFighterId === localFighterId
     if (victimIsLocal) {
       const oppSpawn = map.getBotSpawn(slots.opponent, bot.getFootOffset())
       const camPt = new Vector3(feet.x, feet.y + eyeH(), feet.z)
@@ -3995,7 +4111,9 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     const invulnMs = gameConfig.respawnInvulnMs
     const payload: Record<string, unknown> = {
       type: 'authRespawn',
-      victimRole,
+      victimRole:
+        victimFighterId === 'host' || victimFighterId === 'guest' ? victimFighterId : undefined,
+      victimFighterId,
       x: feet.x,
       fy: feet.y,
       z: feet.z,
@@ -4007,8 +4125,13 @@ async function initGame(lobby: LobbyResult): Promise<void> {
   }
 
   function applyAuthRespawnPayload(data: Record<string, unknown>): void {
-    const vr = data.victimRole === 'host' || data.victimRole === 'guest' ? data.victimRole : undefined
-    if (!vr || lobby.mode !== 'online') return
+    const vf =
+      typeof data.victimFighterId === 'string'
+        ? data.victimFighterId
+        : data.victimRole === 'host' || data.victimRole === 'guest'
+          ? data.victimRole
+          : undefined
+    if (!vf || lobby.mode !== 'online') return
     hideKoAnnouncementImmediate()
     const x = typeof data.x === 'number' ? data.x : 0
     const fy = typeof data.fy === 'number' ? data.fy : 0
@@ -4019,7 +4142,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         ? Math.max(0, data.invulnMs)
         : gameConfig.respawnInvulnMs
 
-    const victimIsYou = vr === lobby.role
+    const victimIsYou = vf === localFighterId
     const until = performance.now() + invulnMs
     const untilAuth = Date.now() + invulnMs
 
@@ -4051,8 +4174,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
     /* Set invuln window BEFORE clearing the ring-out latch so a stale incoming
      * pose can't double-deduct stocks between these two state mutations. */
-    browserHost?.setRespawnInvulnUntil(vr, untilAuth)
-    browserHost?.notifyRespawnApplied(vr)
+    browserHost?.setRespawnInvulnUntil(vf, untilAuth)
+    browserHost?.notifyRespawnApplied(vf)
     syncHud()
     warpRapierCapsulesToCurrentActors()
   }
@@ -4192,12 +4315,17 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     return Math.max(0.2, gameConfig.eyeHeight + gameConfig.pcCameraHeightBias)
   }
 
-  /** Default/offline/host use spawn A; online guests use spawn B, facing the opposite slot. */
+  function spawnSlotForFighter(fid: string): SpawnSlot {
+    const ix = orderedFighterIds.indexOf(fid)
+    return spawnSlotFromIndex(ix >= 0 ? ix : 0)
+  }
+
+  /** Offline + online: player slot from roster index; opponent uses first remote fighter’s slot. */
   function spawnSlots(): { player: SpawnSlot; opponent: SpawnSlot } {
-    if (lobby.mode === 'online' && lobby.role === 'guest') {
-      return { player: 'b', opponent: 'a' }
-    }
-    return { player: 'a', opponent: 'b' }
+    const player = spawnSlotForFighter(localFighterId)
+    const remoteFirst = orderedFighterIds.find((id) => id !== localFighterId)
+    const opponent = remoteFirst ? spawnSlotForFighter(remoteFirst) : spawnSlotFromIndex(1)
+    return { player, opponent }
   }
 
   function yawFacing(from: Vector3, to: Vector3): number {
@@ -4295,7 +4423,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (!isPvp()) return
     const fy = camera.position.y - eyeH()
     if (lobby.mode === 'online' && lobby.role === 'host' && browserHost) {
-      browserHost.setPose('host', {
+      browserHost.setPose(localFighterId, {
         x: camera.position.x,
         z: camera.position.z,
         fy,
@@ -4304,6 +4432,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     }
     sendGameTraffic({
       type: 'pose',
+      fromFighterId: localFighterId,
       x: camera.position.x,
       z: camera.position.z,
       fy,
@@ -5668,7 +5797,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
     if (isPvp()) {
       const fy = camera.position.y - eyeH()
       if (lobby.mode === 'online' && lobby.role === 'host' && browserHost) {
-        browserHost.setPose('host', {
+        browserHost.setPose(localFighterId, {
           x: camera.position.x,
           z: camera.position.z,
           fy,
@@ -5685,6 +5814,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
         )
         sendGameTraffic({
           type: 'pose',
+          fromFighterId: localFighterId,
           x: camera.position.x,
           z: camera.position.z,
           fy,
@@ -5846,7 +5976,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       if (dashSpd < 0.18) dashScanEl.style.opacity = '0'
     }
 
-    if (!tweaksPanelOpen && !leaveMatchDialogOpen) {
+    if (!tweaksPanelOpen && !leaveMatchDialogOpen && !editorOpen) {
       if (!matchOutcome && !multiplayerBlocksPlay()) {
         updateMovement(delta)
         resolveCombat(delta)
@@ -5976,6 +6106,88 @@ async function initGame(lobby: LobbyResult): Promise<void> {
 
   renderer.setAnimationLoop(animate)
 
+  /**
+   * Scene editor integration. The editor chunk is lazy-imported so non-editor users
+   * pay zero cost for it. `window.editorBridge.editorEnabled` is set by the Electron
+   * preload when the user launches with `--editor`; F12 toggles at any time.
+   *
+   * While the editor is open: `editorOpen = true` gates combat/AI (animate()) and
+   * pointer-lock (tryPointerLock) identically to the tweaks panel. `game-root--hud-suspended`
+   * reuses the existing lobby-mode HUD-hide CSS class so crosshair / voice chrome / status
+   * board all vanish under the editor chrome.
+   */
+  let editorHandle: {
+    open(): void
+    close(): void
+    toggle(): void
+    isOpen(): boolean
+  } | null = null
+  let editorMountPromise: Promise<unknown> | null = null
+
+  async function ensureEditorMounted(): Promise<void> {
+    if (editorHandle) return
+    if (!editorMountPromise) {
+      const gameApi = {
+        scene,
+        camera,
+        renderer,
+        hubRoot,
+        terrainPhysics,
+        bananaWorld,
+        getMap: () => map,
+        setMap: (m: MapHandle) => {
+          map = m
+        },
+        spawnActors,
+        warpRapierCapsulesToCurrentActors,
+        syncProjectileSyntheticBoundsForMap,
+        syncBlastBoundsLine,
+      }
+      editorMountPromise = import('./editor/mount')
+        .then(async ({ mountEditor }) => {
+          const handle = await mountEditor({ scene, camera, renderer, gameApi })
+          editorHandle = handle
+          handle.api.onPlay(() => {
+            editorOpen = false
+            gameRoot.classList.remove('game-root--hud-suspended')
+          })
+        })
+        .catch((err) => {
+          console.error('[editor] mount failed', err)
+          editorMountPromise = null
+        })
+    }
+    await editorMountPromise
+  }
+
+  async function toggleSceneEditor(): Promise<void> {
+    await ensureEditorMounted()
+    if (!editorHandle) return
+    editorHandle.toggle()
+    editorOpen = editorHandle.isOpen()
+    if (editorOpen) {
+      gameRoot.classList.add('game-root--hud-suspended')
+      /* Release pointer lock — the editor needs free cursor input for tree/inspector/gizmo. */
+      if (typeof document !== 'undefined' && document.pointerLockElement) {
+        try {
+          document.exitPointerLock()
+        } catch {
+          /* noop */
+        }
+      }
+    } else {
+      gameRoot.classList.remove('game-root--hud-suspended')
+    }
+  }
+
+  if (window.editorBridge?.editorEnabled) void toggleSceneEditor()
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== 'F12') return
+    e.preventDefault()
+    void toggleSceneEditor()
+  })
+
   function tryPointerLock(): void {
     if (
       textChatOpen ||
@@ -5986,7 +6198,8 @@ async function initGame(lobby: LobbyResult): Promise<void> {
       voiceInputBlocked ||
       voiceResumeCountdownActive ||
       multiplayerBlocksPlay() ||
-      seriesTransitionActive
+      seriesTransitionActive ||
+      editorOpen
     )
       return
     void controls.lock()
@@ -6053,6 +6266,7 @@ async function initGame(lobby: LobbyResult): Promise<void> {
             type: 'hello',
             displayName: displayPlayerName(),
             role: onlineLobby.role,
+            fighterId: localFighterId,
             mapId: map.id,
           }),
         )

@@ -6,6 +6,12 @@ export function getPartyKitHost(): string | null {
   const env = import.meta.env.VITE_PARTYKIT_HOST?.trim()
   if (env) return env
 
+  /* Electron preload injects this from env + `Assets/Config/partykit-host.txt` (see electron/preload.cjs). */
+  if (typeof window !== 'undefined') {
+    const w = (window as unknown as { __PARTYKIT_HOST?: string }).__PARTYKIT_HOST?.trim()
+    if (w) return w
+  }
+
   try {
     const ses =
       typeof sessionStorage !== 'undefined'
@@ -14,11 +20,6 @@ export function getPartyKitHost(): string | null {
     if (ses) return ses
   } catch {
     /* private mode */
-  }
-
-  if (typeof window !== 'undefined') {
-    const w = (window as unknown as { __PARTYKIT_HOST?: string }).__PARTYKIT_HOST?.trim()
-    if (w) return w
   }
 
   /** Local `npm run party:dev` uses port 1999 — enables lobby without `.env.local`. */

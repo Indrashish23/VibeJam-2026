@@ -1,6 +1,9 @@
 import { readStoredPlayerName, savePlayerName } from './playerName'
 import { loadUserSettings } from './userSettingsStorage'
-import { isMultiplayerTransportConfigured } from './net/transportConfig'
+import {
+  isMultiplayerTransportConfigured,
+  multiplayerTransportMissingHint,
+} from './net/transportConfig'
 import { isMapId, mapDefsForLobby, migrateLegacyMapId, type MapId } from './maps'
 import { clearTutorialDone, TUTORIAL_ENABLED } from './tutorial'
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js'
@@ -356,7 +359,9 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
     function startQuickMatch(): void {
       if (settled) return
       if (onlineUnavailable()) {
-        setErr('Online play isn’t available right now. Try Practice or Vs Bot instead.')
+        setErr(
+          `Online play isn’t available right now. Try Practice or Vs Bot instead.${multiplayerTransportMissingHint()}`,
+        )
         /* AutoStart hid the menu; bring it back so the error and other options are visible. */
         ui.overlay.hidden = false
         return
@@ -460,7 +465,7 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
     ui.hostPrivate.onclick = () => {
       clearErr()
       if (onlineUnavailable()) {
-        setErr('Online play isn’t available right now.')
+        setErr(`Online play isn’t available right now.${multiplayerTransportMissingHint()}`)
         return
       }
       const roomId = randomRoomId()
@@ -498,7 +503,7 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
     ui.vsBot.onclick = () => {
       clearErr()
       if (onlineUnavailable()) {
-        setErr('Vs Bot needs online lobby transport configured.')
+        setErr(`Vs Bot needs online lobby transport configured.${multiplayerTransportMissingHint()}`)
         return
       }
       const roomId = randomRoomId()
@@ -517,7 +522,7 @@ export async function runLobbyGate(initialDisplayName: string): Promise<LobbyRes
     ui.joinBtn.onclick = () => {
       clearErr()
       if (onlineUnavailable()) {
-        setErr('Online play isn’t available right now.')
+        setErr(`Online play isn’t available right now.${multiplayerTransportMissingHint()}`)
         return
       }
       const raw = ui.joinCode.value.trim().toLowerCase().replace(/[^a-z0-9]/g, '')
